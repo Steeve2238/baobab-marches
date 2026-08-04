@@ -22,6 +22,8 @@ export default function DossierDetailPage() {
   const [modelesCourrier, setModelesCourrier] = useState([]);
   const [suggestionsCourrier, setSuggestionsCourrier] = useState([]);
   const [entete, setEntete] = useState(null);
+  const [fournisseurs, setFournisseurs] = useState([]);
+  const [offres, setOffres] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
 
@@ -64,6 +66,15 @@ export default function DossierDetailPage() {
   const [variablesDetectees, setVariablesDetectees] = useState([]);
   const [variablesPersonnalisees, setVariablesPersonnalisees] = useState({});
 
+  const [formOffreOuvert, setFormOffreOuvert] = useState(false);
+  const [formOffre, setFormOffre] = useState({
+    fournisseur_id: "",
+    prix_exw: "",
+    delai_jours: "",
+    incoterm_scenario_id: "",
+  });
+  const [offreEnCours, setOffreEnCours] = useState(false);
+
   useEffect(() => {
     async function charger() {
       try {
@@ -77,6 +88,8 @@ export default function DossierDetailPage() {
           modelesData,
           suggestionsData,
           enteteData,
+          fournisseursData,
+          offresData,
         ] = await Promise.all([
           api.getDossier(id),
           api.getSimulations(id),
@@ -87,6 +100,8 @@ export default function DossierDetailPage() {
           api.getModelesCourrier(),
           api.getSuggestionsCourrier(id),
           api.getEntete(),
+          api.getFournisseurs(),
+          api.getOffresFournisseur(id),
         ]);
         setDossier(dossierData);
         setSimulations(simulationsData);
@@ -97,6 +112,8 @@ export default function DossierDetailPage() {
         setModelesCourrier(modelesData);
         setSuggestionsCourrier(suggestionsData);
         setEntete(enteteData);
+        setFournisseurs(fournisseursData);
+        setOffres(offresData);
       } catch (err) {
         setErreur(err.message || t("defaultLoadError"));
       } finally {
@@ -274,6 +291,36 @@ export default function DossierDetailPage() {
     });
   }
 
+  async function handleAjouterOffre(e) {
+    e.preventDefault();
+    setOffreEnCours(true);
+    try {
+      const payload = {
+        fournisseur_id: formOffre.fournisseur_id,
+        prix_exw: formOffre.prix_exw ? Number(formOffre.prix_exw) : null,
+        delai_jours: formOffre.delai_jours ? Number(formOffre.delai_jours) : null,
+        incoterm_scenario_id: formOffre.incoterm_scenario_id || null,
+      };
+      const nouvelle = await api.createOffreFournisseur(id, payload);
+      setOffres((prev) => [...prev, nouvelle].sort((a, b) => (a.prix_exw ?? Infinity) - (b.prix_exw ?? Infinity)));
+      setFormOffreOuvert(false);
+      setFormOffre({ fournisseur_id: "", prix_exw: "", delai_jours: "", incoterm_scenario_id: "" });
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setOffreEnCours(false);
+    }
+  }
+
+  async function handleRetenirOffre(offreId) {
+    try {
+      await api.retenirOffreFournisseur(offreId);
+      setOffres((prev) => prev.map((o) => ({ ...o, retenue: o.id === offreId })));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
   if (chargement) {
     return <div style={{ padding: 28 }}>{t("loading")}</div>;
   }
@@ -423,6 +470,125 @@ export default function DossierDetailPage() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ---------------- FOURNISSEURS ---------------- */}
+      <section style={{ marginBottom: 30 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("suppliersSection")}</h2>
+          <button onClick={() => setFormOffreOuvert((v) => !v)} style={boutonPrincipalStyle}>
+            {formOffreOuvert ? t("cancel") : t("newOffer")}
+          </button>
+        </div>
+
+        {formOffreOuvert && (
+          <form onSubmit={handleAjouterOffre} className="card" style={{ marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>{t("supplierLabel")}</label>
+                <select
+                  required
+                  value={formOffre.fournisseur_id}
+                  onChange={(e) => setFormOffre((f) => ({ ...f, fournisseur_id: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">—</option>
+                  {fournisseurs.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>{t("priceExwLabel")}</label>
+                <input
+                  type="number"
+                  value={formOffre.prix_exw}
+                  onChange={(e) => setFormOffre((f) => ({ ...f, prix_exw: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("deliveryDelayLabel")}</label>
+                <input
+                  type="number"
+                  value={formOffre.delai_jours}
+                  onChange={(e) => setFormOffre((f) => ({ ...f, delai_jours: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("incotermLabel")}</label>
+                <select
+                  value={formOffre.incoterm_scenario_id}
+                  onChange={(e) => setFormOffre((f) => ({ ...f, incoterm_scenario_id: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">{t("none")}</option>
+                  {incoterms.map((inc) => (
+                    <option key={inc.id} value={inc.id}>
+                      {inc.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <button type="submit" disabled={offreEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
+              {t("save")}
+            </button>
+          </form>
+        )}
+
+        {offres.length === 0 ? (
+          <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("noOffers")}</p>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {offres.map((o) => (
+              <div
+                key={o.id}
+                className="card"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr",
+                  gap: 10,
+                  alignItems: "center",
+                  background: o.retenue ? "var(--vert-bg)" : "#fff",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{o.fournisseur_nom}</div>
+                  <div style={{ fontSize: 11, color: "var(--sub)" }}>{o.fournisseur_pays || "—"}</div>
+                </div>
+                <div>
+                  <div style={miniLabelStyle}>{t("priceExwLabel")}</div>
+                  <div className="mono" style={{ fontSize: 12.5 }}>
+                    {o.prix_exw ? Number(o.prix_exw).toLocaleString(dict.dateLocale) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div style={miniLabelStyle}>{t("deliveryDelayLabel")}</div>
+                  <div className="mono" style={{ fontSize: 12.5 }}>{o.delai_jours ?? "—"}</div>
+                </div>
+                <div>
+                  <div style={miniLabelStyle}>{t("reliabilityScoreLabel")}</div>
+                  <div className="mono" style={{ fontSize: 12.5 }}>
+                    {o.score_fiabilite != null ? `${o.score_fiabilite}%` : "—"}
+                  </div>
+                </div>
+                <div>
+                  {o.retenue ? (
+                    <span className="chip ok">{t("retainedOffer")}</span>
+                  ) : (
+                    <button onClick={() => handleRetenirOffre(o.id)} style={boutonSecondaireStyle}>
+                      {t("retainOffer")}
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

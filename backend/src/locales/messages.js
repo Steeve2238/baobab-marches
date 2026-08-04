@@ -101,6 +101,16 @@ const MESSAGES = {
     ENTETE_FETCH_ERROR: "Erreur lors de la recuperation de l'entete.",
     ENTETE_UPDATE_ERROR: "Erreur lors de la mise a jour de l'entete.",
 
+    FOURNISSEURS_FETCH_ERROR: "Erreur lors de la recuperation des fournisseurs.",
+    FOURNISSEUR_NOM_REQUIRED: "nom est requis.",
+    FOURNISSEUR_CREATE_ERROR: "Erreur lors de la creation du fournisseur.",
+    FOURNISSEUR_NOT_FOUND: "Fournisseur introuvable.",
+    FOURNISSEUR_ID_REQUIRED: "fournisseur_id est requis.",
+    OFFRES_FETCH_ERROR: "Erreur lors de la recuperation des offres.",
+    OFFRE_CREATE_ERROR: "Erreur lors de la creation de l'offre.",
+    OFFRE_NOT_FOUND: "Offre introuvable.",
+    OFFRE_RETENUE_ERROR: "Erreur lors de la mise a jour de l'offre retenue.",
+
     SERVER_ERROR: "Erreur serveur inattendue.",
   },
   en: {
@@ -199,6 +209,16 @@ const MESSAGES = {
     ENTETE_NOT_FOUND: "Organization not found.",
     ENTETE_FETCH_ERROR: "Error while fetching the letterhead info.",
     ENTETE_UPDATE_ERROR: "Error while updating the letterhead info.",
+
+    FOURNISSEURS_FETCH_ERROR: "Error while fetching suppliers.",
+    FOURNISSEUR_NOM_REQUIRED: "nom is required.",
+    FOURNISSEUR_CREATE_ERROR: "Error while creating the supplier.",
+    FOURNISSEUR_NOT_FOUND: "Supplier not found.",
+    FOURNISSEUR_ID_REQUIRED: "fournisseur_id is required.",
+    OFFRES_FETCH_ERROR: "Error while fetching offers.",
+    OFFRE_CREATE_ERROR: "Error while creating the offer.",
+    OFFRE_NOT_FOUND: "Offer not found.",
+    OFFRE_RETENUE_ERROR: "Error while updating the selected offer.",
 
     SERVER_ERROR: "Unexpected server error.",
   },

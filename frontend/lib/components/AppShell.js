@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", key: "navDashboard" },
   { href: "/financement", key: "navFinancing" },
   { href: "/logistique", key: "navLogistics" },
+  { href: "/fournisseurs", key: "navSuppliers" },
   { href: "/courriers", key: "navLetters" },
   { href: "/parametres/entete", key: "navSettings" },
 ];

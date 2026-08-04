@@ -129,4 +129,13 @@ export const api = {
   // Parametres - entete de structure
   getEntete: () => request("/parametres/entete"),
   updateEntete: (data) => request("/parametres/entete", { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Module 5 - Comparateur fournisseurs
+  getFournisseurs: () => request("/fournisseurs"),
+  createFournisseur: (data) => request("/fournisseurs", { method: "POST", body: JSON.stringify(data) }),
+  getOffresFournisseur: (dossierId) => request(`/fournisseurs/dossiers/${dossierId}/offres`),
+  createOffreFournisseur: (dossierId, data) =>
+    request(`/fournisseurs/dossiers/${dossierId}/offres`, { method: "POST", body: JSON.stringify(data) }),
+  retenirOffreFournisseur: (offreId) =>
+    request(`/fournisseurs/offres/${offreId}/retenue`, { method: "PATCH" }),
 };
