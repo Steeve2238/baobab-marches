@@ -10,7 +10,8 @@ const TYPE_BESOIN_CODES = ["CAUTION_SOUMISSION", "CAUTION_BONNE_EXECUTION", "AVA
 
 export default function DossierDetailPage() {
   const { id } = useParams();
-  const { t, statutLabel, typeBesoinLabel, penaliteStatutLabel, typeCourrierLabel, dict } = useLangue();
+  const { t, statutLabel, typeBesoinLabel, penaliteStatutLabel, typeCourrierLabel, typeFaciliteLabel, dict } =
+    useLangue();
 
   const [dossier, setDossier] = useState(null);
   const [simulations, setSimulations] = useState([]);
@@ -60,6 +61,8 @@ export default function DossierDetailPage() {
   const [courrierGenere, setCourrierGenere] = useState(null);
   const [generationEnCours, setGenerationEnCours] = useState(false);
   const [copieConfirmee, setCopieConfirmee] = useState(false);
+  const [variablesDetectees, setVariablesDetectees] = useState([]);
+  const [variablesPersonnalisees, setVariablesPersonnalisees] = useState({});
 
   useEffect(() => {
     async function charger() {
@@ -190,15 +193,72 @@ export default function DossierDetailPage() {
     }
   }
 
-  async function handleGenererCourrier(modeleId) {
-    const cible = modeleId || modeleSelectionne;
-    if (!cible) return;
+  /**
+   * Extrait les noms de variables {{xxx}} d'un modele, en excluant celles
+   * deja couvertes automatiquement par le contexte dossier ({{dossier.*}}
+   * et {{date_jour}}).
+   */
+  function extraireVariablesPersonnalisees(modele) {
+    const texte = `${modele.titre} ${modele.corps_template}`;
+    const trouvees = new Set();
+    const regex = /\{\{\s*([\w.]+)\s*\}\}/g;
+    let m;
+    while ((m = regex.exec(texte)) !== null) {
+      const cle = m[1];
+      if (!cle.startsWith("dossier.") && cle !== "date_jour") {
+        trouvees.add(cle);
+      }
+    }
+    return [...trouvees];
+  }
+
+  /**
+   * Pre-remplit les variables deductibles de la simulation de financement
+   * retenue sur ce dossier (montant, duree, type de facilite), pour eviter
+   * toute ressaisie d'une information deja connue du systeme.
+   */
+  function deduireValeursConnues() {
+    const simulationAvecOptionRetenue = simulations.find((s) => s.option_retenue_id);
+    if (!simulationAvecOptionRetenue) return {};
+
+    const optionRetenue = (simulationAvecOptionRetenue.resultat_json || []).find(
+      (o) => o.ligne_credit_tarif_id === simulationAvecOptionRetenue.option_retenue_id
+    );
+
+    return {
+      montant_demande: simulationAvecOptionRetenue.montant ?? "",
+      duree_jours: simulationAvecOptionRetenue.duree_estimee_jours ?? "",
+      type_facilite: optionRetenue ? typeFaciliteLabel(optionRetenue.type_facilite) : "",
+    };
+  }
+
+  function handleSelectionModele(modeleId) {
+    setModeleSelectionne(modeleId);
+    setCourrierGenere(null);
+    const modele = modelesCourrier.find((m) => m.id === modeleId);
+    if (!modele) {
+      setVariablesDetectees([]);
+      setVariablesPersonnalisees({});
+      return;
+    }
+    const detectees = extraireVariablesPersonnalisees(modele);
+    const connues = deduireValeursConnues();
+    setVariablesDetectees(detectees);
+    setVariablesPersonnalisees(
+      Object.fromEntries(detectees.map((cle) => [cle, connues[cle] !== undefined ? connues[cle] : ""]))
+    );
+  }
+
+  async function handleGenererCourrier() {
+    if (!modeleSelectionne) return;
     setGenerationEnCours(true);
     setCopieConfirmee(false);
     try {
-      const resultat = await api.genererCourrier(id, { modele_id: cible });
+      const resultat = await api.genererCourrier(id, {
+        modele_id: modeleSelectionne,
+        variables: variablesPersonnalisees,
+      });
       setCourrierGenere(resultat);
-      setModeleSelectionne(cible);
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -635,7 +695,7 @@ export default function DossierDetailPage() {
                     <span style={{ fontWeight: 600 }}>{s.titre}</span>
                     <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 2 }}>{s.raison}</div>
                   </div>
-                  <button onClick={() => handleGenererCourrier(s.id)} style={boutonSecondaireStyle}>
+                  <button onClick={() => handleSelectionModele(s.id)} style={boutonSecondaireStyle}>
                     {t("useSuggestion")}
                   </button>
                 </div>
@@ -649,7 +709,7 @@ export default function DossierDetailPage() {
           <div style={{ display: "flex", gap: 10 }}>
             <select
               value={modeleSelectionne}
-              onChange={(e) => setModeleSelectionne(e.target.value)}
+              onChange={(e) => handleSelectionModele(e.target.value)}
               style={{ ...inputStyle, flex: 1 }}
             >
               <option value="">—</option>
@@ -659,14 +719,32 @@ export default function DossierDetailPage() {
                 </option>
               ))}
             </select>
-            <button
-              onClick={() => handleGenererCourrier()}
-              disabled={!modeleSelectionne || generationEnCours}
-              style={boutonPrincipalStyle}
-            >
-              {t("generateLetter")}
-            </button>
           </div>
+
+          {variablesDetectees.length > 0 && (
+            <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {variablesDetectees.map((cle) => (
+                <div key={cle}>
+                  <label style={labelStyle}>{`{{${cle}}}`}</label>
+                  <input
+                    value={variablesPersonnalisees[cle] ?? ""}
+                    onChange={(e) =>
+                      setVariablesPersonnalisees((prev) => ({ ...prev, [cle]: e.target.value }))
+                    }
+                    style={inputStyle}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={handleGenererCourrier}
+            disabled={!modeleSelectionne || generationEnCours}
+            style={{ ...boutonPrincipalStyle, marginTop: 14 }}
+          >
+            {t("generateLetter")}
+          </button>
         </div>
 
         {courrierGenere && (
