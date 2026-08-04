@@ -17,6 +17,11 @@ export const DICTIONARIES = {
     loading: "Chargement...",
     defaultLoadError: "Erreur de chargement.",
 
+    navDashboard: "Tableau de bord",
+    navFinancing: "Financement",
+    navLogistics: "Logistique",
+    navLetters: "Courriers",
+
     signalSingular: "signal actif",
     signalPlural: "signaux actifs",
     noActiveSignal:
@@ -146,6 +151,11 @@ export const DICTIONARIES = {
     signOut: "Sign out",
     loading: "Loading...",
     defaultLoadError: "Loading error.",
+
+    navDashboard: "Dashboard",
+    navFinancing: "Financing",
+    navLogistics: "Logistics",
+    navLetters: "Letters",
 
     signalSingular: "active signal",
     signalPlural: "active signals",

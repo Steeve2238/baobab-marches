@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
-import LanguageSwitcher from "../../lib/i18n/LanguageSwitcher";
+import AppShell from "../../lib/components/AppShell";
 
 export default function LogistiquePage() {
   const { t, dict } = useLangue();
@@ -44,17 +43,7 @@ export default function LogistiquePage() {
   }
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "28px 24px 60px" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <Link href="/dashboard" style={{ fontSize: 12.5, color: "var(--sub)" }}>
-            ← {t("backToDashboard")}
-          </Link>
-          <h1 style={{ fontSize: 19, color: "var(--petrol)", marginTop: 6 }}>{t("logisticsPageTitle")}</h1>
-        </div>
-        <LanguageSwitcher variant="default" persistToBackend />
-      </header>
-
+    <AppShell title={t("logisticsPageTitle")}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 20, alignItems: "start" }}>
@@ -139,7 +128,7 @@ export default function LogistiquePage() {
           )}
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }
 

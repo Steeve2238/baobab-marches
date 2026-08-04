@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, clearToken } from "../../lib/api";
+import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
-import LanguageSwitcher from "../../lib/i18n/LanguageSwitcher";
+import AppShell from "../../lib/components/AppShell";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -36,11 +36,6 @@ export default function DashboardPage() {
     charger();
   }, [router, t]);
 
-  function handleLogout() {
-    clearToken();
-    router.push("/login");
-  }
-
   async function handleAcquitter(id) {
     try {
       await api.acquitterSignal(id);
@@ -53,35 +48,7 @@ export default function DashboardPage() {
   const signauxActifs = signaux.filter((s) => !s.accuse_reception);
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px 60px" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div
-            style={{
-              width: 34, height: 34, borderRadius: 8,
-              background: "conic-gradient(from 220deg, var(--ocre), #E8A354, var(--ocre))",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "Space Grotesk", fontWeight: 700, color: "#0A2E34", fontSize: 15,
-            }}
-          >
-            B
-          </div>
-          <div>
-            <div style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 16 }}>Baobab Marchés</div>
-            <div style={{ fontSize: 11, color: "var(--sub)" }}>{t("appSubtitle")}</div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <LanguageSwitcher variant="default" persistToBackend />
-          <button
-            onClick={handleLogout}
-            style={{ background: "none", border: "1px solid var(--line)", borderRadius: 8, padding: "7px 14px", fontSize: 12.5 }}
-          >
-            {t("signOut")}
-          </button>
-        </div>
-      </header>
-
+    <AppShell title={t("navDashboard")}>
       {chargement && <p>{t("loading")}</p>}
       {erreur && <p style={{ color: "var(--brique)" }}>{erreur}</p>}
 
@@ -144,42 +111,6 @@ export default function DashboardPage() {
           </section>
 
           <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 12 }}>{t("ongoingFiles")}</h2>
-          <Link
-            href="/financement"
-            style={{
-              display: "inline-block",
-              fontSize: 12,
-              color: "var(--petrol-2)",
-              marginBottom: 12,
-              marginLeft: 12,
-            }}
-          >
-            {t("manageFinancing")} →
-          </Link>
-          <Link
-            href="/logistique"
-            style={{
-              display: "inline-block",
-              fontSize: 12,
-              color: "var(--petrol-2)",
-              marginBottom: 12,
-              marginLeft: 16,
-            }}
-          >
-            {t("manageLogistics")} →
-          </Link>
-          <Link
-            href="/courriers"
-            style={{
-              display: "inline-block",
-              fontSize: 12,
-              color: "var(--petrol-2)",
-              marginBottom: 12,
-              marginLeft: 16,
-            }}
-          >
-            {t("manageLetters")} →
-          </Link>
           <div className="card">
             {dossiers.length === 0 ? (
               <p style={{ fontSize: 13, color: "var(--sub)" }}>
@@ -223,7 +154,7 @@ export default function DashboardPage() {
           </div>
         </>
       )}
-    </div>
+    </AppShell>
   );
 }
 

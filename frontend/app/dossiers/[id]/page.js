@@ -2,10 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
-import LanguageSwitcher from "../../../lib/i18n/LanguageSwitcher";
+import AppShell from "../../../lib/components/AppShell";
 
 const TYPE_BESOIN_CODES = ["CAUTION_SOUMISSION", "CAUTION_BONNE_EXECUTION", "AVANCE_DEMARRAGE", "LC"];
 
@@ -220,23 +219,17 @@ export default function DossierDetailPage() {
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px 60px" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <Link href="/dashboard" style={{ fontSize: 12.5, color: "var(--sub)" }}>
-            ← {t("backToDashboard")}
-          </Link>
-          <h1 style={{ fontSize: 19, color: "var(--petrol)", marginTop: 6 }}>{dossier.intitule}</h1>
-          <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
-            {dossier.reference_externe} {dossier.maitre_ouvrage_nom ? `· ${dossier.maitre_ouvrage_nom}` : ""}
-            {" · "}
-            <span className={`chip ${statutClasse(dossier.statut)}`} style={{ marginLeft: 4 }}>
-              {statutLabel(dossier.statut)}
-            </span>
-          </div>
+    <AppShell backHref="/dashboard">
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 19, color: "var(--petrol)" }}>{dossier.intitule}</h1>
+        <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+          {dossier.reference_externe} {dossier.maitre_ouvrage_nom ? `· ${dossier.maitre_ouvrage_nom}` : ""}
+          {" · "}
+          <span className={`chip ${statutClasse(dossier.statut)}`} style={{ marginLeft: 4 }}>
+            {statutLabel(dossier.statut)}
+          </span>
         </div>
-        <LanguageSwitcher variant="default" persistToBackend />
-      </header>
+      </div>
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
@@ -378,9 +371,6 @@ export default function DossierDetailPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("logisticsSection")}</h2>
           <div style={{ display: "flex", gap: 10 }}>
-            <Link href="/logistique" style={{ fontSize: 12, color: "var(--petrol-2)", alignSelf: "center" }}>
-              {t("manageLogistics")} →
-            </Link>
             <button onClick={() => setFormSuiviOuvert((v) => !v)} style={boutonPrincipalStyle}>
               {formSuiviOuvert ? t("cancel") : t("newSuivi")}
             </button>
@@ -616,9 +606,6 @@ export default function DossierDetailPage() {
       <section>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("lettersSection")}</h2>
-          <Link href="/courriers" style={{ fontSize: 12, color: "var(--petrol-2)", alignSelf: "center" }}>
-            {t("manageLetters")} →
-          </Link>
         </div>
 
         {suggestionsCourrier.length > 0 && (
@@ -705,7 +692,7 @@ export default function DossierDetailPage() {
           </div>
         )}
       </section>
-    </div>
+    </AppShell>
   );
 }
 
