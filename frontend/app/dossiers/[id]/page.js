@@ -1,0 +1,607 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import Link from "next/link";
+import { api } from "../../../lib/api";
+import { useLangue } from "../../../lib/i18n/LanguageContext";
+import LanguageSwitcher from "../../../lib/i18n/LanguageSwitcher";
+
+const TYPE_BESOIN_CODES = ["CAUTION_SOUMISSION", "CAUTION_BONNE_EXECUTION", "AVANCE_DEMARRAGE", "LC"];
+
+export default function DossierDetailPage() {
+  const { id } = useParams();
+  const { t, statutLabel, typeBesoinLabel, penaliteStatutLabel, dict } = useLangue();
+
+  const [dossier, setDossier] = useState(null);
+  const [simulations, setSimulations] = useState([]);
+  const [calculsMarge, setCalculsMarge] = useState([]);
+  const [suivisLogistiques, setSuivisLogistiques] = useState([]);
+  const [incoterms, setIncoterms] = useState([]);
+  const [transitaires, setTransitaires] = useState([]);
+  const [chargement, setChargement] = useState(true);
+  const [erreur, setErreur] = useState("");
+
+  const [formSimulationOuvert, setFormSimulationOuvert] = useState(false);
+  const [formSimulation, setFormSimulation] = useState({
+    type_besoin: TYPE_BESOIN_CODES[0],
+    montant: "",
+    duree_estimee_jours: "",
+  });
+  const [simulationEnCours, setSimulationEnCours] = useState(false);
+
+  const [formMargeOuvert, setFormMargeOuvert] = useState(false);
+  const [formMarge, setFormMarge] = useState({
+    prix_achat_devise: "",
+    taux_change: "",
+    frais_douane_transit: "",
+    frais_bancaires: "",
+    frais_dao_caution: "",
+    redevance_armp: "",
+    marge_pct_visee: "",
+    prix_final_ht_hd: "",
+  });
+  const [margeEnCours, setMargeEnCours] = useState(false);
+
+  const [formSuiviOuvert, setFormSuiviOuvert] = useState(false);
+  const [formSuivi, setFormSuivi] = useState({
+    transitaire_id: "",
+    incoterm_scenario_id: "",
+    date_depart: "",
+    date_arrivee_prevue: "",
+    date_arrivee_reelle: "",
+    montant_ttc: "",
+  });
+  const [suiviEnCours, setSuiviEnCours] = useState(false);
+
+  useEffect(() => {
+    async function charger() {
+      try {
+        const [dossierData, simulationsData, margeData, suivisData, incotermsData, transitairesData] =
+          await Promise.all([
+            api.getDossier(id),
+            api.getSimulations(id),
+            api.getCalculsMarge(id),
+            api.getSuivisLogistiques(id),
+            api.getIncoterms(),
+            api.getTransitaires(),
+          ]);
+        setDossier(dossierData);
+        setSimulations(simulationsData);
+        setCalculsMarge(margeData);
+        setSuivisLogistiques(suivisData);
+        setIncoterms(incotermsData);
+        setTransitaires(transitairesData);
+      } catch (err) {
+        setErreur(err.message || t("defaultLoadError"));
+      } finally {
+        setChargement(false);
+      }
+    }
+    if (id) charger();
+  }, [id, t]);
+
+  async function handleLancerSimulation(e) {
+    e.preventDefault();
+    setSimulationEnCours(true);
+    try {
+      const nouvelle = await api.createSimulation(id, {
+        type_besoin: formSimulation.type_besoin,
+        montant: Number(formSimulation.montant),
+        duree_estimee_jours: formSimulation.duree_estimee_jours
+          ? Number(formSimulation.duree_estimee_jours)
+          : null,
+      });
+      setSimulations((prev) => [nouvelle, ...prev]);
+      setFormSimulationOuvert(false);
+      setFormSimulation({ type_besoin: TYPE_BESOIN_CODES[0], montant: "", duree_estimee_jours: "" });
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setSimulationEnCours(false);
+    }
+  }
+
+  async function handleRetenirOption(simulationId, ligneCreditTarifId) {
+    try {
+      const maj = await api.patchSimulationRetenue(simulationId, ligneCreditTarifId);
+      setSimulations((prev) => prev.map((s) => (s.id === simulationId ? maj : s)));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  async function handleCalculerMarge(e) {
+    e.preventDefault();
+    setMargeEnCours(true);
+    try {
+      const payload = Object.fromEntries(
+        Object.entries(formMarge).map(([k, v]) => [k, v === "" ? null : Number(v)])
+      );
+      const nouveau = await api.createCalculMarge(id, payload);
+      setCalculsMarge((prev) => [nouveau, ...prev]);
+      setFormMargeOuvert(false);
+      setFormMarge({
+        prix_achat_devise: "",
+        taux_change: "",
+        frais_douane_transit: "",
+        frais_bancaires: "",
+        frais_dao_caution: "",
+        redevance_armp: "",
+        marge_pct_visee: "",
+        prix_final_ht_hd: "",
+      });
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setMargeEnCours(false);
+    }
+  }
+
+  async function handleCreerSuivi(e) {
+    e.preventDefault();
+    setSuiviEnCours(true);
+    try {
+      const payload = {
+        transitaire_id: formSuivi.transitaire_id || null,
+        incoterm_scenario_id: formSuivi.incoterm_scenario_id || null,
+        date_depart: formSuivi.date_depart || null,
+        date_arrivee_prevue: formSuivi.date_arrivee_prevue || null,
+        date_arrivee_reelle: formSuivi.date_arrivee_reelle || null,
+        montant_ttc: formSuivi.montant_ttc ? Number(formSuivi.montant_ttc) : null,
+      };
+      const nouveau = await api.createSuiviLogistique(id, payload);
+      setSuivisLogistiques((prev) => [nouveau, ...prev]);
+      setFormSuiviOuvert(false);
+      setFormSuivi({
+        transitaire_id: "",
+        incoterm_scenario_id: "",
+        date_depart: "",
+        date_arrivee_prevue: "",
+        date_arrivee_reelle: "",
+        montant_ttc: "",
+      });
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setSuiviEnCours(false);
+    }
+  }
+
+  if (chargement) {
+    return <div style={{ padding: 28 }}>{t("loading")}</div>;
+  }
+
+  if (erreur && !dossier) {
+    return <div style={{ padding: 28, color: "var(--brique)" }}>{erreur}</div>;
+  }
+
+  return (
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "28px 24px 60px" }}>
+      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+        <div>
+          <Link href="/dashboard" style={{ fontSize: 12.5, color: "var(--sub)" }}>
+            ← {t("backToDashboard")}
+          </Link>
+          <h1 style={{ fontSize: 19, color: "var(--petrol)", marginTop: 6 }}>{dossier.intitule}</h1>
+          <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+            {dossier.reference_externe} {dossier.maitre_ouvrage_nom ? `· ${dossier.maitre_ouvrage_nom}` : ""}
+            {" · "}
+            <span className={`chip ${statutClasse(dossier.statut)}`} style={{ marginLeft: 4 }}>
+              {statutLabel(dossier.statut)}
+            </span>
+          </div>
+        </div>
+        <LanguageSwitcher variant="default" persistToBackend />
+      </header>
+
+      {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+
+      {/* ---------------- FINANCEMENT ---------------- */}
+      <section style={{ marginBottom: 30 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("financingSection")}</h2>
+          <button
+            onClick={() => setFormSimulationOuvert((v) => !v)}
+            style={boutonPrincipalStyle}
+          >
+            {formSimulationOuvert ? t("cancel") : t("newSimulation")}
+          </button>
+        </div>
+
+        {formSimulationOuvert && (
+          <form onSubmit={handleLancerSimulation} className="card" style={{ marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>{t("typeBesoinLabel")}</label>
+                <select
+                  value={formSimulation.type_besoin}
+                  onChange={(e) => setFormSimulation((f) => ({ ...f, type_besoin: e.target.value }))}
+                  style={inputStyle}
+                >
+                  {TYPE_BESOIN_CODES.map((code) => (
+                    <option key={code} value={code}>
+                      {typeBesoinLabel(code)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>{t("montantLabel")}</label>
+                <input
+                  type="number"
+                  required
+                  value={formSimulation.montant}
+                  onChange={(e) => setFormSimulation((f) => ({ ...f, montant: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("dureeLabel")}</label>
+                <input
+                  type="number"
+                  value={formSimulation.duree_estimee_jours}
+                  onChange={(e) =>
+                    setFormSimulation((f) => ({ ...f, duree_estimee_jours: e.target.value }))
+                  }
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <button type="submit" disabled={simulationEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
+              {t("launchSimulation")}
+            </button>
+          </form>
+        )}
+
+        <h3 style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 8, fontWeight: 600 }}>
+          {t("simulationHistory")}
+        </h3>
+        {simulations.length === 0 ? (
+          <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("noSimulations")}</p>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {simulations.map((sim) => (
+              <div key={sim.id} className="card">
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.3 }}>
+                    {typeBesoinLabel(sim.type_besoin)}
+                  </div>
+                  <div className="mono" style={{ fontSize: 12.5, color: "var(--sub)" }}>
+                    {Number(sim.montant).toLocaleString(dict.dateLocale)} XOF
+                    {sim.duree_estimee_jours ? ` · ${sim.duree_estimee_jours}j` : ""}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {(sim.resultat_json || []).map((option, idx) => {
+                    const estRetenue = sim.option_retenue_id === option.ligne_credit_tarif_id;
+                    const estRecommandee = sim.option_recommandee_id === option.ligne_credit_tarif_id;
+                    return (
+                      <div
+                        key={option.ligne_credit_tarif_id || idx}
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          padding: "8px 10px",
+                          borderRadius: 8,
+                          background: estRetenue ? "var(--vert-bg)" : "var(--line-soft)",
+                          fontSize: 12.5,
+                        }}
+                      >
+                        <div>
+                          <span style={{ fontWeight: 600 }}>{option.partenaire_nom}</span>
+                          {estRecommandee && (
+                            <span className="chip ok" style={{ marginLeft: 8 }}>
+                              {t("recommendedOption")}
+                            </span>
+                          )}
+                          {estRetenue && (
+                            <span className="chip warn" style={{ marginLeft: 8 }}>
+                              {t("retainedOption")}
+                            </span>
+                          )}
+                          <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 2 }}>
+                            {option.erreur ? option.erreur : option.formule_utilisee}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span className="mono">
+                            {option.cout_total != null
+                              ? `${Number(option.cout_total).toLocaleString(dict.dateLocale)} XOF`
+                              : t("invalidOption")}
+                          </span>
+                          {option.cout_total != null && !estRetenue && (
+                            <button
+                              onClick={() => handleRetenirOption(sim.id, option.ligne_credit_tarif_id)}
+                              style={boutonSecondaireStyle}
+                            >
+                              {t("retainOption")}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ---------------- LOGISTIQUE ---------------- */}
+      <section style={{ marginBottom: 30 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("logisticsSection")}</h2>
+          <div style={{ display: "flex", gap: 10 }}>
+            <Link href="/logistique" style={{ fontSize: 12, color: "var(--petrol-2)", alignSelf: "center" }}>
+              {t("manageLogistics")} →
+            </Link>
+            <button onClick={() => setFormSuiviOuvert((v) => !v)} style={boutonPrincipalStyle}>
+              {formSuiviOuvert ? t("cancel") : t("newSuivi")}
+            </button>
+          </div>
+        </div>
+
+        {formSuiviOuvert && (
+          <form onSubmit={handleCreerSuivi} className="card" style={{ marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>{t("transitaireLabel")}</label>
+                <select
+                  value={formSuivi.transitaire_id}
+                  onChange={(e) => setFormSuivi((f) => ({ ...f, transitaire_id: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">{t("none")}</option>
+                  {transitaires.map((tr) => (
+                    <option key={tr.id} value={tr.id}>
+                      {tr.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>{t("incotermLabel")}</label>
+                <select
+                  value={formSuivi.incoterm_scenario_id}
+                  onChange={(e) => setFormSuivi((f) => ({ ...f, incoterm_scenario_id: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">{t("none")}</option>
+                  {incoterms.map((inc) => (
+                    <option key={inc.id} value={inc.id}>
+                      {inc.code}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>{t("departDateLabel")}</label>
+                <input
+                  type="date"
+                  value={formSuivi.date_depart}
+                  onChange={(e) => setFormSuivi((f) => ({ ...f, date_depart: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("expectedArrivalLabel")}</label>
+                <input
+                  type="date"
+                  value={formSuivi.date_arrivee_prevue}
+                  onChange={(e) => setFormSuivi((f) => ({ ...f, date_arrivee_prevue: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("actualArrivalLabel")}</label>
+                <input
+                  type="date"
+                  value={formSuivi.date_arrivee_reelle}
+                  onChange={(e) => setFormSuivi((f) => ({ ...f, date_arrivee_reelle: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("amountLabel")}</label>
+                <input
+                  type="number"
+                  value={formSuivi.montant_ttc}
+                  onChange={(e) => setFormSuivi((f) => ({ ...f, montant_ttc: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <button type="submit" disabled={suiviEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
+              {t("save")}
+            </button>
+          </form>
+        )}
+
+        {suivisLogistiques.length === 0 ? (
+          <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("noSuivis")}</p>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {suivisLogistiques.map((sl) => (
+              <div
+                key={sl.id}
+                className="card"
+                style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr", gap: 10, alignItems: "center" }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13 }}>
+                  {sl.transitaire_nom || "—"} {sl.incoterm_code ? `· ${sl.incoterm_code}` : ""}
+                </div>
+                <div>
+                  <div style={miniLabelStyle}>{t("expectedArrivalLabel")}</div>
+                  <div className="mono" style={{ fontSize: 12.5 }}>
+                    {sl.date_arrivee_prevue ? new Date(sl.date_arrivee_prevue).toLocaleDateString(dict.dateLocale) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div style={miniLabelStyle}>{t("actualArrivalLabel")}</div>
+                  <div className="mono" style={{ fontSize: 12.5 }}>
+                    {sl.date_arrivee_reelle ? new Date(sl.date_arrivee_reelle).toLocaleDateString(dict.dateLocale) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div style={miniLabelStyle}>{t("amountLabel")}</div>
+                  <div className="mono" style={{ fontSize: 12.5 }}>
+                    {sl.montant_ttc ? Number(sl.montant_ttc).toLocaleString(dict.dateLocale) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <span
+                    className={`chip ${
+                      sl.statut_penalite === "ENCOURUE" ? "risk" : sl.statut_penalite === "RISQUE" ? "warn" : "ok"
+                    }`}
+                  >
+                    {penaliteStatutLabel(sl.statut_penalite)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ---------------- MARGE ---------------- */}
+      <section>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("marginSection")}</h2>
+          <button onClick={() => setFormMargeOuvert((v) => !v)} style={boutonPrincipalStyle}>
+            {formMargeOuvert ? t("cancel") : t("newMarginCalc")}
+          </button>
+        </div>
+
+        {formMargeOuvert && (
+          <form onSubmit={handleCalculerMarge} className="card" style={{ marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
+              {[
+                ["prix_achat_devise", "purchasePriceLabel"],
+                ["taux_change", "exchangeRateLabel"],
+                ["frais_douane_transit", "customsFeesLabel"],
+                ["frais_bancaires", "bankFeesLabel"],
+                ["frais_dao_caution", "guaranteeFeesLabel"],
+                ["redevance_armp", "armpFeesLabel"],
+                ["marge_pct_visee", "targetMarginLabel"],
+                ["prix_final_ht_hd", "finalPriceLabel"],
+              ].map(([champ, cle]) => (
+                <div key={champ}>
+                  <label style={labelStyle}>{t(cle)}</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formMarge[champ]}
+                    onChange={(e) => setFormMarge((f) => ({ ...f, [champ]: e.target.value }))}
+                    style={inputStyle}
+                  />
+                </div>
+              ))}
+            </div>
+            <button type="submit" disabled={margeEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
+              {t("calculate")}
+            </button>
+          </form>
+        )}
+
+        <h3 style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 8, fontWeight: 600 }}>
+          {t("marginHistory")}
+        </h3>
+        {calculsMarge.length === 0 ? (
+          <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("noMarginCalcs")}</p>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {calculsMarge.map((calc) => (
+              <div
+                key={calc.id}
+                className="card"
+                style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, alignItems: "center" }}
+              >
+                <div>
+                  <div style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase" }}>
+                    {t("cifPriceLabel")}
+                  </div>
+                  <div className="mono" style={{ fontSize: 13 }}>
+                    {calc.prix_cif != null ? Number(calc.prix_cif).toLocaleString(dict.dateLocale) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase" }}>
+                    {t("costOfGoodsLabel")}
+                  </div>
+                  <div className="mono" style={{ fontSize: 13 }}>
+                    {calc.cout_revient != null ? Number(calc.cout_revient).toLocaleString(dict.dateLocale) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase" }}>
+                    {t("targetMarginLabel")}
+                  </div>
+                  <div className="mono" style={{ fontSize: 13 }}>
+                    {calc.marge_pct_visee != null ? `${calc.marge_pct_visee}%` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase" }}>
+                    {t("realMarginLabel")}
+                  </div>
+                  <div
+                    className="mono"
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color:
+                        calc.marge_pct_reelle != null && calc.marge_pct_visee != null
+                          ? calc.marge_pct_reelle >= calc.marge_pct_visee
+                            ? "var(--vert)"
+                            : "var(--brique)"
+                          : "var(--ink)",
+                    }}
+                  >
+                    {calc.marge_pct_reelle != null ? `${calc.marge_pct_reelle}%` : "—"}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function statutClasse(statut) {
+  if (["ATTRIBUE", "EN_EXECUTION", "RECEPTION", "CLOTURE"].includes(statut)) return "ok";
+  if (["NON_ATTRIBUE", "NO_GO"].includes(statut)) return "risk";
+  return "warn";
+}
+
+const labelStyle = { fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 5 };
+const miniLabelStyle = { fontSize: 9.5, color: "var(--sub)", textTransform: "uppercase" };
+const inputStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  fontSize: 13,
+  fontFamily: "inherit",
+};
+const boutonPrincipalStyle = {
+  background: "var(--petrol)",
+  color: "#fff",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 16px",
+  fontSize: 12.5,
+  fontWeight: 600,
+};
+const boutonSecondaireStyle = {
+  background: "none",
+  border: "1px solid var(--line)",
+  borderRadius: 6,
+  padding: "4px 10px",
+  fontSize: 11.5,
+  whiteSpace: "nowrap",
+};

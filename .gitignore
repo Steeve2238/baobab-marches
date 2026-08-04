@@ -1,0 +1,23 @@
+# Dependances
+node_modules/
+
+# Fichiers d'environnement (contiennent des secrets : DATABASE_URL, JWT_SECRET...)
+.env
+.env.local
+.env.*.local
+
+# Next.js
+.next/
+out/
+
+# Logs
+npm-debug.log*
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editeurs
+.vscode/
+.idea/

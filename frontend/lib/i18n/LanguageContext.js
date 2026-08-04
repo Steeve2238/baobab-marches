@@ -1,0 +1,107 @@
+"use client";
+
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  DICTIONARIES,
+  STATUT_LABELS,
+  TYPE_BESOIN_LABELS,
+  TYPE_FACILITE_LABELS,
+  GRILLE_STATUT_LABELS,
+  PENALITE_STATUT_LABELS,
+  LANGUES_SUPPORTEES,
+  LANGUE_PAR_DEFAUT,
+} from "./dictionaries";
+import { setLangueLocale, getLangueLocale, api } from "../api";
+
+const LanguageContext = createContext(null);
+
+export function LanguageProvider({ children }) {
+  const [langue, setLangueState] = useState(LANGUE_PAR_DEFAUT);
+
+  // Au montage cote client : recupere la langue deja choisie (localStorage)
+  useEffect(() => {
+    const stored = getLangueLocale();
+    if (stored && LANGUES_SUPPORTEES.includes(stored)) {
+      setLangueState(stored);
+    }
+  }, []);
+
+  // Reflete la langue active sur <html lang="..."> pour l'accessibilite
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = langue;
+    }
+  }, [langue]);
+
+  /**
+   * Change la langue active. Si `persistToBackend` est vrai (utilisateur
+   * connecte), synchronise aussi la preference sur son profil.
+   */
+  function setLangue(newLangue, { persistToBackend = false } = {}) {
+    if (!LANGUES_SUPPORTEES.includes(newLangue)) return;
+    setLangueState(newLangue);
+    setLangueLocale(newLangue);
+    if (persistToBackend) {
+      api.setLangue(newLangue).catch(() => {
+        // silencieux : la preference reste appliquee localement
+      });
+    }
+  }
+
+  const dict = DICTIONARIES[langue] || DICTIONARIES[LANGUE_PAR_DEFAUT];
+  const statutLabels = STATUT_LABELS[langue] || STATUT_LABELS[LANGUE_PAR_DEFAUT];
+  const typeBesoinLabels = TYPE_BESOIN_LABELS[langue] || TYPE_BESOIN_LABELS[LANGUE_PAR_DEFAUT];
+  const typeFaciliteLabels = TYPE_FACILITE_LABELS[langue] || TYPE_FACILITE_LABELS[LANGUE_PAR_DEFAUT];
+  const grilleStatutLabels = GRILLE_STATUT_LABELS[langue] || GRILLE_STATUT_LABELS[LANGUE_PAR_DEFAUT];
+  const penaliteStatutLabels = PENALITE_STATUT_LABELS[langue] || PENALITE_STATUT_LABELS[LANGUE_PAR_DEFAUT];
+
+  function t(key) {
+    return dict[key] || key;
+  }
+
+  function statutLabel(statut) {
+    return statutLabels[statut] || statut;
+  }
+
+  function typeBesoinLabel(code) {
+    return typeBesoinLabels[code] || code;
+  }
+
+  function typeFaciliteLabel(code) {
+    return typeFaciliteLabels[code] || code;
+  }
+
+  function grilleStatutLabel(code) {
+    return grilleStatutLabels[code] || code;
+  }
+
+  function penaliteStatutLabel(code) {
+    return penaliteStatutLabels[code] || code;
+  }
+
+  return (
+    <LanguageContext.Provider
+      value={{
+        langue,
+        setLangue,
+        t,
+        statutLabel,
+        typeBesoinLabel,
+        typeFaciliteLabel,
+        grilleStatutLabel,
+        penaliteStatutLabel,
+        dict,
+      }}
+    >
+      {children}
+    </LanguageContext.Provider>
+  );
+}
+
+export function useLangue() {
+  const ctx = useContext(LanguageContext);
+  if (!ctx) {
+    throw new Error("useLangue doit etre utilise a l'interieur de LanguageProvider");
+  }
+  return ctx;
+}

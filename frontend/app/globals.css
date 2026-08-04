@@ -1,0 +1,84 @@
+:root {
+  --bg: #EEF1EF;
+  --panel: #FFFFFF;
+  --ink: #14232A;
+  --sub: #5B6A6C;
+  --petrol: #0E3B43;
+  --petrol-2: #155A66;
+  --petrol-3: #1E7280;
+  --ocre: #C97A2B;
+  --ocre-bg: #FBEEE0;
+  --brique: #B23A2E;
+  --brique-bg: #FBE9E7;
+  --vert: #2F6B4F;
+  --vert-bg: #E7F1EB;
+  --line: #DDE4E2;
+  --line-soft: #E9EEEC;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", -apple-system, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Space Grotesk", sans-serif;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.mono {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11.3px;
+  font-weight: 600;
+}
+.chip.ok {
+  background: var(--vert-bg);
+  color: var(--vert);
+}
+.chip.warn {
+  background: var(--ocre-bg);
+  color: var(--ocre);
+}
+.chip.risk {
+  background: var(--brique-bg);
+  color: var(--brique);
+}
