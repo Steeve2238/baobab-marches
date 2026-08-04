@@ -100,7 +100,16 @@ router.get("/dossiers/:dossierId/offres", async (req, res) => {
 // POST /api/fournisseurs/dossiers/:dossierId/offres
 router.post("/dossiers/:dossierId/offres", async (req, res) => {
   const { dossierId } = req.params;
-  const { fournisseur_id, prix_exw, delai_jours, incoterm_scenario_id } = req.body;
+  const {
+    fournisseur_id,
+    prix_exw,
+    devise,
+    delai_jours,
+    delai_paiement_jours,
+    condition_reglement,
+    pourcentage_acompte,
+    incoterm_scenario_id,
+  } = req.body;
 
   if (!fournisseur_id) {
     return res.status(400).json({ error: t(req, "FOURNISSEUR_ID_REQUIRED") });
@@ -124,10 +133,22 @@ router.post("/dossiers/:dossierId/offres", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO offre_fournisseur (dossier_ao_id, fournisseur_id, prix_exw, delai_jours, incoterm_scenario_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO offre_fournisseur
+         (dossier_ao_id, fournisseur_id, prix_exw, devise, delai_jours, delai_paiement_jours,
+          condition_reglement, pourcentage_acompte, incoterm_scenario_id)
+       VALUES ($1, $2, $3, COALESCE($4, 'XOF'), $5, $6, $7, $8, $9)
        RETURNING *`,
-      [dossierId, fournisseur_id, prix_exw || null, delai_jours || null, incoterm_scenario_id || null]
+      [
+        dossierId,
+        fournisseur_id,
+        prix_exw || null,
+        devise || null,
+        delai_jours || null,
+        delai_paiement_jours || null,
+        condition_reglement || null,
+        pourcentage_acompte || null,
+        incoterm_scenario_id || null,
+      ]
     );
 
     await recalculerScoreFiabilite(fournisseur_id);

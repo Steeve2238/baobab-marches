@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import AppShell from "../../lib/components/AppShell";
+import { PAYS } from "../../lib/constants/pays";
 
 export default function FournisseursPage() {
   const { t } = useLangue();
@@ -39,11 +40,18 @@ export default function FournisseursPage() {
           style={inputStyle}
         />
         <label style={{ ...labelStyle, marginTop: 10 }}>{t("supplierCountryLabel")}</label>
-        <input
+        <select
           value={form.pays}
           onChange={(e) => setForm((f) => ({ ...f, pays: e.target.value }))}
           style={inputStyle}
-        />
+        >
+          <option value="">—</option>
+          {PAYS.map((pays) => (
+            <option key={pays} value={pays}>
+              {pays}
+            </option>
+          ))}
+        </select>
         <button type="submit" style={{ ...boutonPrincipalStyle, marginTop: 12 }}>
           {t("newSupplier")}
         </button>

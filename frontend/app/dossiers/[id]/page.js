@@ -5,13 +5,31 @@ import { useParams } from "next/navigation";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import { DEVISES } from "../../../lib/constants/devises";
 
 const TYPE_BESOIN_CODES = ["CAUTION_SOUMISSION", "CAUTION_BONNE_EXECUTION", "AVANCE_DEMARRAGE", "LC"];
+const CONDITIONS_REGLEMENT = [
+  "COMPTANT",
+  "ACOMPTE_SOLDE",
+  "CREDIT_FOURNISSEUR",
+  "LC",
+  "AVAL_TRAITE",
+  "CHEQUE",
+  "VIREMENT",
+];
 
 export default function DossierDetailPage() {
   const { id } = useParams();
-  const { t, statutLabel, typeBesoinLabel, penaliteStatutLabel, typeCourrierLabel, typeFaciliteLabel, dict } =
-    useLangue();
+  const {
+    t,
+    statutLabel,
+    typeBesoinLabel,
+    penaliteStatutLabel,
+    typeCourrierLabel,
+    typeFaciliteLabel,
+    conditionReglementLabel,
+    dict,
+  } = useLangue();
 
   const [dossier, setDossier] = useState(null);
   const [simulations, setSimulations] = useState([]);
@@ -70,7 +88,11 @@ export default function DossierDetailPage() {
   const [formOffre, setFormOffre] = useState({
     fournisseur_id: "",
     prix_exw: "",
+    devise: "XOF",
     delai_jours: "",
+    delai_paiement_jours: "",
+    condition_reglement: "",
+    pourcentage_acompte: "",
     incoterm_scenario_id: "",
   });
   const [offreEnCours, setOffreEnCours] = useState(false);
@@ -298,13 +320,26 @@ export default function DossierDetailPage() {
       const payload = {
         fournisseur_id: formOffre.fournisseur_id,
         prix_exw: formOffre.prix_exw ? Number(formOffre.prix_exw) : null,
+        devise: formOffre.devise || "XOF",
         delai_jours: formOffre.delai_jours ? Number(formOffre.delai_jours) : null,
+        delai_paiement_jours: formOffre.delai_paiement_jours ? Number(formOffre.delai_paiement_jours) : null,
+        condition_reglement: formOffre.condition_reglement || null,
+        pourcentage_acompte: formOffre.pourcentage_acompte ? Number(formOffre.pourcentage_acompte) : null,
         incoterm_scenario_id: formOffre.incoterm_scenario_id || null,
       };
       const nouvelle = await api.createOffreFournisseur(id, payload);
       setOffres((prev) => [...prev, nouvelle].sort((a, b) => (a.prix_exw ?? Infinity) - (b.prix_exw ?? Infinity)));
       setFormOffreOuvert(false);
-      setFormOffre({ fournisseur_id: "", prix_exw: "", delai_jours: "", incoterm_scenario_id: "" });
+      setFormOffre({
+        fournisseur_id: "",
+        prix_exw: "",
+        devise: "XOF",
+        delai_jours: "",
+        delai_paiement_jours: "",
+        condition_reglement: "",
+        pourcentage_acompte: "",
+        incoterm_scenario_id: "",
+      });
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -488,7 +523,7 @@ export default function DossierDetailPage() {
 
         {formOffreOuvert && (
           <form onSubmit={handleAjouterOffre} className="card" style={{ marginBottom: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 12 }}>
               <div>
                 <label style={labelStyle}>{t("supplierLabel")}</label>
                 <select
@@ -515,11 +550,37 @@ export default function DossierDetailPage() {
                 />
               </div>
               <div>
+                <label style={labelStyle}>{t("currencyLabel")}</label>
+                <select
+                  value={formOffre.devise}
+                  onChange={(e) => setFormOffre((f) => ({ ...f, devise: e.target.value }))}
+                  style={inputStyle}
+                >
+                  {DEVISES.map((d) => (
+                    <option key={d.code} value={d.code}>
+                      {d.libelle}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
+              <div>
                 <label style={labelStyle}>{t("deliveryDelayLabel")}</label>
                 <input
                   type="number"
                   value={formOffre.delai_jours}
                   onChange={(e) => setFormOffre((f) => ({ ...f, delai_jours: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("paymentDelayLabel")}</label>
+                <input
+                  type="number"
+                  value={formOffre.delai_paiement_jours}
+                  onChange={(e) => setFormOffre((f) => ({ ...f, delai_paiement_jours: e.target.value }))}
                   style={inputStyle}
                 />
               </div>
@@ -539,6 +600,47 @@ export default function DossierDetailPage() {
                 </select>
               </div>
             </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: formOffre.condition_reglement === "ACOMPTE_SOLDE" ? "1.4fr 1fr" : "1fr",
+                gap: 12,
+                marginTop: 12,
+              }}
+            >
+              <div>
+                <label style={labelStyle}>{t("paymentTermsLabel")}</label>
+                <select
+                  value={formOffre.condition_reglement}
+                  onChange={(e) => setFormOffre((f) => ({ ...f, condition_reglement: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">—</option>
+                  {CONDITIONS_REGLEMENT.map((code) => (
+                    <option key={code} value={code}>
+                      {conditionReglementLabel(code)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {formOffre.condition_reglement === "ACOMPTE_SOLDE" && (
+                <div>
+                  <label style={labelStyle}>{t("depositPercentLabel")}</label>
+                  <input
+                    type="number"
+                    value={formOffre.pourcentage_acompte}
+                    onChange={(e) => setFormOffre((f) => ({ ...f, pourcentage_acompte: e.target.value }))}
+                    style={inputStyle}
+                  />
+                </div>
+              )}
+            </div>
+
+            {["LC", "AVAL_TRAITE", "CREDIT_FOURNISSEUR"].includes(formOffre.condition_reglement) && (
+              <p style={{ fontSize: 11.5, color: "var(--ocre)", marginTop: 10 }}>{t("financingHint")}</p>
+            )}
+
             <button type="submit" disabled={offreEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
               {t("save")}
             </button>
@@ -555,7 +657,7 @@ export default function DossierDetailPage() {
                 className="card"
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr",
+                  gridTemplateColumns: "1.3fr 1fr 0.8fr 0.8fr 1.1fr 0.8fr 0.8fr",
                   gap: 10,
                   alignItems: "center",
                   background: o.retenue ? "var(--vert-bg)" : "#fff",
@@ -568,12 +670,25 @@ export default function DossierDetailPage() {
                 <div>
                   <div style={miniLabelStyle}>{t("priceExwLabel")}</div>
                   <div className="mono" style={{ fontSize: 12.5 }}>
-                    {o.prix_exw ? Number(o.prix_exw).toLocaleString(dict.dateLocale) : "—"}
+                    {o.prix_exw ? `${Number(o.prix_exw).toLocaleString(dict.dateLocale)} ${o.devise}` : "—"}
                   </div>
                 </div>
                 <div>
                   <div style={miniLabelStyle}>{t("deliveryDelayLabel")}</div>
                   <div className="mono" style={{ fontSize: 12.5 }}>{o.delai_jours ?? "—"}</div>
+                </div>
+                <div>
+                  <div style={miniLabelStyle}>{t("paymentDelayLabel")}</div>
+                  <div className="mono" style={{ fontSize: 12.5 }}>{o.delai_paiement_jours ?? "—"}</div>
+                </div>
+                <div>
+                  <div style={miniLabelStyle}>{t("paymentTermsLabel")}</div>
+                  <div style={{ fontSize: 12 }}>
+                    {o.condition_reglement ? conditionReglementLabel(o.condition_reglement) : "—"}
+                    {o.condition_reglement === "ACOMPTE_SOLDE" && o.pourcentage_acompte
+                      ? ` (${o.pourcentage_acompte}%)`
+                      : ""}
+                  </div>
                 </div>
                 <div>
                   <div style={miniLabelStyle}>{t("reliabilityScoreLabel")}</div>

@@ -34,10 +34,15 @@ export const DICTIONARIES = {
     newOffer: "Nouvelle offre",
     supplierLabel: "Fournisseur",
     priceExwLabel: "Prix EXW",
-    deliveryDelayLabel: "Délai (jours)",
+    deliveryDelayLabel: "Délai de livraison (jours)",
+    paymentDelayLabel: "Délai de paiement (jours)",
+    currencyLabel: "Devise",
+    paymentTermsLabel: "Conditions de règlement",
+    depositPercentLabel: "% acompte",
     noOffers: "Aucune offre reçue pour ce dossier.",
     retainOffer: "Retenir",
     retainedOffer: "Retenue",
+    financingHint: "Ce mode de règlement nécessite probablement un financement — voir le module Financement.",
 
     enteteTitle: "Entête de structure",
     enteteDescription: "Ces informations apparaissent en haut de chaque courrier généré.",
@@ -197,10 +202,15 @@ export const DICTIONARIES = {
     newOffer: "New offer",
     supplierLabel: "Supplier",
     priceExwLabel: "EXW price",
-    deliveryDelayLabel: "Delay (days)",
+    deliveryDelayLabel: "Delivery delay (days)",
+    paymentDelayLabel: "Payment delay (days)",
+    currencyLabel: "Currency",
+    paymentTermsLabel: "Payment terms",
+    depositPercentLabel: "% deposit",
     noOffers: "No offer received for this file yet.",
     retainOffer: "Select",
     retainedOffer: "Selected",
+    financingHint: "This payment method likely requires financing — see the Financing module.",
 
     enteteTitle: "Organization letterhead",
     enteteDescription: "This information appears at the top of every generated letter.",
@@ -403,6 +413,27 @@ export const GRILLE_STATUT_LABELS = {
 export const PENALITE_STATUT_LABELS = {
   fr: { AUCUNE: "Aucune", RISQUE: "Risque", ENCOURUE: "Encourue" },
   en: { AUCUNE: "None", RISQUE: "At risk", ENCOURUE: "Incurred" },
+};
+
+export const CONDITION_REGLEMENT_LABELS = {
+  fr: {
+    COMPTANT: "Comptant",
+    ACOMPTE_SOLDE: "Acompte + solde à la livraison",
+    CREDIT_FOURNISSEUR: "Crédit fournisseur (paiement différé)",
+    LC: "Lettre de crédit",
+    AVAL_TRAITE: "Aval de traite",
+    CHEQUE: "Chèque",
+    VIREMENT: "Virement bancaire",
+  },
+  en: {
+    COMPTANT: "Cash",
+    ACOMPTE_SOLDE: "Deposit + balance on delivery",
+    CREDIT_FOURNISSEUR: "Supplier credit (deferred payment)",
+    LC: "Letter of credit",
+    AVAL_TRAITE: "Bill of exchange guarantee",
+    CHEQUE: "Cheque",
+    VIREMENT: "Bank transfer",
+  },
 };
 
 export const TYPE_COURRIER_LABELS = {
