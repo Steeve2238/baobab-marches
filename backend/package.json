@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "migrate": "node scripts/migrate.js",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "seed:courriers": "node scripts/seed-modeles-courrier.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -24,7 +25,3 @@
     "nodemon": "^3.1.0"
   }
 }
-
-
-
-
