@@ -132,12 +132,12 @@ router.post("/dossiers/:dossierId/offres", async (req, res) => {
       return res.status(404).json({ error: t(req, "FOURNISSEUR_NOT_FOUND") });
     }
 
-    const result = await db.query(
+    const inserted = await db.query(
       `INSERT INTO offre_fournisseur
          (dossier_ao_id, fournisseur_id, prix_exw, devise, delai_jours, delai_paiement_jours,
           condition_reglement, pourcentage_acompte, incoterm_scenario_id)
        VALUES ($1, $2, $3, COALESCE($4, 'XOF'), $5, $6, $7, $8, $9)
-       RETURNING *`,
+       RETURNING id`,
       [
         dossierId,
         fournisseur_id,
@@ -152,6 +152,19 @@ router.post("/dossiers/:dossierId/offres", async (req, res) => {
     );
 
     await recalculerScoreFiabilite(fournisseur_id);
+
+    // On renvoie la ligne enrichie (nom fournisseur, score, code incoterm)
+    // plutot que la ligne brute, pour que le front n'ait pas besoin de
+    // recharger toute la liste pour afficher ces informations.
+    const result = await db.query(
+      `SELECT o.*, f.nom AS fournisseur_nom, f.pays AS fournisseur_pays, f.score_fiabilite,
+              inc.code AS incoterm_code
+       FROM offre_fournisseur o
+       JOIN fournisseur f ON f.id = o.fournisseur_id
+       LEFT JOIN incoterm_scenario inc ON inc.id = o.incoterm_scenario_id
+       WHERE o.id = $1`,
+      [inserted.rows[0].id]
+    );
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
