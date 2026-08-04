@@ -125,4 +125,8 @@ export const api = {
   genererCourrier: (dossierId, data) =>
     request(`/courriers/dossiers/${dossierId}/generer`, { method: "POST", body: JSON.stringify(data) }),
   getSuggestionsCourrier: (dossierId) => request(`/courriers/dossiers/${dossierId}/suggestions`),
+
+  // Parametres - entete de structure
+  getEntete: () => request("/parametres/entete"),
+  updateEntete: (data) => request("/parametres/entete", { method: "PATCH", body: JSON.stringify(data) }),
 };

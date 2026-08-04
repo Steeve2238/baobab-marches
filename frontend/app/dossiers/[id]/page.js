@@ -20,6 +20,7 @@ export default function DossierDetailPage() {
   const [transitaires, setTransitaires] = useState([]);
   const [modelesCourrier, setModelesCourrier] = useState([]);
   const [suggestionsCourrier, setSuggestionsCourrier] = useState([]);
+  const [entete, setEntete] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
 
@@ -72,6 +73,7 @@ export default function DossierDetailPage() {
           transitairesData,
           modelesData,
           suggestionsData,
+          enteteData,
         ] = await Promise.all([
           api.getDossier(id),
           api.getSimulations(id),
@@ -81,6 +83,7 @@ export default function DossierDetailPage() {
           api.getTransitaires(),
           api.getModelesCourrier(),
           api.getSuggestionsCourrier(id),
+          api.getEntete(),
         ]);
         setDossier(dossierData);
         setSimulations(simulationsData);
@@ -90,6 +93,7 @@ export default function DossierDetailPage() {
         setTransitaires(transitairesData);
         setModelesCourrier(modelesData);
         setSuggestionsCourrier(suggestionsData);
+        setEntete(enteteData);
       } catch (err) {
         setErreur(err.message || t("defaultLoadError"));
       } finally {
@@ -666,29 +670,62 @@ export default function DossierDetailPage() {
         </div>
 
         {courrierGenere && (
-          <div className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{courrierGenere.titre}</div>
+          <div>
+            <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10, gap: 10 }}>
               <button onClick={handleCopierCourrier} style={boutonSecondaireStyle}>
                 {copieConfirmee ? t("copied") : t("copyText")}
               </button>
+              <button onClick={() => window.print()} style={boutonPrincipalStyle}>
+                {t("print")}
+              </button>
             </div>
+
             {courrierGenere.variables_manquantes.length > 0 && (
-              <p style={{ fontSize: 11.5, color: "var(--brique)", marginBottom: 8 }}>
+              <p className="no-print" style={{ fontSize: 11.5, color: "var(--brique)", marginBottom: 8 }}>
                 {t("missingVariables")} : {courrierGenere.variables_manquantes.join(", ")}
               </p>
             )}
-            <pre
-              style={{
-                whiteSpace: "pre-wrap",
-                fontFamily: "inherit",
-                fontSize: 12.5,
-                lineHeight: 1.6,
-                margin: 0,
-              }}
-            >
-              {courrierGenere.corps}
-            </pre>
+
+            <div className="card print-letter" style={{ padding: "28px 32px" }}>
+              {/* En-tete structure */}
+              <div style={{ borderBottom: "2px solid var(--petrol)", paddingBottom: 14, marginBottom: 24 }}>
+                <div style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 15, color: "var(--petrol)" }}>
+                  {entete?.raison_sociale || "—"}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 3, lineHeight: 1.5 }}>
+                  {entete?.adresse && <div>{entete.adresse}</div>}
+                  <div>
+                    {entete?.telephone ? `Tél : ${entete.telephone}` : ""}
+                    {entete?.telephone && entete?.email ? "  ·  " : ""}
+                    {entete?.email ? `${entete.email}` : ""}
+                  </div>
+                </div>
+              </div>
+
+              {/* Titre du courrier */}
+              <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 18 }}>{courrierGenere.titre}</div>
+
+              {/* Corps */}
+              <pre
+                style={{
+                  whiteSpace: "pre-wrap",
+                  fontFamily: "inherit",
+                  fontSize: 12.8,
+                  lineHeight: 1.7,
+                  margin: 0,
+                }}
+              >
+                {courrierGenere.corps}
+              </pre>
+
+              {/* Signature */}
+              <div style={{ marginTop: 48, textAlign: "right" }}>
+                <div style={{ fontSize: 12.5 }}>{entete?.signataire_titre || ""}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, marginTop: 40 }}>
+                  {entete?.signataire_nom || ""}
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </section>

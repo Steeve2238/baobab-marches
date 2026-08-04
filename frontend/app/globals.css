@@ -82,3 +82,27 @@ button {
   background: var(--brique-bg);
   color: var(--brique);
 }
+
+/* Impression : seul l'element .print-letter (et son contenu) doit apparaitre
+   sur la page imprimee, tout le reste de l'application (sidebar, boutons,
+   sections non liees) est masque. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-letter,
+  .print-letter * {
+    visibility: visible;
+  }
+  .print-letter {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 20mm 18mm;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
+

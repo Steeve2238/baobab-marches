@@ -97,6 +97,10 @@ const MESSAGES = {
     GENERATION_ERROR: "Erreur lors de la generation du courrier.",
     SUGGESTIONS_FETCH_ERROR: "Erreur lors de la recuperation des suggestions.",
 
+    ENTETE_NOT_FOUND: "Structure introuvable.",
+    ENTETE_FETCH_ERROR: "Erreur lors de la recuperation de l'entete.",
+    ENTETE_UPDATE_ERROR: "Erreur lors de la mise a jour de l'entete.",
+
     SERVER_ERROR: "Erreur serveur inattendue.",
   },
   en: {
@@ -191,6 +195,10 @@ const MESSAGES = {
     MODELE_ID_REQUIRED: "modele_id is required.",
     GENERATION_ERROR: "Error while generating the letter.",
     SUGGESTIONS_FETCH_ERROR: "Error while fetching suggestions.",
+
+    ENTETE_NOT_FOUND: "Organization not found.",
+    ENTETE_FETCH_ERROR: "Error while fetching the letterhead info.",
+    ENTETE_UPDATE_ERROR: "Error while updating the letterhead info.",
 
     SERVER_ERROR: "Unexpected server error.",
   },
