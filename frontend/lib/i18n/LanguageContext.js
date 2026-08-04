@@ -8,6 +8,7 @@ import {
   TYPE_FACILITE_LABELS,
   GRILLE_STATUT_LABELS,
   PENALITE_STATUT_LABELS,
+  TYPE_COURRIER_LABELS,
   LANGUES_SUPPORTEES,
   LANGUE_PAR_DEFAUT,
 } from "./dictionaries";
@@ -54,6 +55,7 @@ export function LanguageProvider({ children }) {
   const typeFaciliteLabels = TYPE_FACILITE_LABELS[langue] || TYPE_FACILITE_LABELS[LANGUE_PAR_DEFAUT];
   const grilleStatutLabels = GRILLE_STATUT_LABELS[langue] || GRILLE_STATUT_LABELS[LANGUE_PAR_DEFAUT];
   const penaliteStatutLabels = PENALITE_STATUT_LABELS[langue] || PENALITE_STATUT_LABELS[LANGUE_PAR_DEFAUT];
+  const typeCourrierLabels = TYPE_COURRIER_LABELS[langue] || TYPE_COURRIER_LABELS[LANGUE_PAR_DEFAUT];
 
   function t(key) {
     return dict[key] || key;
@@ -79,6 +81,10 @@ export function LanguageProvider({ children }) {
     return penaliteStatutLabels[code] || code;
   }
 
+  function typeCourrierLabel(code) {
+    return typeCourrierLabels[code] || code;
+  }
+
   return (
     <LanguageContext.Provider
       value={{
@@ -90,6 +96,7 @@ export function LanguageProvider({ children }) {
         typeFaciliteLabel,
         grilleStatutLabel,
         penaliteStatutLabel,
+        typeCourrierLabel,
         dict,
       }}
     >

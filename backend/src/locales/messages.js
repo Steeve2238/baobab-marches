@@ -87,6 +87,16 @@ const MESSAGES = {
     SUIVI_NOT_FOUND: "Suivi logistique introuvable.",
     SUIVI_UPDATE_ERROR: "Erreur lors de la mise a jour du suivi logistique.",
 
+    MODELES_FETCH_ERROR: "Erreur lors de la recuperation des modeles de courrier.",
+    MODELE_FIELDS_REQUIRED: "type_courrier, titre et corps_template sont requis.",
+    MODELE_CREATE_ERROR: "Erreur lors de la creation du modele de courrier.",
+    MODELE_NOT_FOUND: "Modele de courrier introuvable.",
+    MODELE_UPDATE_ERROR: "Erreur lors de la mise a jour du modele de courrier.",
+    MODELE_DELETE_ERROR: "Erreur lors de la suppression du modele de courrier.",
+    MODELE_ID_REQUIRED: "modele_id est requis.",
+    GENERATION_ERROR: "Erreur lors de la generation du courrier.",
+    SUGGESTIONS_FETCH_ERROR: "Erreur lors de la recuperation des suggestions.",
+
     SERVER_ERROR: "Erreur serveur inattendue.",
   },
   en: {
@@ -171,6 +181,16 @@ const MESSAGES = {
     SUIVI_CREATE_ERROR: "Error while creating the logistics tracking entry.",
     SUIVI_NOT_FOUND: "Logistics tracking entry not found.",
     SUIVI_UPDATE_ERROR: "Error while updating the logistics tracking entry.",
+
+    MODELES_FETCH_ERROR: "Error while fetching letter templates.",
+    MODELE_FIELDS_REQUIRED: "type_courrier, titre and corps_template are required.",
+    MODELE_CREATE_ERROR: "Error while creating the letter template.",
+    MODELE_NOT_FOUND: "Letter template not found.",
+    MODELE_UPDATE_ERROR: "Error while updating the letter template.",
+    MODELE_DELETE_ERROR: "Error while deleting the letter template.",
+    MODELE_ID_REQUIRED: "modele_id is required.",
+    GENERATION_ERROR: "Error while generating the letter.",
+    SUGGESTIONS_FETCH_ERROR: "Error while fetching suggestions.",
 
     SERVER_ERROR: "Unexpected server error.",
   },

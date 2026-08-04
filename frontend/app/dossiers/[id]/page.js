@@ -11,7 +11,7 @@ const TYPE_BESOIN_CODES = ["CAUTION_SOUMISSION", "CAUTION_BONNE_EXECUTION", "AVA
 
 export default function DossierDetailPage() {
   const { id } = useParams();
-  const { t, statutLabel, typeBesoinLabel, penaliteStatutLabel, dict } = useLangue();
+  const { t, statutLabel, typeBesoinLabel, penaliteStatutLabel, typeCourrierLabel, dict } = useLangue();
 
   const [dossier, setDossier] = useState(null);
   const [simulations, setSimulations] = useState([]);
@@ -19,6 +19,8 @@ export default function DossierDetailPage() {
   const [suivisLogistiques, setSuivisLogistiques] = useState([]);
   const [incoterms, setIncoterms] = useState([]);
   const [transitaires, setTransitaires] = useState([]);
+  const [modelesCourrier, setModelesCourrier] = useState([]);
+  const [suggestionsCourrier, setSuggestionsCourrier] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
 
@@ -54,24 +56,41 @@ export default function DossierDetailPage() {
   });
   const [suiviEnCours, setSuiviEnCours] = useState(false);
 
+  const [modeleSelectionne, setModeleSelectionne] = useState("");
+  const [courrierGenere, setCourrierGenere] = useState(null);
+  const [generationEnCours, setGenerationEnCours] = useState(false);
+  const [copieConfirmee, setCopieConfirmee] = useState(false);
+
   useEffect(() => {
     async function charger() {
       try {
-        const [dossierData, simulationsData, margeData, suivisData, incotermsData, transitairesData] =
-          await Promise.all([
-            api.getDossier(id),
-            api.getSimulations(id),
-            api.getCalculsMarge(id),
-            api.getSuivisLogistiques(id),
-            api.getIncoterms(),
-            api.getTransitaires(),
-          ]);
+        const [
+          dossierData,
+          simulationsData,
+          margeData,
+          suivisData,
+          incotermsData,
+          transitairesData,
+          modelesData,
+          suggestionsData,
+        ] = await Promise.all([
+          api.getDossier(id),
+          api.getSimulations(id),
+          api.getCalculsMarge(id),
+          api.getSuivisLogistiques(id),
+          api.getIncoterms(),
+          api.getTransitaires(),
+          api.getModelesCourrier(),
+          api.getSuggestionsCourrier(id),
+        ]);
         setDossier(dossierData);
         setSimulations(simulationsData);
         setCalculsMarge(margeData);
         setSuivisLogistiques(suivisData);
         setIncoterms(incotermsData);
         setTransitaires(transitairesData);
+        setModelesCourrier(modelesData);
+        setSuggestionsCourrier(suggestionsData);
       } catch (err) {
         setErreur(err.message || t("defaultLoadError"));
       } finally {
@@ -166,6 +185,30 @@ export default function DossierDetailPage() {
     } finally {
       setSuiviEnCours(false);
     }
+  }
+
+  async function handleGenererCourrier(modeleId) {
+    const cible = modeleId || modeleSelectionne;
+    if (!cible) return;
+    setGenerationEnCours(true);
+    setCopieConfirmee(false);
+    try {
+      const resultat = await api.genererCourrier(id, { modele_id: cible });
+      setCourrierGenere(resultat);
+      setModeleSelectionne(cible);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setGenerationEnCours(false);
+    }
+  }
+
+  function handleCopierCourrier() {
+    if (!courrierGenere) return;
+    navigator.clipboard.writeText(`${courrierGenere.titre}\n\n${courrierGenere.corps}`).then(() => {
+      setCopieConfirmee(true);
+      setTimeout(() => setCopieConfirmee(false), 2000);
+    });
   }
 
   if (chargement) {
@@ -565,6 +608,100 @@ export default function DossierDetailPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      {/* ---------------- COURRIERS ---------------- */}
+      <section>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("lettersSection")}</h2>
+          <Link href="/courriers" style={{ fontSize: 12, color: "var(--petrol-2)", alignSelf: "center" }}>
+            {t("manageLetters")} →
+          </Link>
+        </div>
+
+        {suggestionsCourrier.length > 0 && (
+          <div style={{ marginBottom: 14 }}>
+            <h3 style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 8, fontWeight: 600 }}>
+              {t("suggestedLetters")}
+            </h3>
+            <div style={{ display: "grid", gap: 6 }}>
+              {suggestionsCourrier.map((s) => (
+                <div
+                  key={s.id}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    background: "var(--ocre-bg, #FFF3E0)",
+                    fontSize: 12.5,
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: 600 }}>{s.titre}</span>
+                    <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 2 }}>{s.raison}</div>
+                  </div>
+                  <button onClick={() => handleGenererCourrier(s.id)} style={boutonSecondaireStyle}>
+                    {t("useSuggestion")}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="card" style={{ marginBottom: 14 }}>
+          <label style={labelStyle}>{t("selectTemplate")}</label>
+          <div style={{ display: "flex", gap: 10 }}>
+            <select
+              value={modeleSelectionne}
+              onChange={(e) => setModeleSelectionne(e.target.value)}
+              style={{ ...inputStyle, flex: 1 }}
+            >
+              <option value="">—</option>
+              {modelesCourrier.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.titre} ({typeCourrierLabel(m.type_courrier)})
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => handleGenererCourrier()}
+              disabled={!modeleSelectionne || generationEnCours}
+              style={boutonPrincipalStyle}
+            >
+              {t("generateLetter")}
+            </button>
+          </div>
+        </div>
+
+        {courrierGenere && (
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{courrierGenere.titre}</div>
+              <button onClick={handleCopierCourrier} style={boutonSecondaireStyle}>
+                {copieConfirmee ? t("copied") : t("copyText")}
+              </button>
+            </div>
+            {courrierGenere.variables_manquantes.length > 0 && (
+              <p style={{ fontSize: 11.5, color: "var(--brique)", marginBottom: 8 }}>
+                {t("missingVariables")} : {courrierGenere.variables_manquantes.join(", ")}
+              </p>
+            )}
+            <pre
+              style={{
+                whiteSpace: "pre-wrap",
+                fontFamily: "inherit",
+                fontSize: 12.5,
+                lineHeight: 1.6,
+                margin: 0,
+              }}
+            >
+              {courrierGenere.corps}
+            </pre>
           </div>
         )}
       </section>

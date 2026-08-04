@@ -116,4 +116,13 @@ export const api = {
     request(`/logistique/dossiers/${dossierId}/suivis`, { method: "POST", body: JSON.stringify(data) }),
   patchSuiviLogistique: (id, data) =>
     request(`/logistique/suivis/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Module 6 - Courriers types
+  getModelesCourrier: (type_courrier) =>
+    request(`/courriers/modeles${type_courrier ? `?type_courrier=${type_courrier}` : ""}`),
+  createModeleCourrier: (data) =>
+    request("/courriers/modeles", { method: "POST", body: JSON.stringify(data) }),
+  genererCourrier: (dossierId, data) =>
+    request(`/courriers/dossiers/${dossierId}/generer`, { method: "POST", body: JSON.stringify(data) }),
+  getSuggestionsCourrier: (dossierId) => request(`/courriers/dossiers/${dossierId}/suggestions`),
 };

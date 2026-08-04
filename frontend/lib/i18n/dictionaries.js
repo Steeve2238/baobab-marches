@@ -114,6 +114,24 @@ export const DICTIONARIES = {
     noSuivis: "Aucun suivi logistique pour ce dossier.",
     none: "Aucun",
 
+    lettersSection: "Courriers",
+    manageLetters: "Gérer les modèles de courrier",
+    lettersPageTitle: "Modèles de courrier",
+    newLetterTemplate: "Nouveau modèle",
+    letterTypeLabel: "Type de courrier",
+    letterTitleLabel: "Titre (variables {{}} acceptées)",
+    letterBodyLabel: "Corps du courrier (variables {{dossier.xxx}} acceptées)",
+    letterTriggerLabel: "Déclencheur (description)",
+    noLetterTemplates: "Aucun modèle de courrier enregistré.",
+    generateLetter: "Générer",
+    selectTemplate: "Choisir un modèle",
+    missingVariables: "Variables manquantes",
+    suggestedLetters: "Suggestions",
+    noSuggestions: "Aucune suggestion pour le moment.",
+    useSuggestion: "Utiliser",
+    copyText: "Copier",
+    copied: "Copié !",
+
     dateLocale: "fr-FR",
   },
   en: {
@@ -226,6 +244,24 @@ export const DICTIONARIES = {
     noSuivis: "No logistics tracking entry for this file yet.",
     none: "None",
 
+    lettersSection: "Letters",
+    manageLetters: "Manage letter templates",
+    lettersPageTitle: "Letter templates",
+    newLetterTemplate: "New template",
+    letterTypeLabel: "Letter type",
+    letterTitleLabel: "Title (variables {{}} supported)",
+    letterBodyLabel: "Letter body (variables {{dossier.xxx}} supported)",
+    letterTriggerLabel: "Trigger (description)",
+    noLetterTemplates: "No letter template registered yet.",
+    generateLetter: "Generate",
+    selectTemplate: "Choose a template",
+    missingVariables: "Missing variables",
+    suggestedLetters: "Suggestions",
+    noSuggestions: "No suggestion at the moment.",
+    useSuggestion: "Use",
+    copyText: "Copy",
+    copied: "Copied!",
+
     dateLocale: "en-US",
   },
 };
@@ -301,4 +337,31 @@ export const GRILLE_STATUT_LABELS = {
 export const PENALITE_STATUT_LABELS = {
   fr: { AUCUNE: "Aucune", RISQUE: "Risque", ENCOURUE: "Encourue" },
   en: { AUCUNE: "None", RISQUE: "At risk", ENCOURUE: "Incurred" },
+};
+
+export const TYPE_COURRIER_LABELS = {
+  fr: {
+    DEMANDE_CLARIFICATION: "Demande de clarification",
+    DEMANDE_FINANCEMENT: "Demande de financement",
+    DEMANDE_GARANTIE: "Demande de garantie",
+    DEMANDE_MAINLEVEE: "Demande de mainlevée",
+    DEMANDE_PROROGATION: "Demande de prorogation",
+    RESERVE_ORDRE_SERVICE: "Réserve sur ordre de service",
+    RELANCE_PAIEMENT: "Relance de paiement",
+    RECOURS_GRACIEUX: "Recours gracieux",
+    RECOURS_CONTENTIEUX: "Recours contentieux",
+    NOTIFICATION_SOUS_TRAITANCE: "Notification de sous-traitance",
+  },
+  en: {
+    DEMANDE_CLARIFICATION: "Clarification request",
+    DEMANDE_FINANCEMENT: "Financing request",
+    DEMANDE_GARANTIE: "Guarantee request",
+    DEMANDE_MAINLEVEE: "Guarantee release request",
+    DEMANDE_PROROGATION: "Extension request",
+    RESERVE_ORDRE_SERVICE: "Service order reservation",
+    RELANCE_PAIEMENT: "Payment reminder",
+    RECOURS_GRACIEUX: "Amicable appeal",
+    RECOURS_CONTENTIEUX: "Formal appeal",
+    NOTIFICATION_SOUS_TRAITANCE: "Subcontracting notification",
+  },
 };

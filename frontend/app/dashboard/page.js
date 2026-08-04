@@ -168,6 +168,18 @@ export default function DashboardPage() {
           >
             {t("manageLogistics")} →
           </Link>
+          <Link
+            href="/courriers"
+            style={{
+              display: "inline-block",
+              fontSize: 12,
+              color: "var(--petrol-2)",
+              marginBottom: 12,
+              marginLeft: 16,
+            }}
+          >
+            {t("manageLetters")} →
+          </Link>
           <div className="card">
             {dossiers.length === 0 ? (
               <p style={{ fontSize: 13, color: "var(--sub)" }}>
