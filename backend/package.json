@@ -18,6 +18,9 @@
     "expr-eval": "^2.0.2",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "mammoth": "^1.7.2",
+    "multer": "^2.0.2",
+    "pdf-parse": "^1.1.1",
     "pg": "^8.11.5",
     "uuid": "^9.0.1"
   },

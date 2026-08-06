@@ -67,6 +67,31 @@ export const DICTIONARIES = {
     noFiles: "Aucun dossier pour le moment. Créez-en un pour démarrer le chronogramme.",
 
     backToDashboard: "Retour au tableau de bord",
+
+    clausesSection: "Clauses extraites",
+    uploadDaoLabel: "Analyser un DAO (PDF ou Word)",
+    analyzing: "Analyse en cours...",
+    noClauses: "Aucune clause extraite pour ce dossier. Analysez le DAO pour en détecter automatiquement.",
+    clausesDetectedCount: "clause(s) détectée(s)",
+    validateClause: "Valider",
+    rejectClause: "Rejeter",
+    clauseValidated: "Validée",
+    articleRefLabel: "Réf.",
+
+    chronogramSection: "Chronogramme",
+    generateChronogram: "Générer automatiquement",
+    regenerateChronogram: "Régénérer (remplace l'existant)",
+    chronogramAlreadyExists: "Un chronogramme existe déjà pour ce dossier.",
+    addTask: "Ajouter une tâche",
+    taskTitleLabel: "Intitulé",
+    taskPhaseLabel: "Phase",
+    taskMilestoneLabel: "Jalon (ex : J-7, J0, J+15)",
+    taskDueDateLabel: "Échéance",
+    noTasks: "Aucune tâche planifiée. Générez le chronogramme automatiquement ou ajoutez une tâche.",
+    markAsDone: "Marquer fait",
+    markAsInProgress: "Démarrer",
+    missingSubmissionDate: "Renseignez la date limite de soumission du dossier pour générer le chronogramme.",
+
     financingSection: "Financement",
     marginSection: "Marge",
     newSimulation: "Nouvelle simulation",
@@ -235,6 +260,31 @@ export const DICTIONARIES = {
     noFiles: "No file yet. Create one to start the timeline.",
 
     backToDashboard: "Back to dashboard",
+
+    clausesSection: "Extracted clauses",
+    uploadDaoLabel: "Analyze a tender document (PDF or Word)",
+    analyzing: "Analyzing...",
+    noClauses: "No clause extracted for this file yet. Analyze the tender document to detect clauses automatically.",
+    clausesDetectedCount: "clause(s) detected",
+    validateClause: "Validate",
+    rejectClause: "Reject",
+    clauseValidated: "Validated",
+    articleRefLabel: "Ref.",
+
+    chronogramSection: "Timeline",
+    generateChronogram: "Generate automatically",
+    regenerateChronogram: "Regenerate (replaces existing)",
+    chronogramAlreadyExists: "A timeline already exists for this file.",
+    addTask: "Add a task",
+    taskTitleLabel: "Title",
+    taskPhaseLabel: "Phase",
+    taskMilestoneLabel: "Milestone (e.g. D-7, D0, D+15)",
+    taskDueDateLabel: "Due date",
+    noTasks: "No task planned yet. Generate the timeline automatically or add a task.",
+    markAsDone: "Mark done",
+    markAsInProgress: "Start",
+    missingSubmissionDate: "Set the file's submission deadline to generate the timeline.",
+
     financingSection: "Financing",
     marginSection: "Margin",
     newSimulation: "New simulation",
@@ -434,6 +484,56 @@ export const CONDITION_REGLEMENT_LABELS = {
     CHEQUE: "Cheque",
     VIREMENT: "Bank transfer",
   },
+};
+
+export const CLAUSE_TYPE_LABELS = {
+  fr: {
+    GARANTIE_SOUMISSION: "Garantie de soumission",
+    GARANTIE_BONNE_EXECUTION: "Garantie de bonne exécution",
+    RETENUE_GARANTIE: "Retenue de garantie",
+    AVANCE_DEMARRAGE: "Avance de démarrage",
+    PENALITE_RETARD: "Pénalité de retard",
+    DELAI_EXECUTION: "Délai d'exécution",
+    ASSURANCE: "Assurance",
+    REGIME_FISCAL: "Régime fiscal",
+    CRITERE_ORIGINE: "Critère d'origine",
+    JURIDICTION: "Juridiction",
+  },
+  en: {
+    GARANTIE_SOUMISSION: "Bid guarantee",
+    GARANTIE_BONNE_EXECUTION: "Performance guarantee",
+    RETENUE_GARANTIE: "Retention guarantee",
+    AVANCE_DEMARRAGE: "Start-up advance",
+    PENALITE_RETARD: "Delay penalty",
+    DELAI_EXECUTION: "Execution deadline",
+    ASSURANCE: "Insurance",
+    REGIME_FISCAL: "Tax regime",
+    CRITERE_ORIGINE: "Origin criterion",
+    JURIDICTION: "Jurisdiction",
+  },
+};
+
+export const NIVEAU_VIGILANCE_LABELS = {
+  fr: { STANDARD: "Standard", A_VERIFIER: "À vérifier", RISQUE: "Risque" },
+  en: { STANDARD: "Standard", A_VERIFIER: "To verify", RISQUE: "Risk" },
+};
+
+export const PHASE_CHRONOGRAMME_LABELS = {
+  fr: {
+    AVANT_SOUMISSION: "Avant soumission",
+    NON_ATTRIBUTION: "Non-attribution",
+    ATTRIBUTION_EXECUTION: "Attribution & exécution",
+  },
+  en: {
+    AVANT_SOUMISSION: "Before submission",
+    NON_ATTRIBUTION: "Non-award",
+    ATTRIBUTION_EXECUTION: "Award & execution",
+  },
+};
+
+export const TACHE_STATUT_LABELS = {
+  fr: { A_FAIRE: "À faire", EN_COURS: "En cours", FAIT: "Fait", EN_RETARD: "En retard" },
+  en: { A_FAIRE: "To do", EN_COURS: "In progress", FAIT: "Done", EN_RETARD: "Late" },
 };
 
 export const TYPE_COURRIER_LABELS = {

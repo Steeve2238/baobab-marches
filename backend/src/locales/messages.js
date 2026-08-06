@@ -33,6 +33,16 @@ const MESSAGES = {
     TACHE_CREATE_ERROR: "Erreur lors de la creation de la tache.",
     TACHE_NOT_FOUND: "Tache introuvable.",
     TACHE_STATUT_UPDATE_ERROR: "Erreur lors de la mise a jour de la tache.",
+    CHRONOGRAMME_ALREADY_EXISTS: "Un chronogramme existe deja pour ce dossier.",
+    CHRONOGRAMME_DATE_LIMITE_REQUISE: "La date limite de soumission du dossier est requise pour generer le chronogramme.",
+    CHRONOGRAMME_GENERATE_ERROR: "Erreur lors de la generation du chronogramme.",
+
+    EXTRACTION_FILE_REQUIRED: "Un fichier DAO (PDF ou Word) est requis.",
+    EXTRACTION_FILE_TYPE_INVALID: "Format de fichier non supporte (PDF ou Word uniquement).",
+    EXTRACTION_ERROR: "Erreur lors de l'analyse du fichier DAO.",
+    CLAUSE_NOT_FOUND: "Clause introuvable.",
+    CLAUSE_UPDATE_ERROR: "Erreur lors de la mise a jour de la clause.",
+    CLAUSE_DELETE_ERROR: "Erreur lors de la suppression de la clause.",
 
     REGLES_FETCH_ERROR: "Erreur lors de la recuperation des regles.",
     REGLE_FIELDS_REQUIRED: "code, libelle et expression sont requis.",
@@ -142,6 +152,16 @@ const MESSAGES = {
     TACHE_CREATE_ERROR: "Error while creating the task.",
     TACHE_NOT_FOUND: "Task not found.",
     TACHE_STATUT_UPDATE_ERROR: "Error while updating the task.",
+    CHRONOGRAMME_ALREADY_EXISTS: "A timeline already exists for this file.",
+    CHRONOGRAMME_DATE_LIMITE_REQUISE: "The file's submission deadline is required to generate the timeline.",
+    CHRONOGRAMME_GENERATE_ERROR: "Error while generating the timeline.",
+
+    EXTRACTION_FILE_REQUIRED: "A tender document (PDF or Word) is required.",
+    EXTRACTION_FILE_TYPE_INVALID: "Unsupported file format (PDF or Word only).",
+    EXTRACTION_ERROR: "Error while analyzing the tender document.",
+    CLAUSE_NOT_FOUND: "Clause not found.",
+    CLAUSE_UPDATE_ERROR: "Error while updating the clause.",
+    CLAUSE_DELETE_ERROR: "Error while deleting the clause.",
 
     REGLES_FETCH_ERROR: "Error while fetching rules.",
     REGLE_FIELDS_REQUIRED: "code, libelle and expression are required.",

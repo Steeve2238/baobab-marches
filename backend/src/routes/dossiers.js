@@ -47,6 +47,20 @@ router.get("/:id", async (req, res) => {
       [id]
     );
 
+    // Le statut EN_RETARD est toujours recalcule cote serveur a partir de la
+    // date d'echeance (jamais fourni tel quel par le client) - meme principe
+    // que suivi_logistique.statut_penalite (Module 3) : une tache en retard
+    // doit se signaler seule, sans action manuelle prealable.
+    await db.query(
+      `UPDATE chronogramme_tache
+       SET statut = 'EN_RETARD'
+       WHERE dossier_ao_id = $1
+         AND statut IN ('A_FAIRE', 'EN_COURS')
+         AND date_echeance IS NOT NULL
+         AND date_echeance < CURRENT_DATE`,
+      [id]
+    );
+
     const chronogrammeResult = await db.query(
       `SELECT c.*, r.code AS role_code, r.libelle AS role_libelle
        FROM chronogramme_tache c

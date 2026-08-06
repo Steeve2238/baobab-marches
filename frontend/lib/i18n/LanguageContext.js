@@ -10,6 +10,10 @@ import {
   PENALITE_STATUT_LABELS,
   TYPE_COURRIER_LABELS,
   CONDITION_REGLEMENT_LABELS,
+  CLAUSE_TYPE_LABELS,
+  NIVEAU_VIGILANCE_LABELS,
+  PHASE_CHRONOGRAMME_LABELS,
+  TACHE_STATUT_LABELS,
   LANGUES_SUPPORTEES,
   LANGUE_PAR_DEFAUT,
 } from "./dictionaries";
@@ -59,6 +63,11 @@ export function LanguageProvider({ children }) {
   const typeCourrierLabels = TYPE_COURRIER_LABELS[langue] || TYPE_COURRIER_LABELS[LANGUE_PAR_DEFAUT];
   const conditionReglementLabels =
     CONDITION_REGLEMENT_LABELS[langue] || CONDITION_REGLEMENT_LABELS[LANGUE_PAR_DEFAUT];
+  const clauseTypeLabels = CLAUSE_TYPE_LABELS[langue] || CLAUSE_TYPE_LABELS[LANGUE_PAR_DEFAUT];
+  const niveauVigilanceLabels = NIVEAU_VIGILANCE_LABELS[langue] || NIVEAU_VIGILANCE_LABELS[LANGUE_PAR_DEFAUT];
+  const phaseChronogrammeLabels =
+    PHASE_CHRONOGRAMME_LABELS[langue] || PHASE_CHRONOGRAMME_LABELS[LANGUE_PAR_DEFAUT];
+  const tacheStatutLabels = TACHE_STATUT_LABELS[langue] || TACHE_STATUT_LABELS[LANGUE_PAR_DEFAUT];
 
   function t(key) {
     return dict[key] || key;
@@ -92,6 +101,22 @@ export function LanguageProvider({ children }) {
     return conditionReglementLabels[code] || code;
   }
 
+  function clauseTypeLabel(code) {
+    return clauseTypeLabels[code] || code;
+  }
+
+  function niveauVigilanceLabel(code) {
+    return niveauVigilanceLabels[code] || code;
+  }
+
+  function phaseChronogrammeLabel(code) {
+    return phaseChronogrammeLabels[code] || code;
+  }
+
+  function tacheStatutLabel(code) {
+    return tacheStatutLabels[code] || code;
+  }
+
   return (
     <LanguageContext.Provider
       value={{
@@ -105,6 +130,10 @@ export function LanguageProvider({ children }) {
         penaliteStatutLabel,
         typeCourrierLabel,
         conditionReglementLabel,
+        clauseTypeLabel,
+        niveauVigilanceLabel,
+        phaseChronogrammeLabel,
+        tacheStatutLabel,
         dict,
       }}
     >

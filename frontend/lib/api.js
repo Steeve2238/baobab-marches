@@ -46,6 +46,25 @@ async function request(path, options = {}) {
   return data;
 }
 
+// Requete d'upload (multipart/form-data) : pas de Content-Type explicite,
+// le navigateur pose lui-meme le boundary du FormData.
+async function requestUpload(path, formData) {
+  const token = getToken();
+  const langue = getLangueLocale() || "fr";
+  const headers = {
+    "Accept-Language": langue,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { method: "POST", headers, body: formData });
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    throw new Error(data.error || `Erreur ${res.status}`);
+  }
+  return data;
+}
+
 export const api = {
   login: (email, mot_de_passe) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, mot_de_passe }) }),
@@ -53,6 +72,22 @@ export const api = {
   getDossier: (id) => request(`/dossiers/${id}`),
   getSignaux: () => request("/signaux"),
   acquitterSignal: (id) => request(`/signaux/${id}/acquitter`, { method: "PATCH" }),
+
+  // Module 1 - Extraction DAO & chronogramme
+  analyserDao: (dossierId, fichier) => {
+    const formData = new FormData();
+    formData.append("fichier", fichier);
+    return requestUpload(`/extraction/dossiers/${dossierId}/analyser`, formData);
+  },
+  patchClause: (clauseId, data) =>
+    request(`/extraction/clauses/${clauseId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerClause: (clauseId) => request(`/extraction/clauses/${clauseId}`, { method: "DELETE" }),
+  genererChronogramme: (dossierId, force) =>
+    request(`/chronogramme/${dossierId}/generer${force ? "?force=true" : ""}`, { method: "POST" }),
+  createTacheChronogramme: (dossierId, data) =>
+    request(`/chronogramme/${dossierId}/taches`, { method: "POST", body: JSON.stringify(data) }),
+  patchTacheStatut: (tacheId, statut) =>
+    request(`/chronogramme/taches/${tacheId}`, { method: "PATCH", body: JSON.stringify({ statut }) }),
   setLangue: (langue_preferee) =>
     request("/auth/langue", { method: "PATCH", body: JSON.stringify({ langue_preferee }) }),
 

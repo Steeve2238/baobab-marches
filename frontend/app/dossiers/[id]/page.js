@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
 import { DEVISES } from "../../../lib/constants/devises";
+
+const PHASES_CHRONOGRAMME = ["AVANT_SOUMISSION", "NON_ATTRIBUTION", "ATTRIBUTION_EXECUTION"];
 
 const TYPE_BESOIN_CODES = ["CAUTION_SOUMISSION", "CAUTION_BONNE_EXECUTION", "AVANCE_DEMARRAGE", "LC"];
 const CONDITIONS_REGLEMENT = [
@@ -28,6 +30,10 @@ export default function DossierDetailPage() {
     typeCourrierLabel,
     typeFaciliteLabel,
     conditionReglementLabel,
+    clauseTypeLabel,
+    niveauVigilanceLabel,
+    phaseChronogrammeLabel,
+    tacheStatutLabel,
     dict,
   } = useLangue();
 
@@ -96,6 +102,19 @@ export default function DossierDetailPage() {
     incoterm_scenario_id: "",
   });
   const [offreEnCours, setOffreEnCours] = useState(false);
+
+  const fichierDaoRef = useRef(null);
+  const [analyseEnCours, setAnalyseEnCours] = useState(false);
+
+  const [formTacheOuvert, setFormTacheOuvert] = useState(false);
+  const [formTache, setFormTache] = useState({
+    phase: PHASES_CHRONOGRAMME[0],
+    intitule: "",
+    jalon_relatif: "",
+    date_echeance: "",
+  });
+  const [tacheEnCours, setTacheEnCours] = useState(false);
+  const [genererEnCours, setGenererEnCours] = useState(false);
 
   useEffect(() => {
     async function charger() {
@@ -356,6 +375,104 @@ export default function DossierDetailPage() {
     }
   }
 
+  /**
+   * Upload du DAO et extraction automatique des clauses candidates (Module
+   * 1). Les clauses renvoyees sont toujours a l'etat A_VERIFIER : elles
+   * viennent s'ajouter a celles deja presentes sur le dossier, en attente de
+   * validation ou de rejet par l'utilisateur.
+   */
+  async function handleAnalyserDao(e) {
+    e.preventDefault();
+    const fichier = fichierDaoRef.current?.files?.[0];
+    if (!fichier) return;
+    setAnalyseEnCours(true);
+    try {
+      const resultat = await api.analyserDao(id, fichier);
+      setDossier((prev) => ({ ...prev, clauses: [...prev.clauses, ...resultat.clauses] }));
+      if (fichierDaoRef.current) fichierDaoRef.current.value = "";
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setAnalyseEnCours(false);
+    }
+  }
+
+  async function handleValiderClause(clauseId) {
+    try {
+      const maj = await api.patchClause(clauseId, {
+        valide_par_juridique: true,
+        niveau_vigilance: "STANDARD",
+      });
+      setDossier((prev) => ({
+        ...prev,
+        clauses: prev.clauses.map((c) => (c.id === clauseId ? maj : c)),
+      }));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  async function handleRejeterClause(clauseId) {
+    try {
+      await api.supprimerClause(clauseId);
+      setDossier((prev) => ({
+        ...prev,
+        clauses: prev.clauses.filter((c) => c.id !== clauseId),
+      }));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  /**
+   * Genere le chronogramme standard (retro-planning J-7 -> J0 -> J+X). Si un
+   * chronogramme existe deja pour ce dossier, `force` remplace l'existant
+   * (utilise par le bouton "Regenerer").
+   */
+  async function handleGenererChronogramme(force = false) {
+    setGenererEnCours(true);
+    try {
+      const nouvelles = await api.genererChronogramme(id, force);
+      setDossier((prev) => ({ ...prev, chronogramme: nouvelles }));
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setGenererEnCours(false);
+    }
+  }
+
+  async function handleAjouterTache(e) {
+    e.preventDefault();
+    setTacheEnCours(true);
+    try {
+      const nouvelle = await api.createTacheChronogramme(id, {
+        phase: formTache.phase,
+        intitule: formTache.intitule,
+        jalon_relatif: formTache.jalon_relatif || null,
+        date_echeance: formTache.date_echeance || null,
+      });
+      setDossier((prev) => ({ ...prev, chronogramme: [...prev.chronogramme, nouvelle] }));
+      setFormTacheOuvert(false);
+      setFormTache({ phase: PHASES_CHRONOGRAMME[0], intitule: "", jalon_relatif: "", date_echeance: "" });
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setTacheEnCours(false);
+    }
+  }
+
+  async function handlePatchTacheStatut(tacheId, statut) {
+    try {
+      const maj = await api.patchTacheStatut(tacheId, statut);
+      setDossier((prev) => ({
+        ...prev,
+        chronogramme: prev.chronogramme.map((tache) => (tache.id === tacheId ? maj : tache)),
+      }));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
   if (chargement) {
     return <div style={{ padding: 28 }}>{t("loading")}</div>;
   }
@@ -378,6 +495,211 @@ export default function DossierDetailPage() {
       </div>
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+
+      {/* ---------------- CLAUSES EXTRAITES (Module 1) ---------------- */}
+      <section style={{ marginBottom: 30 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("clausesSection")}</h2>
+        </div>
+
+        <form
+          onSubmit={handleAnalyserDao}
+          className="card"
+          style={{ marginBottom: 14, display: "flex", gap: 12, alignItems: "flex-end" }}
+        >
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>{t("uploadDaoLabel")}</label>
+            <input ref={fichierDaoRef} type="file" accept=".pdf,.doc,.docx" style={inputStyle} />
+          </div>
+          <button type="submit" disabled={analyseEnCours} style={boutonPrincipalStyle}>
+            {analyseEnCours ? t("analyzing") : t("uploadDaoLabel")}
+          </button>
+        </form>
+
+        {dossier.clauses.length === 0 ? (
+          <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>
+            {t("noClauses")}
+          </p>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {dossier.clauses.map((clause) => (
+              <div
+                key={clause.id}
+                className="card"
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
+              >
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>
+                    {clauseTypeLabel(clause.type_clause)}
+                    <span
+                      className={`chip ${
+                        clause.niveau_vigilance === "RISQUE"
+                          ? "risk"
+                          : clause.niveau_vigilance === "STANDARD"
+                          ? "ok"
+                          : "warn"
+                      }`}
+                      style={{ marginLeft: 8 }}
+                    >
+                      {niveauVigilanceLabel(clause.niveau_vigilance)}
+                    </span>
+                    {clause.valide_par_juridique && (
+                      <span className="chip ok" style={{ marginLeft: 6 }}>
+                        {t("clauseValidated")}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12.5, marginTop: 4 }}>{clause.libelle}</div>
+                  {clause.article_reference && (
+                    <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 2 }}>
+                      {t("articleRefLabel")} {clause.article_reference}
+                    </div>
+                  )}
+                </div>
+                {!clause.valide_par_juridique && (
+                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                    <button onClick={() => handleValiderClause(clause.id)} style={boutonSecondaireStyle}>
+                      {t("validateClause")}
+                    </button>
+                    <button onClick={() => handleRejeterClause(clause.id)} style={boutonSecondaireStyle}>
+                      {t("rejectClause")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ---------------- CHRONOGRAMME (Module 1) ---------------- */}
+      <section style={{ marginBottom: 30 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("chronogramSection")}</h2>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              onClick={() => handleGenererChronogramme(dossier.chronogramme.length > 0)}
+              disabled={genererEnCours || !dossier.date_limite_soumission}
+              style={boutonSecondaireStyle}
+            >
+              {dossier.chronogramme.length > 0 ? t("regenerateChronogram") : t("generateChronogram")}
+            </button>
+            <button onClick={() => setFormTacheOuvert((v) => !v)} style={boutonPrincipalStyle}>
+              {formTacheOuvert ? t("cancel") : t("addTask")}
+            </button>
+          </div>
+        </div>
+
+        {!dossier.date_limite_soumission && (
+          <p style={{ fontSize: 11.5, color: "var(--ocre)", marginBottom: 10 }}>
+            {t("missingSubmissionDate")}
+          </p>
+        )}
+
+        {formTacheOuvert && (
+          <form onSubmit={handleAjouterTache} className="card" style={{ marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>{t("taskTitleLabel")}</label>
+                <input
+                  required
+                  value={formTache.intitule}
+                  onChange={(e) => setFormTache((f) => ({ ...f, intitule: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("taskPhaseLabel")}</label>
+                <select
+                  value={formTache.phase}
+                  onChange={(e) => setFormTache((f) => ({ ...f, phase: e.target.value }))}
+                  style={inputStyle}
+                >
+                  {PHASES_CHRONOGRAMME.map((code) => (
+                    <option key={code} value={code}>
+                      {phaseChronogrammeLabel(code)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>{t("taskMilestoneLabel")}</label>
+                <input
+                  value={formTache.jalon_relatif}
+                  onChange={(e) => setFormTache((f) => ({ ...f, jalon_relatif: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("taskDueDateLabel")}</label>
+                <input
+                  type="date"
+                  value={formTache.date_echeance}
+                  onChange={(e) => setFormTache((f) => ({ ...f, date_echeance: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <button type="submit" disabled={tacheEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
+              {t("save")}
+            </button>
+          </form>
+        )}
+
+        {dossier.chronogramme.length === 0 ? (
+          <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>
+            {t("noTasks")}
+          </p>
+        ) : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {dossier.chronogramme.map((tache) => (
+              <div
+                key={tache.id}
+                className="card"
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
+              >
+                <div>
+                  <div style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase" }}>
+                    {phaseChronogrammeLabel(tache.phase)} {tache.jalon_relatif ? `· ${tache.jalon_relatif}` : ""}
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{tache.intitule}</div>
+                  <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+                    {tache.date_echeance
+                      ? new Date(tache.date_echeance).toLocaleDateString(dict.dateLocale)
+                      : "—"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                  <span
+                    className={`chip ${
+                      tache.statut === "FAIT"
+                        ? "ok"
+                        : tache.statut === "EN_RETARD"
+                        ? "risk"
+                        : tache.statut === "EN_COURS"
+                        ? "warn"
+                        : ""
+                    }`}
+                    style={tache.statut === "A_FAIRE" ? { background: "var(--line-soft)", color: "var(--sub)" } : {}}
+                  >
+                    {tacheStatutLabel(tache.statut)}
+                  </span>
+                  {tache.statut !== "FAIT" && (
+                    <button
+                      onClick={() =>
+                        handlePatchTacheStatut(tache.id, tache.statut === "A_FAIRE" ? "EN_COURS" : "FAIT")
+                      }
+                      style={boutonSecondaireStyle}
+                    >
+                      {tache.statut === "A_FAIRE" ? t("markAsInProgress") : t("markAsDone")}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* ---------------- FINANCEMENT ---------------- */}
       <section style={{ marginBottom: 30 }}>
