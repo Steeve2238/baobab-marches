@@ -52,6 +52,7 @@ export default function DossierDetailPage() {
   const [offres, setOffres] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
+  const [signalements, setSignalements] = useState({});
 
   const [formSimulationOuvert, setFormSimulationOuvert] = useState(false);
   const [formSimulation, setFormSimulation] = useState({
@@ -435,6 +436,39 @@ export default function DossierDetailPage() {
   }
 
   /**
+   * Raccourci Module 1 -> Module 7 : signale qu'une clause deja extraite
+   * constitue un motif recurrent pour le maitre d'ouvrage de ce dossier. Le
+   * backend regroupe automatiquement par (maitre d'ouvrage, type de clause) :
+   * une nouvelle entree est creee la premiere fois, puis son compteur
+   * d'occurrences est incremente les fois suivantes.
+   */
+  async function handleSignalerRecurrent(clause) {
+    setSignalements((prev) => ({ ...prev, [clause.id]: { loading: true } }));
+    try {
+      const resultat = await api.signalerClauseRecurrente({
+        dossier_ao_id: id,
+        type_clause: clause.type_clause,
+        libelle: clause.libelle,
+      });
+      setSignalements((prev) => ({
+        ...prev,
+        [clause.id]: {
+          loading: false,
+          message: resultat.cree
+            ? t("signalerRecurrentCreated")
+            : t("signalerRecurrentIncremented").replace("{n}", resultat.clause.occurrences),
+          isError: false,
+        },
+      }));
+    } catch (err) {
+      setSignalements((prev) => ({
+        ...prev,
+        [clause.id]: { loading: false, message: err.message || t("signalerRecurrentError"), isError: true },
+      }));
+    }
+  }
+
+  /**
    * Genere le chronogramme standard (retro-planning J-7 -> J0 -> J+X). Si un
    * chronogramme existe deja pour ce dossier, `force` remplace l'existant
    * (utilise par le bouton "Regenerer").
@@ -568,7 +602,7 @@ export default function DossierDetailPage() {
               <div
                 key={clause.id}
                 className="card"
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
+                style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>
@@ -597,17 +631,37 @@ export default function DossierDetailPage() {
                       {t("articleRefLabel")} {clause.article_reference}
                     </div>
                   )}
+                  {signalements[clause.id]?.message && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        marginTop: 4,
+                        color: signalements[clause.id].isError ? "var(--brique)" : "var(--sub)",
+                      }}
+                    >
+                      {signalements[clause.id].message}
+                    </div>
+                  )}
                 </div>
-                {!clause.valide_par_juridique && (
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                    <button onClick={() => handleValiderClause(clause.id)} style={boutonSecondaireStyle}>
-                      {t("validateClause")}
-                    </button>
-                    <button onClick={() => handleRejeterClause(clause.id)} style={boutonSecondaireStyle}>
-                      {t("rejectClause")}
-                    </button>
-                  </div>
-                )}
+                <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                  <button
+                    onClick={() => handleSignalerRecurrent(clause)}
+                    disabled={signalements[clause.id]?.loading}
+                    style={boutonSecondaireStyle}
+                  >
+                    {signalements[clause.id]?.loading ? t("signalerRecurrentSending") : t("signalerRecurrent")}
+                  </button>
+                  {!clause.valide_par_juridique && (
+                    <>
+                      <button onClick={() => handleValiderClause(clause.id)} style={boutonSecondaireStyle}>
+                        {t("validateClause")}
+                      </button>
+                      <button onClick={() => handleRejeterClause(clause.id)} style={boutonSecondaireStyle}>
+                        {t("rejectClause")}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             ))}
           </div>

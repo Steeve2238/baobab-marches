@@ -148,6 +148,27 @@ const MESSAGES = {
     OFFRE_NOT_FOUND: "Offre introuvable.",
     OFFRE_RETENUE_ERROR: "Erreur lors de la mise a jour de l'offre retenue.",
 
+    MAITRES_OUVRAGE_FETCH_ERROR: "Erreur lors de la recuperation des maitres d'ouvrage.",
+    MAITRE_OUVRAGE_NOM_REQUIRED: "nom est requis.",
+    MAITRE_OUVRAGE_CREATE_ERROR: "Erreur lors de la creation du maitre d'ouvrage.",
+
+    HISTORIQUE_CONCURRENT_FETCH_ERROR: "Erreur lors de la recuperation de l'historique des offres concurrentes.",
+    HISTORIQUE_CONCURRENT_NOM_REQUIRED: "concurrent_nom est requis.",
+    HISTORIQUE_CONCURRENT_CREATE_ERROR: "Erreur lors de la creation de l'entree d'historique.",
+    HISTORIQUE_CONCURRENT_NOT_FOUND: "Entree d'historique introuvable.",
+    HISTORIQUE_CONCURRENT_UPDATE_ERROR: "Erreur lors de la mise a jour de l'entree d'historique.",
+    HISTORIQUE_CONCURRENT_DELETE_ERROR: "Erreur lors de la suppression de l'entree d'historique.",
+
+    CLAUSE_RISQUE_FETCH_ERROR: "Erreur lors de la recuperation de la bibliotheque de clauses a risque.",
+    CLAUSE_RISQUE_DESCRIPTION_REQUIRED: "pattern_description est requis.",
+    CLAUSE_RISQUE_CREATE_ERROR: "Erreur lors de la creation de la clause a risque.",
+    CLAUSE_RISQUE_NOT_FOUND: "Clause a risque introuvable.",
+    CLAUSE_RISQUE_UPDATE_ERROR: "Erreur lors de la mise a jour de la clause a risque.",
+    CLAUSE_RISQUE_DELETE_ERROR: "Erreur lors de la suppression de la clause a risque.",
+    CLAUSE_RISQUE_SIGNALER_FIELDS_REQUIRED: "dossier_ao_id, type_clause et libelle sont requis.",
+    CLAUSE_RISQUE_SIGNALER_NO_MAITRE_OUVRAGE: "Ce dossier n'a pas de maitre d'ouvrage renseigne. Veuillez d'abord en definir un sur le dossier.",
+    CLAUSE_RISQUE_SIGNALER_ERROR: "Erreur lors du signalement de la clause comme recurrente.",
+
     SERVER_ERROR: "Erreur serveur inattendue.",
   },
   en: {
@@ -293,6 +314,27 @@ const MESSAGES = {
     OFFRE_CREATE_ERROR: "Error while creating the offer.",
     OFFRE_NOT_FOUND: "Offer not found.",
     OFFRE_RETENUE_ERROR: "Error while updating the selected offer.",
+
+    MAITRES_OUVRAGE_FETCH_ERROR: "Error while fetching contracting authorities.",
+    MAITRE_OUVRAGE_NOM_REQUIRED: "nom is required.",
+    MAITRE_OUVRAGE_CREATE_ERROR: "Error while creating the contracting authority.",
+
+    HISTORIQUE_CONCURRENT_FETCH_ERROR: "Error while fetching the competitor bid history.",
+    HISTORIQUE_CONCURRENT_NOM_REQUIRED: "concurrent_nom is required.",
+    HISTORIQUE_CONCURRENT_CREATE_ERROR: "Error while creating the history entry.",
+    HISTORIQUE_CONCURRENT_NOT_FOUND: "History entry not found.",
+    HISTORIQUE_CONCURRENT_UPDATE_ERROR: "Error while updating the history entry.",
+    HISTORIQUE_CONCURRENT_DELETE_ERROR: "Error while deleting the history entry.",
+
+    CLAUSE_RISQUE_FETCH_ERROR: "Error while fetching the risk clause library.",
+    CLAUSE_RISQUE_DESCRIPTION_REQUIRED: "pattern_description is required.",
+    CLAUSE_RISQUE_CREATE_ERROR: "Error while creating the risk clause.",
+    CLAUSE_RISQUE_NOT_FOUND: "Risk clause not found.",
+    CLAUSE_RISQUE_UPDATE_ERROR: "Error while updating the risk clause.",
+    CLAUSE_RISQUE_DELETE_ERROR: "Error while deleting the risk clause.",
+    CLAUSE_RISQUE_SIGNALER_FIELDS_REQUIRED: "dossier_ao_id, type_clause and libelle are required.",
+    CLAUSE_RISQUE_SIGNALER_NO_MAITRE_OUVRAGE: "This case has no contracting authority set. Please set one on the case first.",
+    CLAUSE_RISQUE_SIGNALER_ERROR: "Error while flagging the clause as recurring.",
 
     SERVER_ERROR: "Unexpected server error.",
   },

@@ -273,6 +273,50 @@ export const DICTIONARIES = {
     noRoleOption: "Aucun rôle",
     noPersonOption: "Aucune personne",
 
+    navConcurrence: "Concurrence",
+    concurrencePageTitle: "Intelligence concurrentielle & juridique",
+    concurrencePageSubtitle: "Historique des offres concurrentes et bibliothèque de clauses à risque récurrentes.",
+
+    maitreOuvrageLabel: "Maître d'ouvrage",
+    selectMaitreOuvrage: "Sélectionner un maître d'ouvrage",
+    newMaitreOuvrage: "+ Nouveau maître d'ouvrage",
+    maitreOuvrageNameLabel: "Nom",
+    maitreOuvrageCategorieLabel: "Catégorie",
+    createMaitreOuvrageButton: "Créer",
+    noMaitreOuvrage: "Aucun",
+
+    historiqueSection: "Historique des offres concurrentes",
+    newHistoriqueEntry: "Nouvelle entrée",
+    dossierReferenceLabel: "Référence du dossier",
+    concurrentNameLabel: "Nom du concurrent",
+    montantOffreLabel: "Montant de l'offre",
+    resultatLabel: "Résultat",
+    motifEchecLabel: "Motif (si perdu/infructueux)",
+    dateObservationLabel: "Date d'observation",
+    noHistorique: "Aucune offre concurrente enregistrée.",
+    selectResultat: "Sélectionner un résultat",
+    addHistoriqueButton: "Ajouter",
+    deleteHistoriqueConfirm: "Supprimer cette entrée d'historique ?",
+
+    clauseRisqueSection: "Bibliothèque de clauses à risque",
+    newClauseRisque: "Nouvelle clause",
+    patternDescriptionLabel: "Description du motif",
+    niveauRisqueLabel2: "Niveau de risque",
+    selectNiveauRisque: "Sélectionner un niveau de risque",
+    occurrencesLabel: "Occurrences",
+    addClauseRisqueButton: "Ajouter",
+    deleteClauseRisqueConfirm: "Supprimer cette clause de la bibliothèque ?",
+    noClauseRisque: "Aucune clause à risque enregistrée.",
+    filterByMaitreOuvrage: "Filtrer par maître d'ouvrage",
+    allMaitresOuvrage: "Tous",
+    incrementOccurrence: "+1 occurrence",
+
+    signalerRecurrent: "Signaler comme récurrent",
+    signalerRecurrentSending: "Envoi...",
+    signalerRecurrentCreated: "Nouveau motif ajouté à la bibliothèque de clauses à risque.",
+    signalerRecurrentIncremented: "Occurrence enregistrée (total : {n}).",
+    signalerRecurrentError: "Impossible de signaler cette clause.",
+
     dateLocale: "fr-FR",
   },
   en: {
@@ -544,6 +588,50 @@ export const DICTIONARIES = {
     noRoleOption: "No role",
     noPersonOption: "No person",
 
+    navConcurrence: "Competition",
+    concurrencePageTitle: "Competitive & legal intelligence",
+    concurrencePageSubtitle: "Competitor bid history and library of recurring risk clauses.",
+
+    maitreOuvrageLabel: "Contracting authority",
+    selectMaitreOuvrage: "Select a contracting authority",
+    newMaitreOuvrage: "+ New contracting authority",
+    maitreOuvrageNameLabel: "Name",
+    maitreOuvrageCategorieLabel: "Category",
+    createMaitreOuvrageButton: "Create",
+    noMaitreOuvrage: "None",
+
+    historiqueSection: "Competitor bid history",
+    newHistoriqueEntry: "New entry",
+    dossierReferenceLabel: "Case reference",
+    concurrentNameLabel: "Competitor name",
+    montantOffreLabel: "Bid amount",
+    resultatLabel: "Result",
+    motifEchecLabel: "Reason (if lost/unsuccessful)",
+    dateObservationLabel: "Observation date",
+    noHistorique: "No competitor bid recorded.",
+    selectResultat: "Select a result",
+    addHistoriqueButton: "Add",
+    deleteHistoriqueConfirm: "Delete this history entry?",
+
+    clauseRisqueSection: "Risk clause library",
+    newClauseRisque: "New clause",
+    patternDescriptionLabel: "Pattern description",
+    niveauRisqueLabel2: "Risk level",
+    selectNiveauRisque: "Select a risk level",
+    occurrencesLabel: "Occurrences",
+    addClauseRisqueButton: "Add",
+    deleteClauseRisqueConfirm: "Delete this clause from the library?",
+    noClauseRisque: "No risk clause recorded.",
+    filterByMaitreOuvrage: "Filter by contracting authority",
+    allMaitresOuvrage: "All",
+    incrementOccurrence: "+1 occurrence",
+
+    signalerRecurrent: "Flag as recurring",
+    signalerRecurrentSending: "Sending...",
+    signalerRecurrentCreated: "New pattern added to the risk clause library.",
+    signalerRecurrentIncremented: "Occurrence recorded (total: {n}).",
+    signalerRecurrentError: "Could not flag this clause.",
+
     dateLocale: "en-US",
   },
 };
@@ -717,4 +805,14 @@ export const TYPE_COURRIER_LABELS = {
     RECOURS_CONTENTIEUX: "Formal appeal",
     NOTIFICATION_SOUS_TRAITANCE: "Subcontracting notification",
   },
+};
+
+export const RESULTAT_CONCURRENT_LABELS = {
+  fr: { GAGNE: "Gagné", PERDU: "Perdu", INFRUCTUEUX: "Infructueux" },
+  en: { GAGNE: "Won", PERDU: "Lost", INFRUCTUEUX: "Unsuccessful" },
+};
+
+export const NIVEAU_RISQUE_LABELS = {
+  fr: { FAIBLE: "Faible", MOYEN: "Moyen", ELEVE: "Élevé" },
+  en: { FAIBLE: "Low", MOYEN: "Medium", ELEVE: "High" },
 };

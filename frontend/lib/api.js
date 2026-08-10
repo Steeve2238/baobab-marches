@@ -265,4 +265,28 @@ export const api = {
     request(`/fournisseurs/dossiers/${dossierId}/offres`, { method: "POST", body: JSON.stringify(data) }),
   retenirOffreFournisseur: (offreId) =>
     request(`/fournisseurs/offres/${offreId}/retenue`, { method: "PATCH" }),
+
+  // Maitres d'ouvrage (donnee de reference partagee par Module 1 et Module 7)
+  getMaitresOuvrage: () => request("/maitres-ouvrage"),
+  createMaitreOuvrage: (data) =>
+    request("/maitres-ouvrage", { method: "POST", body: JSON.stringify(data) }),
+
+  // Module 7 - Intelligence concurrentielle & juridique
+  getHistoriqueConcurrent: (maitre_ouvrage_id) =>
+    request(`/concurrence/historique${maitre_ouvrage_id ? `?maitre_ouvrage_id=${maitre_ouvrage_id}` : ""}`),
+  createHistoriqueConcurrent: (data) =>
+    request("/concurrence/historique", { method: "POST", body: JSON.stringify(data) }),
+  patchHistoriqueConcurrent: (id, data) =>
+    request(`/concurrence/historique/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerHistoriqueConcurrent: (id) => request(`/concurrence/historique/${id}`, { method: "DELETE" }),
+
+  getClausesRisque: (maitre_ouvrage_id) =>
+    request(`/concurrence/clauses-risque${maitre_ouvrage_id ? `?maitre_ouvrage_id=${maitre_ouvrage_id}` : ""}`),
+  createClauseRisque: (data) =>
+    request("/concurrence/clauses-risque", { method: "POST", body: JSON.stringify(data) }),
+  patchClauseRisque: (id, data) =>
+    request(`/concurrence/clauses-risque/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerClauseRisque: (id) => request(`/concurrence/clauses-risque/${id}`, { method: "DELETE" }),
+  signalerClauseRecurrente: (data) =>
+    request("/concurrence/clauses-risque/signaler", { method: "POST", body: JSON.stringify(data) }),
 };

@@ -14,6 +14,8 @@ import {
   NIVEAU_VIGILANCE_LABELS,
   PHASE_CHRONOGRAMME_LABELS,
   TACHE_STATUT_LABELS,
+  RESULTAT_CONCURRENT_LABELS,
+  NIVEAU_RISQUE_LABELS,
   LANGUES_SUPPORTEES,
   LANGUE_PAR_DEFAUT,
 } from "./dictionaries";
@@ -68,6 +70,9 @@ export function LanguageProvider({ children }) {
   const phaseChronogrammeLabels =
     PHASE_CHRONOGRAMME_LABELS[langue] || PHASE_CHRONOGRAMME_LABELS[LANGUE_PAR_DEFAUT];
   const tacheStatutLabels = TACHE_STATUT_LABELS[langue] || TACHE_STATUT_LABELS[LANGUE_PAR_DEFAUT];
+  const resultatConcurrentLabels =
+    RESULTAT_CONCURRENT_LABELS[langue] || RESULTAT_CONCURRENT_LABELS[LANGUE_PAR_DEFAUT];
+  const niveauRisqueLabels = NIVEAU_RISQUE_LABELS[langue] || NIVEAU_RISQUE_LABELS[LANGUE_PAR_DEFAUT];
 
   function t(key) {
     return dict[key] || key;
@@ -117,6 +122,14 @@ export function LanguageProvider({ children }) {
     return tacheStatutLabels[code] || code;
   }
 
+  function resultatConcurrentLabel(code) {
+    return resultatConcurrentLabels[code] || code;
+  }
+
+  function niveauRisqueLabel(code) {
+    return niveauRisqueLabels[code] || code;
+  }
+
   return (
     <LanguageContext.Provider
       value={{
@@ -134,6 +147,8 @@ export function LanguageProvider({ children }) {
         niveauVigilanceLabel,
         phaseChronogrammeLabel,
         tacheStatutLabel,
+        resultatConcurrentLabel,
+        niveauRisqueLabel,
         dict,
       }}
     >

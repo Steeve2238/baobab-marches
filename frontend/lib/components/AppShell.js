@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { href: "/logistique", key: "navLogistics" },
   { href: "/fournisseurs", key: "navSuppliers" },
   { href: "/courriers", key: "navLetters" },
+  { href: "/concurrence", key: "navConcurrence" },
   { href: "/roles", key: "navRoles", adminOnly: true },
   { href: "/utilisateurs", key: "navUsers", adminOnly: true },
   { href: "/parametres/entete", key: "navSettings" },
