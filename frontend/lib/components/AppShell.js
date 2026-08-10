@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/fournisseurs", key: "navSuppliers" },
   { href: "/courriers", key: "navLetters" },
   { href: "/concurrence", key: "navConcurrence" },
+  { href: "/parc-auto", key: "navParcAuto" },
   { href: "/roles", key: "navRoles", adminOnly: true },
   { href: "/utilisateurs", key: "navUsers", adminOnly: true },
   { href: "/parametres/entete", key: "navSettings" },

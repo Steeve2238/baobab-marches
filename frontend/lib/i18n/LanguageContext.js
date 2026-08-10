@@ -16,6 +16,8 @@ import {
   TACHE_STATUT_LABELS,
   RESULTAT_CONCURRENT_LABELS,
   NIVEAU_RISQUE_LABELS,
+  STATUT_VEHICULE_LABELS,
+  STATUT_SORTIE_LABELS,
   LANGUES_SUPPORTEES,
   LANGUE_PAR_DEFAUT,
 } from "./dictionaries";
@@ -73,6 +75,8 @@ export function LanguageProvider({ children }) {
   const resultatConcurrentLabels =
     RESULTAT_CONCURRENT_LABELS[langue] || RESULTAT_CONCURRENT_LABELS[LANGUE_PAR_DEFAUT];
   const niveauRisqueLabels = NIVEAU_RISQUE_LABELS[langue] || NIVEAU_RISQUE_LABELS[LANGUE_PAR_DEFAUT];
+  const statutVehiculeLabels = STATUT_VEHICULE_LABELS[langue] || STATUT_VEHICULE_LABELS[LANGUE_PAR_DEFAUT];
+  const statutSortieLabels = STATUT_SORTIE_LABELS[langue] || STATUT_SORTIE_LABELS[LANGUE_PAR_DEFAUT];
 
   function t(key) {
     return dict[key] || key;
@@ -130,6 +134,14 @@ export function LanguageProvider({ children }) {
     return niveauRisqueLabels[code] || code;
   }
 
+  function statutVehiculeLabel(code) {
+    return statutVehiculeLabels[code] || code;
+  }
+
+  function statutSortieLabel(code) {
+    return statutSortieLabels[code] || code;
+  }
+
   return (
     <LanguageContext.Provider
       value={{
@@ -149,6 +161,8 @@ export function LanguageProvider({ children }) {
         tacheStatutLabel,
         resultatConcurrentLabel,
         niveauRisqueLabel,
+        statutVehiculeLabel,
+        statutSortieLabel,
         dict,
       }}
     >

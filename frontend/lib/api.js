@@ -289,4 +289,20 @@ export const api = {
   supprimerClauseRisque: (id) => request(`/concurrence/clauses-risque/${id}`, { method: "DELETE" }),
   signalerClauseRecurrente: (data) =>
     request("/concurrence/clauses-risque/signaler", { method: "POST", body: JSON.stringify(data) }),
+
+  // Module 8 - Parc auto (etape 1/3 : vehicules + sorties)
+  getVehicules: () => request("/parc-auto/vehicules"),
+  getVehicule: (id) => request(`/parc-auto/vehicules/${id}`),
+  createVehicule: (data) => request("/parc-auto/vehicules", { method: "POST", body: JSON.stringify(data) }),
+  patchVehicule: (id, data) =>
+    request(`/parc-auto/vehicules/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getSorties: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/parc-auto/sorties${query ? `?${query}` : ""}`);
+  },
+  getSortie: (id) => request(`/parc-auto/sorties/${id}`),
+  createSortie: (data) => request("/parc-auto/sorties", { method: "POST", body: JSON.stringify(data) }),
+  cloturerSortie: (id, data) =>
+    request(`/parc-auto/sorties/${id}/cloturer`, { method: "PATCH", body: JSON.stringify(data) }),
 };
