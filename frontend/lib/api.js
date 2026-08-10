@@ -25,13 +25,52 @@ export function setUtilisateurCourant(user) {
   window.localStorage.setItem("baobab_user", JSON.stringify(user || {}));
 }
 
-export function getUtilisateurCourant() {
-  if (typeof window === "undefined") return null;
+/**
+ * Decode la charge utile (payload) du token JWT courant, sans verifier la
+ * signature (deja verifiee par le backend a chaque requete - ceci est
+ * uniquement une lecture cote client pour l'affichage). Contient au moins
+ * sub/tenantId/email/roles (voir utils/jwt.js et routes/auth.js cote
+ * backend), mais PAS nom/prenom (absents du token).
+ */
+function decoderPayloadToken() {
+  const token = getToken();
+  if (!token) return null;
   try {
-    return JSON.parse(window.localStorage.getItem("baobab_user") || "null");
+    const partiePayload = token.split(".")[1];
+    const normalise = partiePayload.replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(normalise));
   } catch {
     return null;
   }
+}
+
+/**
+ * Profil affichable de l'utilisateur connecte. Priorite au profil complet
+ * enregistre a la connexion (setUtilisateurCourant, avec nom/prenom) ; si
+ * absent - typiquement une session ouverte AVANT l'introduction de ce profil
+ * (baobab_user n'existe pas encore dans le localStorage de cette personne,
+ * meme si son token reste valide) - on retombe sur le contenu du token
+ * (email + roles, sans nom/prenom) plutot que de ne rien afficher du tout.
+ * Une reconnexion normale reconstitue le profil complet automatiquement.
+ */
+export function getUtilisateurCourant() {
+  if (typeof window === "undefined") return null;
+  let stocke = null;
+  try {
+    stocke = JSON.parse(window.localStorage.getItem("baobab_user") || "null");
+  } catch {
+    stocke = null;
+  }
+  if (stocke && Array.isArray(stocke.roles)) return stocke;
+
+  const payload = decoderPayloadToken();
+  if (!payload) return null;
+  return {
+    email: payload.email,
+    roles: payload.roles || [],
+    prenom: null,
+    nom: null,
+  };
 }
 
 export function clearUtilisateurCourant() {

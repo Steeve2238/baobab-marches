@@ -97,7 +97,7 @@ export default function AppShell({ children, title, backHref }) {
         </nav>
 
         <div style={{ padding: "0 16px 16px" }}>
-          {profil?.prenom && (
+          {profil?.email && (
             <div
               style={{
                 display: "flex",
@@ -109,26 +109,34 @@ export default function AppShell({ children, title, backHref }) {
               }}
             >
               <div style={avatarStyle}>
-                {profil.prenom.charAt(0)}
+                {profil.prenom ? profil.prenom.charAt(0) : profil.email.charAt(0)}
                 {profil.nom ? profil.nom.charAt(0) : ""}
               </div>
               <div style={{ minWidth: 0 }}>
+                {/* prenom/nom sont absents si le profil vient du secours par
+                    decodage du token (session ouverte avant l'ajout de ce
+                    profil - voir getUtilisateurCourant) : on affiche alors
+                    seulement l'e-mail plutot qu'un nom vide. Une
+                    reconnexion normale retablit prenom/nom. */}
+                {profil.prenom && (
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      color: "#fff",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {profil.prenom} {profil.nom}
+                  </div>
+                )}
                 <div
                   style={{
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                    color: "#fff",
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {profil.prenom} {profil.nom}
-                </div>
-                <div
-                  style={{
-                    fontSize: 10,
-                    color: "rgba(255,255,255,0.55)",
+                    fontSize: profil.prenom ? 10 : 12.5,
+                    fontWeight: profil.prenom ? 400 : 600,
+                    color: profil.prenom ? "rgba(255,255,255,0.55)" : "#fff",
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",

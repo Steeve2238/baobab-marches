@@ -28,6 +28,13 @@ export default function DashboardPage() {
   const { t, statutLabel, dict } = useLangue();
   const [dossiers, setDossiers] = useState([]);
   const [signaux, setSignaux] = useState([]);
+  const [fournisseurs, setFournisseurs] = useState([]);
+  const [partenaires, setPartenaires] = useState([]);
+  const [incoterms, setIncoterms] = useState([]);
+  const [transitaires, setTransitaires] = useState([]);
+  const [modelesCourrier, setModelesCourrier] = useState([]);
+  const [utilisateurs, setUtilisateurs] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [filtreGroupe, setFiltreGroupe] = useState(null);
@@ -35,12 +42,42 @@ export default function DashboardPage() {
   useEffect(() => {
     async function charger() {
       try {
-        const [dossiersData, signauxData] = await Promise.all([
+        // Les stats "par domaine" ci-dessous s'appuient sur des listes
+        // globales deja exposees par chaque module (pas de nouvelle route
+        // backend) : ce sont des compteurs d'INVENTAIRE (ce qui est
+        // configure aujourd'hui), pas encore des stats d'ACTIVITE agregees
+        // sur l'ensemble des dossiers (montant total finance, delai moyen
+        // reel...) - celles-ci demanderaient une route d'agregation dediee.
+        const [
+          dossiersData,
+          signauxData,
+          fournisseursData,
+          partenairesData,
+          incotermsData,
+          transitairesData,
+          modelesCourrierData,
+          utilisateursData,
+          rolesData,
+        ] = await Promise.all([
           api.getDossiers(),
           api.getSignaux(),
+          api.getFournisseurs(),
+          api.getPartenaires(),
+          api.getIncoterms(),
+          api.getTransitaires(),
+          api.getModelesCourrier(),
+          api.getUtilisateurs(),
+          api.getRoles(),
         ]);
         setDossiers(dossiersData);
         setSignaux(signauxData);
+        setFournisseurs(fournisseursData);
+        setPartenaires(partenairesData);
+        setIncoterms(incotermsData);
+        setTransitaires(transitairesData);
+        setModelesCourrier(modelesCourrierData);
+        setUtilisateurs(utilisateursData);
+        setRoles(rolesData);
       } catch (err) {
         setErreur(err.message || t("defaultLoadError"));
         if (String(err.message).includes("Authentification") || String(err.message).includes("expiree") || String(err.message).includes("Authentication") || String(err.message).includes("expired")) {
@@ -76,6 +113,54 @@ export default function DashboardPage() {
   function handleClicStat(groupe) {
     setFiltreGroupe((prev) => (prev === groupe ? null : groupe));
   }
+
+  const scoresFiabilite = fournisseurs.map((f) => f.score_fiabilite).filter((s) => s != null);
+  const scoreFiabiliteMoyen = scoresFiabilite.length
+    ? Math.round(scoresFiabilite.reduce((a, b) => a + b, 0) / scoresFiabilite.length)
+    : null;
+  const nbBanques = partenaires.filter((p) => p.type === "BANQUE").length;
+  const nbAssurances = partenaires.filter((p) => p.type === "ASSURANCE").length;
+  const utilisateursActifs = utilisateurs.filter((u) => u.actif).length;
+
+  const domaines = [
+    {
+      href: "/fournisseurs",
+      titre: t("domainSuppliers"),
+      lignes: [
+        { valeur: fournisseurs.length, libelle: t("domainSuppliersCount") },
+        { valeur: scoreFiabiliteMoyen != null ? `${scoreFiabiliteMoyen}%` : "—", libelle: t("domainAvgReliability") },
+      ],
+    },
+    {
+      href: "/financement",
+      titre: t("domainFinancing"),
+      lignes: [
+        { valeur: partenaires.length, libelle: t("domainPartnersCount") },
+        { valeur: `${nbBanques} / ${nbAssurances}`, libelle: t("domainBanksInsurers") },
+      ],
+    },
+    {
+      href: "/logistique",
+      titre: t("domainLogistics"),
+      lignes: [
+        { valeur: incoterms.length, libelle: t("domainIncotermsCount") },
+        { valeur: transitaires.length, libelle: t("domainForwardersCount") },
+      ],
+    },
+    {
+      href: "/courriers",
+      titre: t("domainLetters"),
+      lignes: [{ valeur: modelesCourrier.length, libelle: t("domainTemplatesCount") }],
+    },
+    {
+      href: "/utilisateurs",
+      titre: t("domainTeam"),
+      lignes: [
+        { valeur: `${utilisateursActifs} / ${utilisateurs.length}`, libelle: t("domainActiveUsers") },
+        { valeur: roles.length, libelle: t("domainRolesCount") },
+      ],
+    },
+  ];
 
   return (
     <AppShell title={t("navDashboard")}>
@@ -184,6 +269,34 @@ export default function DashboardPage() {
             />
           </div>
 
+          <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 12 }}>{t("domainStatsSection")}</h2>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+              gap: 10,
+              marginBottom: 24,
+            }}
+          >
+            {domaines.map((domaine) => (
+              <Link key={domaine.href} href={domaine.href} className="card" style={domainCardStyle}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--petrol)", marginBottom: 8 }}>
+                  {domaine.titre}
+                </div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {domaine.lignes.map((ligne) => (
+                    <div key={ligne.libelle} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                      <span style={{ fontSize: 10.5, color: "var(--sub)" }}>{ligne.libelle}</span>
+                      <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>
+                        {ligne.valeur}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Link>
+            ))}
+          </div>
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("ongoingFiles")}</h2>
             {filtreGroupe && (
@@ -257,6 +370,11 @@ function StatCard({ valeur, libelle, couleur = "var(--petrol)", actif, onClick }
 }
 
 const fileCardStyle = {
+  display: "block",
+  padding: "13px 14px",
+};
+
+const domainCardStyle = {
   display: "block",
   padding: "13px 14px",
 };
