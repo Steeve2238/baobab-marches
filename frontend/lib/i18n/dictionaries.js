@@ -68,6 +68,12 @@ export const DICTIONARIES = {
 
     ongoingFiles: "Dossiers en cours",
     noFiles: "Aucun dossier pour le moment. Créez-en un pour démarrer le chronogramme.",
+    statTotalFiles: "Total dossiers",
+    statOpenFiles: "Ouverts",
+    statOngoingFiles: "En cours",
+    statClosedFiles: "Terminés",
+    statRejectedFiles: "Rejetés",
+    clearFilter: "Effacer le filtre",
 
     backToDashboard: "Retour au tableau de bord",
 
@@ -226,6 +232,7 @@ export const DICTIONARIES = {
     noUsers: "Aucun utilisateur pour le moment.",
     activeLabel: "Actif",
     inactiveLabel: "Inactif",
+    editUserRoles: "Modifier les rôles",
     deactivateUser: "Désactiver",
     reactivateUser: "Réactiver",
     resetPasswordAction: "Réinitialiser le mot de passe",
@@ -316,6 +323,12 @@ export const DICTIONARIES = {
 
     ongoingFiles: "Ongoing files",
     noFiles: "No file yet. Create one to start the timeline.",
+    statTotalFiles: "Total files",
+    statOpenFiles: "Open",
+    statOngoingFiles: "Ongoing",
+    statClosedFiles: "Closed",
+    statRejectedFiles: "Rejected",
+    clearFilter: "Clear filter",
 
     backToDashboard: "Back to dashboard",
 
@@ -474,6 +487,7 @@ export const DICTIONARIES = {
     noUsers: "No user yet.",
     activeLabel: "Active",
     inactiveLabel: "Inactive",
+    editUserRoles: "Edit roles",
     deactivateUser: "Deactivate",
     reactivateUser: "Reactivate",
     resetPasswordAction: "Reset password",

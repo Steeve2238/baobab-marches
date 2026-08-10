@@ -1,10 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLangue } from "../i18n/LanguageContext";
 import LanguageSwitcher from "../i18n/LanguageSwitcher";
-import { clearToken, clearUtilisateurCourant, estAdmin } from "../api";
+import { clearToken, clearUtilisateurCourant, estAdmin, getUtilisateurCourant } from "../api";
 
 const NAV_ITEMS = [
   { href: "/dashboard", key: "navDashboard" },
@@ -29,16 +30,34 @@ export default function AppShell({ children, title, backHref }) {
   const router = useRouter();
   const { t } = useLangue();
 
+  // localStorage n'existe pas cote serveur (SSR) : lire le profil directement
+  // dans le corps du composant produirait un HTML different entre le rendu
+  // serveur et le rendu client, ce que React signale comme une erreur
+  // d'hydratation (et peut faire clignoter/rebasculer toute la page en rendu
+  // client). On lit donc le profil dans un effet (cote client uniquement,
+  // apres le premier rendu), comme le fait deja LanguageContext pour la
+  // langue choisie.
+  const [profil, setProfil] = useState(null);
+  const [estAdminConnecte, setEstAdminConnecte] = useState(false);
+
+  useEffect(() => {
+    setProfil(getUtilisateurCourant());
+    setEstAdminConnecte(estAdmin());
+  }, []);
+
   function handleLogout() {
     clearToken();
     clearUtilisateurCourant();
     router.push("/login");
   }
 
-  // estAdmin() lit le profil stocke a la connexion : il masque simplement le
-  // lien pour les non-admins (confort d'usage). Si les roles ont change
-  // depuis, le backend renverra 403 de toute facon a la moindre requete.
-  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || estAdmin());
+  // Tant que le profil n'est pas encore lu (avant l'effet ci-dessus), les
+  // liens reserves ADMIN restent masques : c'est aussi ce que le serveur
+  // rend, donc pas de decalage d'hydratation. Si les roles ont change depuis
+  // la connexion, le backend renverra 403 de toute facon a la moindre
+  // requete (voir requireRole cote backend) - ce filtre est un confort
+  // d'affichage, pas un controle d'acces.
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || estAdminConnecte);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -77,7 +96,49 @@ export default function AppShell({ children, title, backHref }) {
           })}
         </nav>
 
-        <div style={{ padding: 16 }}>
+        <div style={{ padding: "0 16px 16px" }}>
+          {profil?.prenom && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "10px 4px",
+                borderTop: "1px solid rgba(255,255,255,0.1)",
+                marginBottom: 10,
+              }}
+            >
+              <div style={avatarStyle}>
+                {profil.prenom.charAt(0)}
+                {profil.nom ? profil.nom.charAt(0) : ""}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    color: "#fff",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {profil.prenom} {profil.nom}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.55)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {profil.email}
+                </div>
+              </div>
+            </div>
+          )}
           <button onClick={handleLogout} style={logoutBtnStyle}>
             {t("signOut")}
           </button>
@@ -137,6 +198,21 @@ const logoStyle = {
   fontWeight: 700,
   color: "#1a1a1a",
   flexShrink: 0,
+};
+
+const avatarStyle = {
+  width: 30,
+  height: 30,
+  borderRadius: "50%",
+  background: "rgba(255,255,255,0.14)",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 11.5,
+  fontWeight: 700,
+  flexShrink: 0,
+  textTransform: "uppercase",
 };
 
 const logoutBtnStyle = {

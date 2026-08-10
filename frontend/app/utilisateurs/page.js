@@ -19,6 +19,8 @@ export default function UtilisateursPage() {
   const [erreur, setErreur] = useState("");
   const [form, setForm] = useState(FORM_VIDE);
   const [motDePasseAffiche, setMotDePasseAffiche] = useState(null); // { nom, mot_de_passe }
+  const [enEditionRoles, setEnEditionRoles] = useState(null); // id de l'utilisateur en cours d'edition
+  const [roleIdsEdition, setRoleIdsEdition] = useState([]);
 
   useEffect(() => {
     api.getUtilisateurs().then(setUtilisateurs).catch((err) => setErreur(err.message));
@@ -72,6 +74,32 @@ export default function UtilisateursPage() {
         nom: `${utilisateur.prenom} ${utilisateur.nom}`,
         mot_de_passe: mot_de_passe_temporaire_genere,
       });
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  function commencerEditionRoles(utilisateur) {
+    setEnEditionRoles(utilisateur.id);
+    setRoleIdsEdition(utilisateur.roles.map((r) => r.id));
+  }
+
+  function toggleRoleEdition(roleId) {
+    setRoleIdsEdition((prev) =>
+      prev.includes(roleId) ? prev.filter((id) => id !== roleId) : [...prev, roleId]
+    );
+  }
+
+  async function handleEnregistrerRoles(utilisateurId) {
+    setErreur("");
+    if (roleIdsEdition.length === 0) {
+      setErreur(t("selectAtLeastOneRole"));
+      return;
+    }
+    try {
+      const maj = await api.patchUtilisateur(utilisateurId, { role_ids: roleIdsEdition });
+      setUtilisateurs((prev) => prev.map((u) => (u.id === utilisateurId ? { ...u, ...maj } : u)));
+      setEnEditionRoles(null);
     } catch (err) {
       setErreur(err.message);
     }
@@ -191,10 +219,50 @@ export default function UtilisateursPage() {
                   {utilisateur.actif ? t("activeLabel") : t("inactiveLabel")}
                 </span>
               </div>
-              <div style={{ fontSize: 11.5, color: "var(--sub)" }}>
-                {utilisateur.roles.map((r) => r.libelle).join(", ") || "—"}
-              </div>
+              {enEditionRoles === utilisateur.id ? (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {roles.map((role) => (
+                    <label
+                      key={role.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        fontSize: 12,
+                        border: "1px solid var(--line)",
+                        borderRadius: 6,
+                        padding: "5px 8px",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={roleIdsEdition.includes(role.id)}
+                        onChange={() => toggleRoleEdition(role.id)}
+                      />
+                      {role.libelle}
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 11.5, color: "var(--sub)" }}>
+                  {utilisateur.roles.map((r) => r.libelle).join(", ") || "—"}
+                </div>
+              )}
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {enEditionRoles === utilisateur.id ? (
+                  <>
+                    <button onClick={() => handleEnregistrerRoles(utilisateur.id)} style={boutonSecondaireStyle}>
+                      {t("save")}
+                    </button>
+                    <button onClick={() => setEnEditionRoles(null)} style={boutonSecondaireStyle}>
+                      {t("cancel")}
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={() => commencerEditionRoles(utilisateur)} style={boutonSecondaireStyle}>
+                    {t("editUserRoles")}
+                  </button>
+                )}
                 <button onClick={() => handleToggleActif(utilisateur)} style={boutonSecondaireStyle}>
                   {utilisateur.actif ? t("deactivateUser") : t("reactivateUser")}
                 </button>
