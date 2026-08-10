@@ -9,7 +9,7 @@ import AppShell from "../../../../lib/components/AppShell";
 
 export default function SortieDetailPage() {
   const { id } = useParams();
-  const { t, statutSortieLabel, dict } = useLangue();
+  const { t, statutSortieLabel, niveauCarburantLabel, dict } = useLangue();
   const [sortie, setSortie] = useState(null);
   const [erreur, setErreur] = useState("");
   const [enCours, setEnCours] = useState(false);
@@ -80,7 +80,10 @@ export default function SortieDetailPage() {
           <Champ label={t("passagersLabel")} value={sortie.passagers} />
           <Champ label={t("itineraireLabel")} value={sortie.itineraire} />
           <Champ label={t("dossierLieLabel")} value={sortie.dossier_reference} />
-          <Champ label={t("niveauCarburantDepartLabel")} value={sortie.niveau_carburant_depart} />
+          <Champ
+            label={t("niveauCarburantDepartLabel")}
+            value={sortie.niveau_carburant_depart ? niveauCarburantLabel(sortie.niveau_carburant_depart) : null}
+          />
           <Champ label={t("kilometrageDepartLabel")} value={sortie.kilometrage_depart} mono />
           <Champ
             label={t("kilometrageRetourLabel")}

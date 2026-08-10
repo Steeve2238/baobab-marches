@@ -354,6 +354,7 @@ export const DICTIONARIES = {
     itineraireLabel: "Itinéraire",
     kilometrageDepartLabel: "Kilométrage de départ",
     niveauCarburantDepartLabel: "Niveau de carburant au départ",
+    selectNiveauCarburant: "Sélectionner un niveau",
     dossierLieLabel: "Dossier lié (facultatif)",
     selectDossier: "Aucun dossier lié",
     createSortieButton: "Créer la sortie",
@@ -720,6 +721,7 @@ export const DICTIONARIES = {
     itineraireLabel: "Route",
     kilometrageDepartLabel: "Departure mileage",
     niveauCarburantDepartLabel: "Fuel level at departure",
+    selectNiveauCarburant: "Select a level",
     dossierLieLabel: "Linked case (optional)",
     selectDossier: "No linked case",
     createSortieButton: "Create trip",
@@ -937,4 +939,9 @@ export const STATUT_VEHICULE_LABELS = {
 export const STATUT_SORTIE_LABELS = {
   fr: { EN_COURS: "En cours", CLOTUREE: "Clôturée" },
   en: { EN_COURS: "In progress", CLOTUREE: "Closed" },
+};
+
+export const NIVEAU_CARBURANT_LABELS = {
+  fr: { PLEIN: "Plein", TROIS_QUARTS: "3/4", DEMI: "1/2", QUART: "1/4", RESERVE: "Réserve" },
+  en: { PLEIN: "Full", TROIS_QUARTS: "3/4", DEMI: "1/2", QUART: "1/4", RESERVE: "Reserve" },
 };

@@ -18,6 +18,7 @@ import {
   NIVEAU_RISQUE_LABELS,
   STATUT_VEHICULE_LABELS,
   STATUT_SORTIE_LABELS,
+  NIVEAU_CARBURANT_LABELS,
   LANGUES_SUPPORTEES,
   LANGUE_PAR_DEFAUT,
 } from "./dictionaries";
@@ -77,6 +78,7 @@ export function LanguageProvider({ children }) {
   const niveauRisqueLabels = NIVEAU_RISQUE_LABELS[langue] || NIVEAU_RISQUE_LABELS[LANGUE_PAR_DEFAUT];
   const statutVehiculeLabels = STATUT_VEHICULE_LABELS[langue] || STATUT_VEHICULE_LABELS[LANGUE_PAR_DEFAUT];
   const statutSortieLabels = STATUT_SORTIE_LABELS[langue] || STATUT_SORTIE_LABELS[LANGUE_PAR_DEFAUT];
+  const niveauCarburantLabels = NIVEAU_CARBURANT_LABELS[langue] || NIVEAU_CARBURANT_LABELS[LANGUE_PAR_DEFAUT];
 
   function t(key) {
     return dict[key] || key;
@@ -142,6 +144,10 @@ export function LanguageProvider({ children }) {
     return statutSortieLabels[code] || code;
   }
 
+  function niveauCarburantLabel(code) {
+    return niveauCarburantLabels[code] || code;
+  }
+
   return (
     <LanguageContext.Provider
       value={{
@@ -163,6 +169,7 @@ export function LanguageProvider({ children }) {
         niveauRisqueLabel,
         statutVehiculeLabel,
         statutSortieLabel,
+        niveauCarburantLabel,
         dict,
       }}
     >

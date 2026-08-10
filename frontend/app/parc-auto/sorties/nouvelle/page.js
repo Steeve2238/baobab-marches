@@ -6,9 +6,11 @@ import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
 
+const NIVEAUX_CARBURANT = ["PLEIN", "TROIS_QUARTS", "DEMI", "QUART", "RESERVE"];
+
 export default function NouvelleSortiePage() {
   const router = useRouter();
-  const { t } = useLangue();
+  const { t, niveauCarburantLabel } = useLangue();
   const [vehicules, setVehicules] = useState([]);
   const [dossiers, setDossiers] = useState([]);
   const [erreur, setErreur] = useState("");
@@ -147,11 +149,18 @@ export default function NouvelleSortiePage() {
           </div>
           <div>
             <label style={labelStyle}>{t("niveauCarburantDepartLabel")}</label>
-            <input
+            <select
               value={form.niveau_carburant_depart}
               onChange={(e) => setForm((f) => ({ ...f, niveau_carburant_depart: e.target.value }))}
               style={inputStyle}
-            />
+            >
+              <option value="">{t("selectNiveauCarburant")}</option>
+              {NIVEAUX_CARBURANT.map((n) => (
+                <option key={n} value={n}>
+                  {niveauCarburantLabel(n)}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
