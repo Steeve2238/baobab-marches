@@ -15,6 +15,35 @@ export function clearToken() {
   window.localStorage.removeItem("baobab_token");
 }
 
+// Profil utilisateur courant (nom, roles...) - stocke cote client uniquement
+// pour l'affichage (masquer les menus Roles/Utilisateurs pour les non-admins,
+// afficher le prenom...). Le controle d'acces reel reste fait par le backend
+// a chaque requete (voir middleware/auth.js) : ce profil peut etre legerement
+// perime si les roles ont change depuis la derniere connexion.
+export function setUtilisateurCourant(user) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem("baobab_user", JSON.stringify(user || {}));
+}
+
+export function getUtilisateurCourant() {
+  if (typeof window === "undefined") return null;
+  try {
+    return JSON.parse(window.localStorage.getItem("baobab_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
+export function clearUtilisateurCourant() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem("baobab_user");
+}
+
+export function estAdmin() {
+  const user = getUtilisateurCourant();
+  return Array.isArray(user?.roles) && user.roles.includes("ADMIN");
+}
+
 // Langue de l'interface : stockee cote client, envoyee a chaque requete via
 // l'en-tete Accept-Language pour que le backend traduise ses messages.
 export function getLangueLocale() {
@@ -68,6 +97,11 @@ async function requestUpload(path, formData) {
 export const api = {
   login: (email, mot_de_passe) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, mot_de_passe }) }),
+  changerMotDePasse: (nouveau_mot_de_passe) =>
+    request("/auth/changer-mot-de-passe", {
+      method: "POST",
+      body: JSON.stringify({ nouveau_mot_de_passe }),
+    }),
   getDossiers: () => request("/dossiers"),
   getDossier: (id) => request(`/dossiers/${id}`),
   getSignaux: () => request("/signaux"),
@@ -88,6 +122,25 @@ export const api = {
     request(`/chronogramme/${dossierId}/taches`, { method: "POST", body: JSON.stringify(data) }),
   patchTacheStatut: (tacheId, statut) =>
     request(`/chronogramme/taches/${tacheId}`, { method: "PATCH", body: JSON.stringify({ statut }) }),
+  patchTacheAffectation: (tacheId, { role_porteur_id, assigne_utilisateur_id }) =>
+    request(`/chronogramme/taches/${tacheId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role_porteur_id, assigne_utilisateur_id }),
+    }),
+  getMesTaches: (tous) => request(`/chronogramme/mes-taches${tous ? "?tous=true" : ""}`),
+
+  // Roles & utilisateurs (gestion des acces)
+  getRoles: () => request("/roles"),
+  createRole: (data) => request("/roles", { method: "POST", body: JSON.stringify(data) }),
+  patchRole: (id, data) => request(`/roles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerRole: (id) => request(`/roles/${id}`, { method: "DELETE" }),
+  getUtilisateurs: () => request("/utilisateurs"),
+  createUtilisateur: (data) => request("/utilisateurs", { method: "POST", body: JSON.stringify(data) }),
+  patchUtilisateur: (id, data) =>
+    request(`/utilisateurs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerUtilisateur: (id) => request(`/utilisateurs/${id}`, { method: "DELETE" }),
+  reinitialiserMotDePasse: (id) =>
+    request(`/utilisateurs/${id}/reinitialiser-mot-de-passe`, { method: "POST" }),
   setLangue: (langue_preferee) =>
     request("/auth/langue", { method: "PATCH", body: JSON.stringify({ langue_preferee }) }),
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, setToken } from "../../lib/api";
+import { api, setToken, setUtilisateurCourant } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import LanguageSwitcher from "../../lib/i18n/LanguageSwitcher";
 
@@ -21,11 +21,19 @@ export default function LoginPage() {
     try {
       const data = await api.login(email, motDePasse);
       setToken(data.token);
+      setUtilisateurCourant(data.user);
       // Synchronise la langue de l'interface avec la preference du profil
       if (data.user?.langue_preferee) {
         setLangue(data.user.langue_preferee);
       }
-      router.push("/dashboard");
+      // Mot de passe temporaire (premiere connexion ou reinitialisation par
+      // un admin) : on force le changement avant d'acceder au reste de
+      // l'application.
+      if (data.mustChangePassword) {
+        router.push("/changer-mot-de-passe");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err) {
       setErreur(err.message || t("defaultLoginError"));
     } finally {

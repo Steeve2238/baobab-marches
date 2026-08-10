@@ -4,14 +4,17 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLangue } from "../i18n/LanguageContext";
 import LanguageSwitcher from "../i18n/LanguageSwitcher";
-import { clearToken } from "../api";
+import { clearToken, clearUtilisateurCourant, estAdmin } from "../api";
 
 const NAV_ITEMS = [
   { href: "/dashboard", key: "navDashboard" },
+  { href: "/mes-taches", key: "navMyTasks" },
   { href: "/financement", key: "navFinancing" },
   { href: "/logistique", key: "navLogistics" },
   { href: "/fournisseurs", key: "navSuppliers" },
   { href: "/courriers", key: "navLetters" },
+  { href: "/roles", key: "navRoles", adminOnly: true },
+  { href: "/utilisateurs", key: "navUsers", adminOnly: true },
   { href: "/parametres/entete", key: "navSettings" },
 ];
 
@@ -28,8 +31,14 @@ export default function AppShell({ children, title, backHref }) {
 
   function handleLogout() {
     clearToken();
+    clearUtilisateurCourant();
     router.push("/login");
   }
+
+  // estAdmin() lit le profil stocke a la connexion : il masque simplement le
+  // lien pour les non-admins (confort d'usage). Si les roles ont change
+  // depuis, le backend renverra 403 de toute facon a la moindre requete.
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || estAdmin());
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -45,7 +54,7 @@ export default function AppShell({ children, title, backHref }) {
         </div>
 
         <nav style={{ padding: "8px 12px", flex: 1 }}>
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const actif = pathname === item.href;
             return (
               <Link

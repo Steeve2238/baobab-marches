@@ -14,6 +14,8 @@ const courriersRoutes = require("./routes/courriers");
 const parametresRoutes = require("./routes/parametres");
 const fournisseursRoutes = require("./routes/fournisseurs");
 const extractionRoutes = require("./routes/extraction");
+const rolesRoutes = require("./routes/roles");
+const utilisateursRoutes = require("./routes/utilisateurs");
 const { t } = require("./utils/i18n");
 
 const app = express();
@@ -37,6 +39,8 @@ app.use("/api/courriers", courriersRoutes);
 app.use("/api/parametres", parametresRoutes);
 app.use("/api/fournisseurs", fournisseursRoutes);
 app.use("/api/extraction", extractionRoutes);
+app.use("/api/roles", rolesRoutes);
+app.use("/api/utilisateurs", utilisateursRoutes);
 
 // Gestionnaire d'erreur generique (dernier recours)
 app.use((err, req, res, next) => {

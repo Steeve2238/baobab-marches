@@ -38,6 +38,8 @@ export default function DossierDetailPage() {
   } = useLangue();
 
   const [dossier, setDossier] = useState(null);
+  const [roles, setRoles] = useState([]);
+  const [utilisateurs, setUtilisateurs] = useState([]);
   const [simulations, setSimulations] = useState([]);
   const [calculsMarge, setCalculsMarge] = useState([]);
   const [suivisLogistiques, setSuivisLogistiques] = useState([]);
@@ -112,6 +114,8 @@ export default function DossierDetailPage() {
     intitule: "",
     jalon_relatif: "",
     date_echeance: "",
+    role_porteur_id: "",
+    assigne_utilisateur_id: "",
   });
   const [tacheEnCours, setTacheEnCours] = useState(false);
   const [genererEnCours, setGenererEnCours] = useState(false);
@@ -121,6 +125,8 @@ export default function DossierDetailPage() {
       try {
         const [
           dossierData,
+          rolesData,
+          utilisateursData,
           simulationsData,
           margeData,
           suivisData,
@@ -133,6 +139,8 @@ export default function DossierDetailPage() {
           offresData,
         ] = await Promise.all([
           api.getDossier(id),
+          api.getRoles(),
+          api.getUtilisateurs(),
           api.getSimulations(id),
           api.getCalculsMarge(id),
           api.getSuivisLogistiques(id),
@@ -145,6 +153,8 @@ export default function DossierDetailPage() {
           api.getOffresFournisseur(id),
         ]);
         setDossier(dossierData);
+        setRoles(rolesData);
+        setUtilisateurs(utilisateursData);
         setSimulations(simulationsData);
         setCalculsMarge(margeData);
         setSuivisLogistiques(suivisData);
@@ -450,10 +460,19 @@ export default function DossierDetailPage() {
         intitule: formTache.intitule,
         jalon_relatif: formTache.jalon_relatif || null,
         date_echeance: formTache.date_echeance || null,
+        role_porteur_id: formTache.role_porteur_id || null,
+        assigne_utilisateur_id: formTache.assigne_utilisateur_id || null,
       });
       setDossier((prev) => ({ ...prev, chronogramme: [...prev.chronogramme, nouvelle] }));
       setFormTacheOuvert(false);
-      setFormTache({ phase: PHASES_CHRONOGRAMME[0], intitule: "", jalon_relatif: "", date_echeance: "" });
+      setFormTache({
+        phase: PHASES_CHRONOGRAMME[0],
+        intitule: "",
+        jalon_relatif: "",
+        date_echeance: "",
+        role_porteur_id: "",
+        assigne_utilisateur_id: "",
+      });
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -464,6 +483,29 @@ export default function DossierDetailPage() {
   async function handlePatchTacheStatut(tacheId, statut) {
     try {
       const maj = await api.patchTacheStatut(tacheId, statut);
+      setDossier((prev) => ({
+        ...prev,
+        chronogramme: prev.chronogramme.map((tache) => (tache.id === tacheId ? maj : tache)),
+      }));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  /**
+   * Affectation d'une tache a un role et/ou une personne, editable
+   * directement depuis chaque carte de tache (voir section CHRONOGRAMME).
+   * champ vaut "role_porteur_id" ou "assigne_utilisateur_id" ; une valeur
+   * vide envoie explicitement null pour desaffecter ce champ.
+   */
+  async function handlePatchTacheAffectation(tacheId, champ, valeur) {
+    try {
+      const tacheActuelle = dossier.chronogramme.find((tache) => tache.id === tacheId);
+      const maj = await api.patchTacheAffectation(tacheId, {
+        role_porteur_id: tacheActuelle.role_porteur_id,
+        assigne_utilisateur_id: tacheActuelle.assigne_utilisateur_id,
+        [champ]: valeur || null,
+      });
       setDossier((prev) => ({
         ...prev,
         chronogramme: prev.chronogramme.map((tache) => (tache.id === tacheId ? maj : tache)),
@@ -640,6 +682,38 @@ export default function DossierDetailPage() {
                 />
               </div>
             </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+              <div>
+                <label style={labelStyle}>{t("assignRoleLabel")}</label>
+                <select
+                  value={formTache.role_porteur_id}
+                  onChange={(e) => setFormTache((f) => ({ ...f, role_porteur_id: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">{t("noRoleOption")}</option>
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.id}>
+                      {role.libelle}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>{t("assignPersonLabel")}</label>
+                <select
+                  value={formTache.assigne_utilisateur_id}
+                  onChange={(e) => setFormTache((f) => ({ ...f, assigne_utilisateur_id: e.target.value }))}
+                  style={inputStyle}
+                >
+                  <option value="">{t("noPersonOption")}</option>
+                  {utilisateurs.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.prenom} {u.nom}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
             <button type="submit" disabled={tacheEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
               {t("save")}
             </button>
@@ -653,47 +727,85 @@ export default function DossierDetailPage() {
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
             {dossier.chronogramme.map((tache) => (
-              <div
-                key={tache.id}
-                className="card"
-                style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
-              >
-                <div>
-                  <div style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase" }}>
-                    {phaseChronogrammeLabel(tache.phase)} {tache.jalon_relatif ? `· ${tache.jalon_relatif}` : ""}
+              <div key={tache.id} className="card" style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase" }}>
+                      {phaseChronogrammeLabel(tache.phase)} {tache.jalon_relatif ? `· ${tache.jalon_relatif}` : ""}
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{tache.intitule}</div>
+                    <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+                      {tache.date_echeance
+                        ? new Date(tache.date_echeance).toLocaleDateString(dict.dateLocale)
+                        : "—"}
+                    </div>
                   </div>
-                  <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{tache.intitule}</div>
-                  <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
-                    {tache.date_echeance
-                      ? new Date(tache.date_echeance).toLocaleDateString(dict.dateLocale)
-                      : "—"}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                    <span
+                      className={`chip ${
+                        tache.statut === "FAIT"
+                          ? "ok"
+                          : tache.statut === "EN_RETARD"
+                          ? "risk"
+                          : tache.statut === "EN_COURS"
+                          ? "warn"
+                          : ""
+                      }`}
+                      style={tache.statut === "A_FAIRE" ? { background: "var(--line-soft)", color: "var(--sub)" } : {}}
+                    >
+                      {tacheStatutLabel(tache.statut)}
+                    </span>
+                    {tache.statut !== "FAIT" && (
+                      <button
+                        onClick={() =>
+                          handlePatchTacheStatut(tache.id, tache.statut === "A_FAIRE" ? "EN_COURS" : "FAIT")
+                        }
+                        style={boutonSecondaireStyle}
+                      >
+                        {tache.statut === "A_FAIRE" ? t("markAsInProgress") : t("markAsDone")}
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                  <span
-                    className={`chip ${
-                      tache.statut === "FAIT"
-                        ? "ok"
-                        : tache.statut === "EN_RETARD"
-                        ? "risk"
-                        : tache.statut === "EN_COURS"
-                        ? "warn"
-                        : ""
-                    }`}
-                    style={tache.statut === "A_FAIRE" ? { background: "var(--line-soft)", color: "var(--sub)" } : {}}
-                  >
-                    {tacheStatutLabel(tache.statut)}
+
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "center",
+                    borderTop: "1px solid var(--line)",
+                    paddingTop: 8,
+                  }}
+                >
+                  <span style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase", flexShrink: 0 }}>
+                    {t("assignedToLabel")}
                   </span>
-                  {tache.statut !== "FAIT" && (
-                    <button
-                      onClick={() =>
-                        handlePatchTacheStatut(tache.id, tache.statut === "A_FAIRE" ? "EN_COURS" : "FAIT")
-                      }
-                      style={boutonSecondaireStyle}
-                    >
-                      {tache.statut === "A_FAIRE" ? t("markAsInProgress") : t("markAsDone")}
-                    </button>
-                  )}
+                  <select
+                    value={tache.role_porteur_id || ""}
+                    onChange={(e) => handlePatchTacheAffectation(tache.id, "role_porteur_id", e.target.value)}
+                    style={{ ...inputStyle, fontSize: 11.5, padding: "5px 8px" }}
+                  >
+                    <option value="">{t("noRoleOption")}</option>
+                    {roles.map((role) => (
+                      <option key={role.id} value={role.id}>
+                        {role.libelle}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={tache.assigne_utilisateur_id || ""}
+                    onChange={(e) =>
+                      handlePatchTacheAffectation(tache.id, "assigne_utilisateur_id", e.target.value)
+                    }
+                    style={{ ...inputStyle, fontSize: 11.5, padding: "5px 8px" }}
+                  >
+                    <option value="">{t("noPersonOption")}</option>
+                    {utilisateurs.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.prenom} {u.nom}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             ))}
