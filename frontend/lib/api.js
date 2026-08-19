@@ -305,4 +305,18 @@ export const api = {
   createSortie: (data) => request("/parc-auto/sorties", { method: "POST", body: JSON.stringify(data) }),
   cloturerSortie: (id, data) =>
     request(`/parc-auto/sorties/${id}/cloturer`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Module 8 - Parc auto (etape 2/3 : entretiens + alertes)
+  getEntretiens: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/parc-auto/entretiens${query ? `?${query}` : ""}`);
+  },
+  getEntretien: (id) => request(`/parc-auto/entretiens/${id}`),
+  createEntretien: (data) => request("/parc-auto/entretiens", { method: "POST", body: JSON.stringify(data) }),
+  patchEntretien: (id, data) =>
+    request(`/parc-auto/entretiens/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  getAlertesParcAuto: () => request("/parc-auto/alertes"),
+
+  // Module 8 - Parc auto (etape 3/3 : statistiques)
+  getStatistiquesParcAuto: () => request("/parc-auto/statistiques"),
 };

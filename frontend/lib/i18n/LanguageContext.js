@@ -19,6 +19,10 @@ import {
   STATUT_VEHICULE_LABELS,
   STATUT_SORTIE_LABELS,
   NIVEAU_CARBURANT_LABELS,
+  TYPE_ENTRETIEN_LABELS,
+  STATUT_ENTRETIEN_LABELS,
+  ALERTE_TYPE_LABELS,
+  ALERTE_SEVERITE_LABELS,
   LANGUES_SUPPORTEES,
   LANGUE_PAR_DEFAUT,
 } from "./dictionaries";
@@ -79,6 +83,10 @@ export function LanguageProvider({ children }) {
   const statutVehiculeLabels = STATUT_VEHICULE_LABELS[langue] || STATUT_VEHICULE_LABELS[LANGUE_PAR_DEFAUT];
   const statutSortieLabels = STATUT_SORTIE_LABELS[langue] || STATUT_SORTIE_LABELS[LANGUE_PAR_DEFAUT];
   const niveauCarburantLabels = NIVEAU_CARBURANT_LABELS[langue] || NIVEAU_CARBURANT_LABELS[LANGUE_PAR_DEFAUT];
+  const typeEntretienLabels = TYPE_ENTRETIEN_LABELS[langue] || TYPE_ENTRETIEN_LABELS[LANGUE_PAR_DEFAUT];
+  const statutEntretienLabels = STATUT_ENTRETIEN_LABELS[langue] || STATUT_ENTRETIEN_LABELS[LANGUE_PAR_DEFAUT];
+  const alerteTypeLabels = ALERTE_TYPE_LABELS[langue] || ALERTE_TYPE_LABELS[LANGUE_PAR_DEFAUT];
+  const alerteSeveriteLabels = ALERTE_SEVERITE_LABELS[langue] || ALERTE_SEVERITE_LABELS[LANGUE_PAR_DEFAUT];
 
   function t(key) {
     return dict[key] || key;
@@ -148,6 +156,22 @@ export function LanguageProvider({ children }) {
     return niveauCarburantLabels[code] || code;
   }
 
+  function typeEntretienLabel(code) {
+    return typeEntretienLabels[code] || code;
+  }
+
+  function statutEntretienLabel(code) {
+    return statutEntretienLabels[code] || code;
+  }
+
+  function alerteTypeLabel(code) {
+    return alerteTypeLabels[code] || code;
+  }
+
+  function alerteSeveriteLabel(code) {
+    return alerteSeveriteLabels[code] || code;
+  }
+
   return (
     <LanguageContext.Provider
       value={{
@@ -170,6 +194,10 @@ export function LanguageProvider({ children }) {
         statutVehiculeLabel,
         statutSortieLabel,
         niveauCarburantLabel,
+        typeEntretienLabel,
+        statutEntretienLabel,
+        alerteTypeLabel,
+        alerteSeveriteLabel,
         dict,
       }}
     >

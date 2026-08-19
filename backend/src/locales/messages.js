@@ -188,6 +188,16 @@ const MESSAGES = {
     SORTIE_DEJA_CLOTUREE: "Cette sortie est deja cloturee.",
     SORTIE_CLOTURE_ERROR: "Erreur lors de la cloture de la sortie.",
 
+    ENTRETIENS_FETCH_ERROR: "Erreur lors de la recuperation des entretiens.",
+    ENTRETIEN_NOT_FOUND: "Entretien introuvable.",
+    ENTRETIEN_FETCH_ERROR: "Erreur lors de la recuperation de l'entretien.",
+    ENTRETIEN_FIELDS_REQUIRED: "vehicule_id et type_entretien sont requis.",
+    ENTRETIEN_STATUT_INVALID: "Statut d'entretien invalide.",
+    ENTRETIEN_CREATE_ERROR: "Erreur lors de la creation de l'entretien.",
+    ENTRETIEN_UPDATE_ERROR: "Erreur lors de la mise a jour de l'entretien.",
+    ALERTES_FETCH_ERROR: "Erreur lors de la recuperation des alertes.",
+    STATISTIQUES_FETCH_ERROR: "Erreur lors de la recuperation des statistiques.",
+
     SERVER_ERROR: "Erreur serveur inattendue.",
   },
   en: {
@@ -373,6 +383,16 @@ const MESSAGES = {
     SORTIE_KM_RETOUR_INVALID: "The return mileage cannot be lower than the departure mileage.",
     SORTIE_DEJA_CLOTUREE: "This trip is already closed.",
     SORTIE_CLOTURE_ERROR: "Error while closing the trip.",
+
+    ENTRETIENS_FETCH_ERROR: "Error while fetching maintenance records.",
+    ENTRETIEN_NOT_FOUND: "Maintenance record not found.",
+    ENTRETIEN_FETCH_ERROR: "Error while fetching the maintenance record.",
+    ENTRETIEN_FIELDS_REQUIRED: "vehicule_id and type_entretien are required.",
+    ENTRETIEN_STATUT_INVALID: "Invalid maintenance status.",
+    ENTRETIEN_CREATE_ERROR: "Error while creating the maintenance record.",
+    ENTRETIEN_UPDATE_ERROR: "Error while updating the maintenance record.",
+    ALERTES_FETCH_ERROR: "Error while fetching alerts.",
+    STATISTIQUES_FETCH_ERROR: "Error while fetching statistics.",
 
     SERVER_ERROR: "Unexpected server error.",
   },

@@ -7,8 +7,9 @@ import { useLangue } from "../../lib/i18n/LanguageContext";
 import AppShell from "../../lib/components/AppShell";
 
 export default function ParcAutoPage() {
-  const { t, statutVehiculeLabel } = useLangue();
+  const { t, statutVehiculeLabel, alerteTypeLabel, alerteSeveriteLabel } = useLangue();
   const [vehicules, setVehicules] = useState([]);
+  const [alertes, setAlertes] = useState([]);
   const [erreur, setErreur] = useState("");
   const [form, setForm] = useState({
     immatriculation: "",
@@ -18,7 +19,13 @@ export default function ParcAutoPage() {
 
   useEffect(() => {
     api.getVehicules().then(setVehicules).catch((err) => setErreur(err.message));
+    api.getAlertesParcAuto().then(setAlertes).catch(() => {});
   }, []);
+
+  const alertesParVehicule = alertes.reduce((acc, a) => {
+    acc[a.vehicule_id] = (acc[a.vehicule_id] || 0) + 1;
+    return acc;
+  }, {});
 
   async function handleAjouter(e) {
     e.preventDefault();
@@ -56,11 +63,47 @@ export default function ParcAutoPage() {
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: "flex", gap: 10 }}>
         <Link href="/parc-auto/sorties" className="card" style={{ display: "inline-block", padding: "8px 16px", fontSize: 12.5, fontWeight: 600, color: "var(--petrol)" }}>
           {t("sortiesPageTitle")} →
         </Link>
+        <Link href="/parc-auto/entretiens" className="card" style={{ display: "inline-block", padding: "8px 16px", fontSize: 12.5, fontWeight: 600, color: "var(--petrol)" }}>
+          {t("entretiensPageTitle")} →
+        </Link>
+        <Link href="/parc-auto/statistiques" className="card" style={{ display: "inline-block", padding: "8px 16px", fontSize: 12.5, fontWeight: 600, color: "var(--petrol)" }}>
+          {t("statistiquesLinkLabel")} →
+        </Link>
       </div>
+
+      <h2 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 10, fontWeight: 700 }}>
+        {t("alertesSection")}
+      </h2>
+      {alertes.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 16 }}>{t("noAlertes")}</p>
+      ) : (
+        <div style={{ display: "grid", gap: 6, marginBottom: 20 }}>
+          {alertes.map((a, i) => (
+            <Link
+              key={i}
+              href={`/parc-auto/vehicules/${a.vehicule_id}`}
+              className="card"
+              style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 12, alignItems: "center", textDecoration: "none", color: "inherit" }}
+            >
+              <span className={a.severite === "DEPASSEE" ? "chip risk" : "chip warn"}>
+                {alerteSeveriteLabel(a.severite)}
+              </span>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{a.immatriculation}</div>
+                <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{alerteTypeLabel(a.type)}</div>
+              </div>
+              <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)" }}>
+                {a.jours_restants != null ? `${a.jours_restants}${t("joursRestantsSuffix")}` : ""}
+                {a.marge_km != null ? `${Math.round(a.marge_km)}${t("margeKmSuffix")}` : ""}
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <form onSubmit={handleAjouter} className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
         <label style={labelStyle}>{t("immatriculationLabel")}</label>
@@ -110,7 +153,14 @@ export default function ParcAutoPage() {
                   {v.kilometrage_actuel != null ? Number(v.kilometrage_actuel).toLocaleString() : "—"}
                 </div>
               </div>
-              <span className={chipClasse(v.statut)}>{statutVehiculeLabel(v.statut)}</span>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <span className={chipClasse(v.statut)}>{statutVehiculeLabel(v.statut)}</span>
+                {alertesParVehicule[v.id] > 0 && (
+                  <span className="chip risk" title={t("alertesSection")}>
+                    {alertesParVehicule[v.id]}
+                  </span>
+                )}
+              </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <Link href={`/parc-auto/vehicules/${v.id}`} style={boutonMiniStyle}>
                   {t("viewDetail")}

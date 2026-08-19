@@ -369,6 +369,68 @@ export const DICTIONARIES = {
     distanceParcourueLabel: "Distance parcourue",
     sortieClotureeConfirmation: "Cette sortie est clôturée.",
 
+    navEntretiens: "Entretiens",
+    entretiensPageTitle: "Entretiens véhicules",
+    newEntretien: "Nouvel entretien",
+    filterByVehicule: "Filtrer par véhicule",
+    allVehicules: "Tous",
+    noEntretiens: "Aucun entretien enregistré.",
+
+    entretienNewPageTitle: "Nouvel entretien",
+    typeEntretienLabel: "Type d'entretien",
+    selectTypeEntretien: "Sélectionner un type",
+    dateEntretienLabel: "Date de l'entretien",
+    kilometrageLabel: "Kilométrage",
+    prestataireLabel: "Prestataire",
+    descriptionLabel: "Description",
+    piecesChangeesLabel: "Pièces changées",
+    coutLabel: "Coût",
+    prochainEntretienDateLabel: "Prochain entretien (date)",
+    prochainEntretienKmLabel: "Prochain entretien (km)",
+    statutEntretienLabel: "Statut de l'entretien",
+    selectStatutEntretien: "Sélectionner un statut",
+    createEntretienButton: "Créer l'entretien",
+
+    entretienDetailTitle: "Détail de l'entretien",
+    backToEntretiens: "← Retour aux entretiens",
+    marquerEnCoursButton: "Marquer en cours",
+    marquerTermineButton: "Marquer terminé",
+    entretienUpdated: "Entretien mis à jour.",
+
+    entretiensHistorySection: "Historique des entretiens",
+    noEntretiensForVehicule: "Aucun entretien enregistré pour ce véhicule.",
+
+    alertesSection: "Alertes d'échéance",
+    noAlertes: "Aucune alerte en cours.",
+    alerteAssurance: "Assurance",
+    alerteVisiteTechnique: "Visite technique",
+    alerteEntretienDate: "Entretien programmé",
+    alerteEntretienKm: "Entretien programmé (kilométrage)",
+    alerteDepassee: "Échéance dépassée",
+    alerteProche: "Échéance proche",
+    joursRestantsSuffix: "j",
+    margeKmSuffix: "km",
+
+    echeancesSection: "Échéances du véhicule",
+    dateExpirationAssuranceLabel: "Expiration de l'assurance",
+    dateExpirationVisiteTechniqueLabel: "Expiration de la visite technique",
+    saveEcheancesButton: "Enregistrer les échéances",
+    echeancesUpdated: "Échéances mises à jour.",
+
+    statistiquesPageTitle: "Statistiques — Parc auto",
+    backToParcAuto: "← Retour au parc auto",
+    vehiculesParStatutSection: "Véhicules par statut",
+    kilometrageMoisSection: "Kilométrage du mois en cours",
+    statsParVehiculeSection: "Statistiques par véhicule",
+    statsParLocaliteSection: "Statistiques par localité de départ",
+    alertesUrgentesSection: "Alertes les plus urgentes",
+    nombreSortiesLabel: "Sorties",
+    distanceTotaleLabel: "Distance totale",
+    coutEntretienTotalLabel: "Coût entretien cumulé",
+    localiteLabel: "Localité",
+    statistiquesLinkLabel: "Statistiques",
+    aucuneDonneeStatistique: "Aucune donnée pour le moment.",
+
     dateLocale: "fr-FR",
   },
   en: {
@@ -736,6 +798,68 @@ export const DICTIONARIES = {
     distanceParcourueLabel: "Distance traveled",
     sortieClotureeConfirmation: "This trip is closed.",
 
+    navEntretiens: "Maintenance",
+    entretiensPageTitle: "Vehicle maintenance",
+    newEntretien: "New maintenance record",
+    filterByVehicule: "Filter by vehicle",
+    allVehicules: "All",
+    noEntretiens: "No maintenance record recorded.",
+
+    entretienNewPageTitle: "New maintenance record",
+    typeEntretienLabel: "Maintenance type",
+    selectTypeEntretien: "Select a type",
+    dateEntretienLabel: "Maintenance date",
+    kilometrageLabel: "Mileage",
+    prestataireLabel: "Provider",
+    descriptionLabel: "Description",
+    piecesChangeesLabel: "Parts replaced",
+    coutLabel: "Cost",
+    prochainEntretienDateLabel: "Next maintenance (date)",
+    prochainEntretienKmLabel: "Next maintenance (mileage)",
+    statutEntretienLabel: "Maintenance status",
+    selectStatutEntretien: "Select a status",
+    createEntretienButton: "Create maintenance record",
+
+    entretienDetailTitle: "Maintenance record detail",
+    backToEntretiens: "← Back to maintenance",
+    marquerEnCoursButton: "Mark in progress",
+    marquerTermineButton: "Mark completed",
+    entretienUpdated: "Maintenance record updated.",
+
+    entretiensHistorySection: "Maintenance history",
+    noEntretiensForVehicule: "No maintenance record for this vehicle.",
+
+    alertesSection: "Upcoming deadlines",
+    noAlertes: "No current alerts.",
+    alerteAssurance: "Insurance",
+    alerteVisiteTechnique: "Technical inspection",
+    alerteEntretienDate: "Scheduled maintenance",
+    alerteEntretienKm: "Scheduled maintenance (mileage)",
+    alerteDepassee: "Deadline passed",
+    alerteProche: "Deadline approaching",
+    joursRestantsSuffix: "d",
+    margeKmSuffix: "km",
+
+    echeancesSection: "Vehicle deadlines",
+    dateExpirationAssuranceLabel: "Insurance expiry",
+    dateExpirationVisiteTechniqueLabel: "Technical inspection expiry",
+    saveEcheancesButton: "Save deadlines",
+    echeancesUpdated: "Deadlines updated.",
+
+    statistiquesPageTitle: "Fleet statistics",
+    backToParcAuto: "← Back to fleet",
+    vehiculesParStatutSection: "Vehicles by status",
+    kilometrageMoisSection: "Current month mileage",
+    statsParVehiculeSection: "Statistics by vehicle",
+    statsParLocaliteSection: "Statistics by departure location",
+    alertesUrgentesSection: "Most urgent alerts",
+    nombreSortiesLabel: "Trips",
+    distanceTotaleLabel: "Total distance",
+    coutEntretienTotalLabel: "Total maintenance cost",
+    localiteLabel: "Location",
+    statistiquesLinkLabel: "Statistics",
+    aucuneDonneeStatistique: "No data yet.",
+
     dateLocale: "en-US",
   },
 };
@@ -944,4 +1068,50 @@ export const STATUT_SORTIE_LABELS = {
 export const NIVEAU_CARBURANT_LABELS = {
   fr: { PLEIN: "Plein", TROIS_QUARTS: "3/4", DEMI: "1/2", QUART: "1/4", RESERVE: "Réserve" },
   en: { PLEIN: "Full", TROIS_QUARTS: "3/4", DEMI: "1/2", QUART: "1/4", RESERVE: "Reserve" },
+};
+
+export const TYPE_ENTRETIEN_LABELS = {
+  fr: {
+    VIDANGE: "Vidange",
+    REVISION: "Révision",
+    PNEUS: "Pneus",
+    FREINS: "Freins",
+    REPARATION: "Réparation",
+    CARROSSERIE: "Carrosserie",
+    AUTRE: "Autre",
+  },
+  en: {
+    VIDANGE: "Oil change",
+    REVISION: "Service",
+    PNEUS: "Tires",
+    FREINS: "Brakes",
+    REPARATION: "Repair",
+    CARROSSERIE: "Bodywork",
+    AUTRE: "Other",
+  },
+};
+
+export const STATUT_ENTRETIEN_LABELS = {
+  fr: { PLANIFIE: "Planifié", EN_COURS: "En cours", TERMINE: "Terminé" },
+  en: { PLANIFIE: "Planned", EN_COURS: "In progress", TERMINE: "Completed" },
+};
+
+export const ALERTE_TYPE_LABELS = {
+  fr: {
+    ASSURANCE: "Assurance",
+    VISITE_TECHNIQUE: "Visite technique",
+    ENTRETIEN_DATE: "Entretien programmé",
+    ENTRETIEN_KM: "Entretien programmé (kilométrage)",
+  },
+  en: {
+    ASSURANCE: "Insurance",
+    VISITE_TECHNIQUE: "Technical inspection",
+    ENTRETIEN_DATE: "Scheduled maintenance",
+    ENTRETIEN_KM: "Scheduled maintenance (mileage)",
+  },
+};
+
+export const ALERTE_SEVERITE_LABELS = {
+  fr: { DEPASSEE: "Échéance dépassée", PROCHE: "Échéance proche" },
+  en: { DEPASSEE: "Deadline passed", PROCHE: "Deadline approaching" },
 };
