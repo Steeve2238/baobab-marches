@@ -142,6 +142,7 @@ export const api = {
       body: JSON.stringify({ nouveau_mot_de_passe }),
     }),
   getDossiers: () => request("/dossiers"),
+  createDossier: (data) => request("/dossiers", { method: "POST", body: JSON.stringify(data) }),
   getDossier: (id) => request(`/dossiers/${id}`),
   getSignaux: () => request("/signaux"),
   acquitterSignal: (id) => request(`/signaux/${id}/acquitter`, { method: "PATCH" }),

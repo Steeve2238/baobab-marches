@@ -299,11 +299,16 @@ export default function DashboardPage() {
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("ongoingFiles")}</h2>
-            {filtreGroupe && (
-              <button onClick={() => setFiltreGroupe(null)} style={boutonEffacerFiltreStyle}>
-                {t("clearFilter")}
-              </button>
-            )}
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {filtreGroupe && (
+                <button onClick={() => setFiltreGroupe(null)} style={boutonEffacerFiltreStyle}>
+                  {t("clearFilter")}
+                </button>
+              )}
+              <Link href="/dossiers/nouveau" style={boutonNouveauDossierStyle}>
+                + {t("newDossierButton")}
+              </Link>
+            </div>
           </div>
 
           {dossiersAffiches.length === 0 ? (
@@ -386,6 +391,18 @@ const boutonEffacerFiltreStyle = {
   padding: "4px 10px",
   fontSize: 11.5,
   color: "var(--sub)",
+  whiteSpace: "nowrap",
+};
+
+const boutonNouveauDossierStyle = {
+  background: "var(--petrol)",
+  color: "#fff",
+  border: "none",
+  borderRadius: 6,
+  padding: "6px 12px",
+  fontSize: 12,
+  fontWeight: 600,
+  textDecoration: "none",
   whiteSpace: "nowrap",
 };
 
