@@ -23,6 +23,9 @@ import {
   STATUT_ENTRETIEN_LABELS,
   ALERTE_TYPE_LABELS,
   ALERTE_SEVERITE_LABELS,
+  STATUT_EMPLOYE_LABELS,
+  TYPE_DEMANDE_RH_LABELS,
+  STATUT_DEMANDE_RH_LABELS,
   LANGUES_SUPPORTEES,
   LANGUE_PAR_DEFAUT,
 } from "./dictionaries";
@@ -87,6 +90,9 @@ export function LanguageProvider({ children }) {
   const statutEntretienLabels = STATUT_ENTRETIEN_LABELS[langue] || STATUT_ENTRETIEN_LABELS[LANGUE_PAR_DEFAUT];
   const alerteTypeLabels = ALERTE_TYPE_LABELS[langue] || ALERTE_TYPE_LABELS[LANGUE_PAR_DEFAUT];
   const alerteSeveriteLabels = ALERTE_SEVERITE_LABELS[langue] || ALERTE_SEVERITE_LABELS[LANGUE_PAR_DEFAUT];
+  const statutEmployeLabels = STATUT_EMPLOYE_LABELS[langue] || STATUT_EMPLOYE_LABELS[LANGUE_PAR_DEFAUT];
+  const typeDemandeRHLabels = TYPE_DEMANDE_RH_LABELS[langue] || TYPE_DEMANDE_RH_LABELS[LANGUE_PAR_DEFAUT];
+  const statutDemandeRHLabels = STATUT_DEMANDE_RH_LABELS[langue] || STATUT_DEMANDE_RH_LABELS[LANGUE_PAR_DEFAUT];
 
   function t(key) {
     return dict[key] || key;
@@ -172,6 +178,18 @@ export function LanguageProvider({ children }) {
     return alerteSeveriteLabels[code] || code;
   }
 
+  function statutEmployeLabel(code) {
+    return statutEmployeLabels[code] || code;
+  }
+
+  function typeDemandeRHLabel(code) {
+    return typeDemandeRHLabels[code] || code;
+  }
+
+  function statutDemandeRHLabel(code) {
+    return statutDemandeRHLabels[code] || code;
+  }
+
   return (
     <LanguageContext.Provider
       value={{
@@ -198,6 +216,9 @@ export function LanguageProvider({ children }) {
         statutEntretienLabel,
         alerteTypeLabel,
         alerteSeveriteLabel,
+        statutEmployeLabel,
+        typeDemandeRHLabel,
+        statutDemandeRHLabel,
         dict,
       }}
     >

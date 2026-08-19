@@ -109,7 +109,9 @@ async function request(path, options = {}) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || `Erreur ${res.status}`);
+    const erreur = new Error(data.error || `Erreur ${res.status}`);
+    erreur.status = res.status;
+    throw erreur;
   }
   return data;
 }
@@ -128,7 +130,9 @@ async function requestUpload(path, formData) {
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || `Erreur ${res.status}`);
+    const erreur = new Error(data.error || `Erreur ${res.status}`);
+    erreur.status = res.status;
+    throw erreur;
   }
   return data;
 }
@@ -320,4 +324,27 @@ export const api = {
 
   // Module 8 - Parc auto (etape 3/3 : statistiques)
   getStatistiquesParcAuto: () => request("/parc-auto/statistiques"),
+
+  // Module 9 - RH (etape 1/5 : Dossiers du personnel)
+  getPersonnel: () => request("/rh/personnel"),
+  getMaFicheEmploye: () => request("/rh/personnel/moi"),
+  getUtilisateursDisponiblesRH: () => request("/rh/personnel/utilisateurs-disponibles"),
+  getFicheEmploye: (id) => request(`/rh/personnel/${id}`),
+  createFicheEmploye: (data) => request("/rh/personnel", { method: "POST", body: JSON.stringify(data) }),
+  patchFicheEmploye: (id, data) =>
+    request(`/rh/personnel/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Module 9 - RH (etape 2/5 : moteur de demandes RH + circuit d'approbation)
+  getReglesApprobationRH: () => request("/rh/regles-approbation"),
+  patchReglesApprobationRH: (regles) =>
+    request("/rh/regles-approbation", { method: "PUT", body: JSON.stringify({ regles }) }),
+  getMesDemandesRH: () => request("/rh/demandes/mes"),
+  getDemandesRHAValider: () => request("/rh/demandes/a-valider"),
+  getDemandeRH: (id) => request(`/rh/demandes/${id}`),
+  createDemandeRH: (data) => request("/rh/demandes", { method: "POST", body: JSON.stringify(data) }),
+  patchDemandeRH: (id, data) => request(`/rh/demandes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  soumettreDemandeRH: (id) => request(`/rh/demandes/${id}/soumettre`, { method: "PATCH" }),
+  annulerDemandeRH: (id) => request(`/rh/demandes/${id}/annuler`, { method: "PATCH" }),
+  validerDemandeRH: (id, data) =>
+    request(`/rh/demandes/${id}/valider`, { method: "PATCH", body: JSON.stringify(data) }),
 };

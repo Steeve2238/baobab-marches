@@ -19,6 +19,7 @@ const utilisateursRoutes = require("./routes/utilisateurs");
 const maitresOuvrageRoutes = require("./routes/maitresOuvrage");
 const concurrenceRoutes = require("./routes/concurrence");
 const parcAutoRoutes = require("./routes/parcAuto");
+const rhRoutes = require("./routes/rh");
 const { t } = require("./utils/i18n");
 
 const app = express();
@@ -47,6 +48,7 @@ app.use("/api/utilisateurs", utilisateursRoutes);
 app.use("/api/maitres-ouvrage", maitresOuvrageRoutes);
 app.use("/api/concurrence", concurrenceRoutes);
 app.use("/api/parc-auto", parcAutoRoutes);
+app.use("/api/rh", rhRoutes);
 
 // Gestionnaire d'erreur generique (dernier recours)
 app.use((err, req, res, next) => {
