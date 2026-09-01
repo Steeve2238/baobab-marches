@@ -52,6 +52,20 @@ export default function PersonnelPage() {
         >
           {t("navCircuitApprobation")} →
         </Link>
+        <Link
+          href="/rh/planning-conges"
+          className="card"
+          style={{ display: "inline-block", padding: "8px 16px", fontSize: 12.5, fontWeight: 600, color: "var(--petrol)" }}
+        >
+          {t("navPlanningConges")} →
+        </Link>
+        <Link
+          href="/rh/statistiques"
+          className="card"
+          style={{ display: "inline-block", padding: "8px 16px", fontSize: 12.5, fontWeight: 600, color: "var(--petrol)" }}
+        >
+          {t("navStatistiquesRH")} →
+        </Link>
       </div>
 
       {chargement ? (

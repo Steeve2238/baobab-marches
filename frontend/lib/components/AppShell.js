@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/concurrence", key: "navConcurrence" },
   { href: "/parc-auto", key: "navParcAuto" },
   { href: "/rh/demandes", key: "navDemandesRH" },
+  { href: "/rh/fiches-temps", key: "navFichesTemps" },
   { href: "/rh/personnel", key: "navRH", adminOnly: true },
   { href: "/roles", key: "navRoles", adminOnly: true },
   { href: "/utilisateurs", key: "navUsers", adminOnly: true },

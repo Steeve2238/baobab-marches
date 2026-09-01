@@ -25,7 +25,11 @@ import {
   ALERTE_SEVERITE_LABELS,
   STATUT_EMPLOYE_LABELS,
   TYPE_DEMANDE_RH_LABELS,
+  TYPE_ABSENCE_LABELS,
+  TYPE_IMPRESSION_LABELS,
   STATUT_DEMANDE_RH_LABELS,
+  STATUT_FICHE_TEMPS_LABELS,
+  TYPE_TEMPS_AUTRE_LABELS,
   LANGUES_SUPPORTEES,
   LANGUE_PAR_DEFAUT,
 } from "./dictionaries";
@@ -92,7 +96,11 @@ export function LanguageProvider({ children }) {
   const alerteSeveriteLabels = ALERTE_SEVERITE_LABELS[langue] || ALERTE_SEVERITE_LABELS[LANGUE_PAR_DEFAUT];
   const statutEmployeLabels = STATUT_EMPLOYE_LABELS[langue] || STATUT_EMPLOYE_LABELS[LANGUE_PAR_DEFAUT];
   const typeDemandeRHLabels = TYPE_DEMANDE_RH_LABELS[langue] || TYPE_DEMANDE_RH_LABELS[LANGUE_PAR_DEFAUT];
+  const typeAbsenceLabels = TYPE_ABSENCE_LABELS[langue] || TYPE_ABSENCE_LABELS[LANGUE_PAR_DEFAUT];
+  const typeImpressionLabels = TYPE_IMPRESSION_LABELS[langue] || TYPE_IMPRESSION_LABELS[LANGUE_PAR_DEFAUT];
   const statutDemandeRHLabels = STATUT_DEMANDE_RH_LABELS[langue] || STATUT_DEMANDE_RH_LABELS[LANGUE_PAR_DEFAUT];
+  const statutFicheTempsLabels = STATUT_FICHE_TEMPS_LABELS[langue] || STATUT_FICHE_TEMPS_LABELS[LANGUE_PAR_DEFAUT];
+  const typeTempsAutreLabels = TYPE_TEMPS_AUTRE_LABELS[langue] || TYPE_TEMPS_AUTRE_LABELS[LANGUE_PAR_DEFAUT];
 
   function t(key) {
     return dict[key] || key;
@@ -186,8 +194,24 @@ export function LanguageProvider({ children }) {
     return typeDemandeRHLabels[code] || code;
   }
 
+  function typeAbsenceLabel(code) {
+    return typeAbsenceLabels[code] || code;
+  }
+
+  function typeImpressionLabel(code) {
+    return typeImpressionLabels[code] || code;
+  }
+
   function statutDemandeRHLabel(code) {
     return statutDemandeRHLabels[code] || code;
+  }
+
+  function statutFicheTempsLabel(code) {
+    return statutFicheTempsLabels[code] || code;
+  }
+
+  function typeTempsAutreLabel(code) {
+    return typeTempsAutreLabels[code] || code;
   }
 
   return (
@@ -218,7 +242,11 @@ export function LanguageProvider({ children }) {
         alerteSeveriteLabel,
         statutEmployeLabel,
         typeDemandeRHLabel,
+        typeAbsenceLabel,
+        typeImpressionLabel,
         statutDemandeRHLabel,
+        statutFicheTempsLabel,
+        typeTempsAutreLabel,
         dict,
       }}
     >

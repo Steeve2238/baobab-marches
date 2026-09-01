@@ -137,6 +137,39 @@ async function requestUpload(path, formData) {
   return data;
 }
 
+// Telechargement d'un fichier binaire (export/modele Excel) : la reponse
+// n'est pas du JSON, on la traite comme un Blob et on declenche un
+// telechargement navigateur classique via un lien temporaire.
+async function requestDownload(path, nomFichierParDefaut) {
+  const token = getToken();
+  const langue = getLangueLocale() || "fr";
+  const headers = {
+    "Accept-Language": langue,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const erreur = new Error(data.error || `Erreur ${res.status}`);
+    erreur.status = res.status;
+    throw erreur;
+  }
+  const blob = await res.blob();
+  const entete = res.headers.get("Content-Disposition") || "";
+  const correspondance = /filename="?([^"]+)"?/.exec(entete);
+  const nomFichier = correspondance ? correspondance[1] : nomFichierParDefaut;
+
+  const url = window.URL.createObjectURL(blob);
+  const lien = document.createElement("a");
+  lien.href = url;
+  lien.download = nomFichier;
+  document.body.appendChild(lien);
+  lien.click();
+  lien.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export const api = {
   login: (email, mot_de_passe) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, mot_de_passe }) }),
@@ -338,6 +371,14 @@ export const api = {
   getReglesApprobationRH: () => request("/rh/regles-approbation"),
   patchReglesApprobationRH: (regles) =>
     request("/rh/regles-approbation", { method: "PUT", body: JSON.stringify({ regles }) }),
+  // Circuit a plusieurs etapes (enrichissement de l'etape 2/5, cf. modeles
+  // OGAA envoyes par Steeve) : configure par type_demande, independant du
+  // role du demandeur. etapes: [] efface la chaine (repli sur
+  // regles-approbation ci-dessus pour ce type).
+  getEtapesApprobationRH: (typeDemande) =>
+    request(`/rh/etapes-approbation?type_demande=${encodeURIComponent(typeDemande)}`),
+  putEtapesApprobationRH: (typeDemande, etapes) =>
+    request("/rh/etapes-approbation", { method: "PUT", body: JSON.stringify({ type_demande: typeDemande, etapes }) }),
   getMesDemandesRH: () => request("/rh/demandes/mes"),
   getDemandesRHAValider: () => request("/rh/demandes/a-valider"),
   getDemandeRH: (id) => request(`/rh/demandes/${id}`),
@@ -347,4 +388,28 @@ export const api = {
   annulerDemandeRH: (id) => request(`/rh/demandes/${id}/annuler`, { method: "PATCH" }),
   validerDemandeRH: (id, data) =>
     request(`/rh/demandes/${id}/valider`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Module 9 - RH (etape 3/5 : planning des conges + statistiques RH)
+  getPlanningCongesRH: (annee) => request(`/rh/planning-conges?annee=${annee}`),
+  getStatistiquesRH: (periode, mois) => request(`/rh/statistiques?periode=${periode}&mois=${mois}`),
+
+  // Module 9 - RH (etape 4/5 : fiches de temps v2)
+  getDossiersDisponiblesFichesTemps: () => request("/rh/fiches-temps/dossiers-disponibles"),
+  getFicheTempsSemaine: (semaineDebut) => request(`/rh/fiches-temps/semaine?semaine_debut=${semaineDebut}`),
+  getMesFichesTempsAnnee: (annee) => request(`/rh/fiches-temps/mes?annee=${annee}`),
+  getFichesTempsAValider: () => request("/rh/fiches-temps/a-valider"),
+  getFicheTemps: (id) => request(`/rh/fiches-temps/${id}`),
+  enregistrerLignesFicheTemps: (id, lignes) =>
+    request(`/rh/fiches-temps/${id}/lignes`, { method: "PUT", body: JSON.stringify({ lignes }) }),
+  soumettreFicheTemps: (id) => request(`/rh/fiches-temps/${id}/soumettre`, { method: "PATCH" }),
+  validerFicheTemps: (id, data) =>
+    request(`/rh/fiches-temps/${id}/valider`, { method: "PATCH", body: JSON.stringify(data) }),
+  telechargerModeleFicheTemps: () => requestDownload("/rh/fiches-temps/modele-import", "modele_fiche_temps.xlsx"),
+  exporterFicheTemps: (id, semaineDebut) =>
+    requestDownload(`/rh/fiches-temps/${id}/export`, `fiche_temps_${semaineDebut}.xlsx`),
+  importerFicheTemps: (id, fichier) => {
+    const formData = new FormData();
+    formData.append("fichier", fichier);
+    return requestUpload(`/rh/fiches-temps/${id}/importer`, formData);
+  },
 };
