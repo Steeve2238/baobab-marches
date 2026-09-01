@@ -472,7 +472,7 @@ export const DICTIONARIES = {
 
     navDemandesRH: "Mes demandes",
     demandesRHPageTitle: "RH — Demandes",
-    demandesRHPageSubtitle: "Congés, avances, ordres de mission, heures supplémentaires et autres demandes internes (étape 2/5 du Module 9 — RH, enrichie avec les modèles de fiches ARED/OGAA).",
+    demandesRHPageSubtitle: "Congés, avances, ordres de mission, heures supplémentaires et autres demandes internes (étape 2/5 du Module 9 — RH).",
     tabMesDemandes: "Mes demandes",
     tabAValider: "À valider",
     newDemandeRH: "Nouvelle demande",
@@ -1083,7 +1083,7 @@ export const DICTIONARIES = {
 
     navDemandesRH: "My requests",
     demandesRHPageTitle: "HR — Requests",
-    demandesRHPageSubtitle: "Leave, advances, mission orders, overtime and other internal requests (step 2/5 of Module 9 — HR, enriched with the ARED/OGAA paper form templates).",
+    demandesRHPageSubtitle: "Leave, advances, mission orders, overtime and other internal requests (step 2/5 of Module 9 — HR).",
     tabMesDemandes: "My requests",
     tabAValider: "To approve",
     newDemandeRH: "New request",
