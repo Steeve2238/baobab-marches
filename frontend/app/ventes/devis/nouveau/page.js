@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
@@ -8,7 +8,11 @@ import AppShell from "../../../../lib/components/AppShell";
 
 const LIGNE_VIDE = { designation: "", unite: "U", quantite: 1, prix_unitaire_ht: "" };
 
-export default function NouveauDevisPage() {
+// useSearchParams() impose que le composant qui l'utilise soit rendu a
+// l'interieur d'un <Suspense> - sinon "npm run build" echoue au moment du
+// prerendering statique de cette page (erreur constatee sur Railway).
+// Voir le composant wrapper NouveauDevisPage plus bas.
+function NouveauDevisFormulaire() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { t } = useLangue();
@@ -223,6 +227,14 @@ export default function NouveauDevisPage() {
         </button>
       </form>
     </AppShell>
+  );
+}
+
+export default function NouveauDevisPage() {
+  return (
+    <Suspense fallback={null}>
+      <NouveauDevisFormulaire />
+    </Suspense>
   );
 }
 
