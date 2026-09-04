@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import VentesSousNav from "../../../lib/components/VentesSousNav";
 
 const STATUT_STYLE = {
   IMPAYEE: { color: "var(--brique)", background: "rgba(196,74,58,0.1)" },
@@ -37,7 +38,7 @@ export default function FacturesVentePage() {
   }, [filtre]);
 
   return (
-    <AppShell title={t("venteFacturesPageTitle")} backHref="/ventes/devis">
+    <AppShell title={t("venteFacturesPageTitle")} subNav={<VentesSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>

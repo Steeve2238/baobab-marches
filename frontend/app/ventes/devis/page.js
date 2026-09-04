@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import VentesSousNav from "../../../lib/components/VentesSousNav";
 
 const STATUT_STYLE = {
   BROUILLON: { color: "var(--sub)", background: "rgba(91,106,108,0.1)" },
@@ -32,7 +33,7 @@ export default function DevisListePage() {
   }, [filtre]);
 
   return (
-    <AppShell title={t("venteDevisPageTitle")}>
+    <AppShell title={t("venteDevisPageTitle")} subNav={<VentesSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>

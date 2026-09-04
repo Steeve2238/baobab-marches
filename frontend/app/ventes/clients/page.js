@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import VentesSousNav from "../../../lib/components/VentesSousNav";
 
 // Clients COMMERCIAUX du tenant (ex: ses propres clients a lui, comme SETER,
 // DKM...) - a ne pas confondre avec les "tenants" de la plateforme Baobab.
@@ -47,7 +48,7 @@ export default function ClientsCommerciauxPage() {
   }
 
   return (
-    <AppShell title={t("venteClientsPageTitle")}>
+    <AppShell title={t("venteClientsPageTitle")} subNav={<VentesSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       <form onSubmit={handleAjouter} className="card" style={{ marginBottom: 16, maxWidth: 480 }}>

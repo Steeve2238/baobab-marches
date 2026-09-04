@@ -695,6 +695,11 @@ export const DICTIONARIES = {
     saGenerateInstallationInvoiceButton: "Générer la facture d'installation",
 
     navVentes: "Ventes",
+    navVentesConsultations: "Consultations",
+    navVentesDevis: "Devis",
+    navVentesFactures: "Factures",
+    navVentesBl: "Bons de livraison",
+    navVentesClients: "Clients",
     removeLine: "Supprimer la ligne",
     notesLabel: "Notes",
 
@@ -1478,6 +1483,11 @@ export const DICTIONARIES = {
     saGenerateInstallationInvoiceButton: "Generate setup invoice",
 
     navVentes: "Sales",
+    navVentesConsultations: "Consultations",
+    navVentesDevis: "Quotes",
+    navVentesFactures: "Invoices",
+    navVentesBl: "Delivery notes",
+    navVentesClients: "Clients",
     removeLine: "Remove line",
     notesLabel: "Notes",
 

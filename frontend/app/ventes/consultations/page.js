@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import VentesSousNav from "../../../lib/components/VentesSousNav";
 
 const STATUT_STYLE = {
   RECUE: { color: "var(--ocre)", background: "rgba(224,149,76,0.12)" },
@@ -68,7 +69,7 @@ export default function ConsultationsPage() {
   }
 
   return (
-    <AppShell title={t("venteConsultationsPageTitle")}>
+    <AppShell title={t("venteConsultationsPageTitle")} subNav={<VentesSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>

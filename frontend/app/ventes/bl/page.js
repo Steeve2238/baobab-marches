@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import VentesSousNav from "../../../lib/components/VentesSousNav";
 
 const STATUT_STYLE = {
   BROUILLON: { color: "var(--ocre)", background: "rgba(224,149,76,0.12)" },
@@ -34,7 +35,7 @@ export default function BlListePage() {
   }, [filtre]);
 
   return (
-    <AppShell title={t("venteBlPageTitle")} backHref="/ventes/factures">
+    <AppShell title={t("venteBlPageTitle")} subNav={<VentesSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>

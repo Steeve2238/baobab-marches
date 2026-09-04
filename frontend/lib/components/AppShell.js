@@ -31,7 +31,7 @@ const NAV_ITEMS = [
  * zone de contenu. Utiliser sur chaque page apres connexion pour une
  * navigation coherente dans toute l'application.
  */
-export default function AppShell({ children, title, backHref }) {
+export default function AppShell({ children, title, backHref, subNav }) {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useLangue();
@@ -78,7 +78,15 @@ export default function AppShell({ children, title, backHref }) {
           </div>
         </div>
 
-        <nav style={{ padding: "8px 12px", flex: 1 }}>
+        {/* flex 1 1 auto + minHeight:0 + overflowY:auto : quand la liste de
+            liens est plus haute que l'espace disponible (barre laterale a
+            hauteur fixe 100vh, voir sidebarStyle), c'est CETTE zone qui
+            defile avec sa propre barre de defilement - le logo en haut et le
+            profil/deconnexion en bas restent toujours visibles et ne sont
+            jamais pousses hors du fond colore de la barre laterale (bug
+            constate et corrige le 04/09/2026, apparu avec l'ajout de
+            l'entree de navigation Ventes qui a fait deborder la liste). */}
+        <nav style={{ padding: "8px 12px", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
           {navItems.map((item) => {
             const actif = pathname === item.href;
             return (
@@ -183,6 +191,7 @@ export default function AppShell({ children, title, backHref }) {
             </div>
             <LanguageSwitcher variant="default" persistToBackend />
           </div>
+          {subNav && <div style={{ marginBottom: 18 }}>{subNav}</div>}
           {children}
         </div>
       </main>
