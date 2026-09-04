@@ -106,6 +106,11 @@ export const superAdminApi = {
       method: "POST",
       body: JSON.stringify(periode ? { periode } : {}),
     }),
+  genererFactureInstallation: (clientId, periode) =>
+    request(`/super-admin/clients/${clientId}/factures/generer-installation`, {
+      method: "POST",
+      body: JSON.stringify(periode ? { periode } : {}),
+    }),
   marquerFacturePayee: (id, data) =>
     request(`/super-admin/factures/${id}/marquer-payee`, { method: "PATCH", body: JSON.stringify(data) }),
   annulerFacture: (id) => request(`/super-admin/factures/${id}/annuler`, { method: "PATCH" }),

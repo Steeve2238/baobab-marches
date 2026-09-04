@@ -31,6 +31,7 @@ export default function SuperAdminNouveauClientPage() {
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
   const [resultat, setResultat] = useState(null);
+  const formuleSelectionnee = formules.find((f) => f.id === form.formule_abonnement_id) || null;
 
   useEffect(() => {
     superAdminApi
@@ -79,6 +80,15 @@ export default function SuperAdminNouveauClientPage() {
           <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>
             {resultat.premier_administrateur.mot_de_passe_temporaire}
           </div>
+          {resultat.premiere_facture_installation && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
+              <div style={{ fontSize: 12.5 }}>
+                <strong>{t("saFirstInvoiceGeneratedNote")}</strong>{" "}
+                {Number(resultat.premiere_facture_installation.montant_xof).toLocaleString()} XOF (
+                {t("saInvoiceTypeInstallation")}, {resultat.premiere_facture_installation.periode})
+              </div>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
             <button onClick={() => router.push(`/super-admin/clients/${resultat.id}`)} style={boutonPrincipalStyle}>
               {t("saViewClientButton")}
@@ -136,6 +146,14 @@ export default function SuperAdminNouveauClientPage() {
             </option>
           ))}
         </select>
+        {formuleSelectionnee && (
+          <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 6 }}>
+            {t("saInstallationFeeLabel")}:{" "}
+            {Number(formuleSelectionnee.frais_installation_xof) > 0
+              ? `${Number(formuleSelectionnee.frais_installation_xof).toLocaleString()} XOF ${t("saInstallationFeeAutoNote")}`
+              : t("saNoInstallationFee")}
+          </div>
+        )}
 
         <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginTop: 20, marginBottom: 12 }}>
           {t("saFirstAdminSection")}

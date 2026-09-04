@@ -159,6 +159,11 @@ router.get("/clients/:id", async (req, res) => {
 // aucun moyen de se connecter serait inutilisable. Seed aussi un role ADMIN
 // pour ce tenant (les roles sont libres par tenant, voir routes/roles.js -
 // il en faut au moins un pour que le premier compte existe avec des droits).
+// Si une formule est assignee des la creation ET qu'elle porte des frais
+// d'installation (> 0), genere aussi dans la meme transaction la toute
+// premiere facture du client (type_facture = INSTALLATION, periode = mois de
+// creation) - demande explicite de Steeve le 04/09/2026 : l'installation est
+// facturee separement de l'abonnement mensuel recurrent, une seule fois.
 router.post("/clients", async (req, res) => {
   const { raison_sociale, secteur_activite, pays, formule_abonnement_id, admin_nom, admin_prenom, admin_email } =
     req.body;
@@ -200,12 +205,37 @@ router.post("/clients", async (req, res) => {
       roleAdminId,
     ]);
 
+    let factureInstallationId = null;
+    if (formule_abonnement_id) {
+      const formuleResult = await client.query(
+        `SELECT nom, frais_installation_xof FROM formule_abonnement WHERE id = $1`,
+        [formule_abonnement_id]
+      );
+      const formule = formuleResult.rows[0];
+      if (formule && Number(formule.frais_installation_xof) > 0) {
+        const periode = new Date().toISOString().slice(0, 7);
+        const factureResult = await client.query(
+          `INSERT INTO facture_abonnement (tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
+           VALUES ($1, $2, $3, $4, $5, 'INSTALLATION')
+           RETURNING id`,
+          [tenantId, formule_abonnement_id, formule.nom, periode, formule.frais_installation_xof]
+        );
+        factureInstallationId = factureResult.rows[0].id;
+      }
+    }
+
     await client.query("COMMIT");
 
     const clientResult = await db.query(`${SELECT_CLIENT} WHERE te.id = $1`, [tenantId]);
+    let factureInstallation = null;
+    if (factureInstallationId) {
+      const factureResult = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [factureInstallationId]);
+      factureInstallation = factureResult.rows[0];
+    }
     res.status(201).json({
       ...clientResult.rows[0],
       premier_administrateur: { ...adminUser, mot_de_passe_temporaire: motDePasseTemporaire },
+      premiere_facture_installation: factureInstallation,
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -306,15 +336,15 @@ router.get("/formules", async (req, res) => {
 
 // POST /api/super-admin/formules
 router.post("/formules", async (req, res) => {
-  const { nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage } = req.body;
+  const { nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, frais_installation_xof } = req.body;
   if (!nom || prix_mensuel_xof === undefined || prix_mensuel_xof === null) {
     return res.status(400).json({ error: t(req, "SUPER_ADMIN_FORMULE_FIELDS_REQUIRED") });
   }
   try {
     const result = await db.query(
-      `INSERT INTO formule_abonnement (nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [nom, plafond_utilisateurs || null, prix_mensuel_xof, ordre_affichage || 0]
+      `INSERT INTO formule_abonnement (nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, frais_installation_xof)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [nom, plafond_utilisateurs || null, prix_mensuel_xof, ordre_affichage || 0, frais_installation_xof || 0]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -324,10 +354,12 @@ router.post("/formules", async (req, res) => {
 });
 
 // PATCH /api/super-admin/formules/:id - modifie une formule EXISTANTE en
-// place (nom/prix/plafond/actif). Ne touche jamais les factures deja
-// generees (formule_nom/montant_xof y sont figes, voir migration 014).
+// place (nom/prix/plafond/frais d'installation/actif). Ne touche jamais les
+// factures deja generees (formule_nom/montant_xof y sont figes, voir
+// migration 014) : un changement de frais_installation_xof ici ne modifie
+// jamais une facture d'installation deja generee pour un client existant.
 router.patch("/formules/:id", async (req, res) => {
-  const { nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, actif } = req.body;
+  const { nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, actif, frais_installation_xof } = req.body;
   try {
     const existing = await db.query(`SELECT id FROM formule_abonnement WHERE id = $1`, [req.params.id]);
     if (existing.rows.length === 0) {
@@ -339,10 +371,11 @@ router.patch("/formules/:id", async (req, res) => {
          plafond_utilisateurs = $2,
          prix_mensuel_xof = COALESCE($3, prix_mensuel_xof),
          ordre_affichage = COALESCE($4, ordre_affichage),
-         actif = COALESCE($5, actif)
-       WHERE id = $6
+         actif = COALESCE($5, actif),
+         frais_installation_xof = COALESCE($6, frais_installation_xof)
+       WHERE id = $7
        RETURNING *`,
-      [nom, plafond_utilisateurs ?? null, prix_mensuel_xof, ordre_affichage, actif, req.params.id]
+      [nom, plafond_utilisateurs ?? null, prix_mensuel_xof, ordre_affichage, actif, frais_installation_xof, req.params.id]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -358,7 +391,7 @@ router.patch("/formules/:id", async (req, res) => {
 
 const SELECT_FACTURE = `
   SELECT f.id, f.tenant_id, f.formule_abonnement_id, f.formule_nom, f.periode, f.montant_xof,
-         f.statut, f.date_generation, f.date_paiement, f.mode_paiement, f.notes,
+         f.type_facture, f.statut, f.date_generation, f.date_paiement, f.mode_paiement, f.notes,
          te.raison_sociale AS client_raison_sociale
   FROM facture_abonnement f
   JOIN tenant te ON te.id = f.tenant_id
@@ -424,10 +457,55 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO facture_abonnement (tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO facture_abonnement (tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
+       VALUES ($1, $2, $3, $4, $5, 'ABONNEMENT')
        RETURNING id`,
       [client.id, client.formule_abonnement_id, client.formule_nom, periode, client.prix_mensuel_xof]
+    );
+
+    const factureResult = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [result.rows[0].id]);
+    res.status(201).json(factureResult.rows[0]);
+  } catch (err) {
+    if (err.code === "23505") {
+      return res.status(409).json({ error: t(req, "SUPER_ADMIN_FACTURE_ALREADY_EXISTS") });
+    }
+    console.error(err);
+    res.status(500).json({ error: t(req, "SUPER_ADMIN_FACTURE_GENERATE_ERROR") });
+  }
+});
+
+// POST /api/super-admin/clients/:id/factures/generer-installation - genere
+// (au besoin, hors creation du client) les frais d'installation de la
+// formule ACTUELLE du client - typiquement utilise quand la formule a ete
+// assignee APRES la creation du client (a la creation, voir POST /clients
+// ci-dessus qui la genere automatiquement si une formule est deja choisie).
+// Meme logique de gel que la facture d'abonnement : montant fige au moment
+// de la generation, jamais retroactif. Idempotent par construction : la
+// contrainte unique (tenant_id, periode, type_facture) empeche un doublon
+// pour le meme mois.
+router.post("/clients/:id/factures/generer-installation", async (req, res) => {
+  const periode = (req.body && req.body.periode) || new Date().toISOString().slice(0, 7); // "AAAA-MM"
+
+  try {
+    const clientResult = await db.query(
+      `SELECT te.id, te.formule_abonnement_id, fa.nom AS formule_nom, fa.frais_installation_xof
+       FROM tenant te LEFT JOIN formule_abonnement fa ON fa.id = te.formule_abonnement_id
+       WHERE te.id = $1`,
+      [req.params.id]
+    );
+    const client = clientResult.rows[0];
+    if (!client) {
+      return res.status(404).json({ error: t(req, "SUPER_ADMIN_CLIENT_NOT_FOUND") });
+    }
+    if (!client.formule_abonnement_id) {
+      return res.status(400).json({ error: t(req, "SUPER_ADMIN_CLIENT_SANS_FORMULE") });
+    }
+
+    const result = await db.query(
+      `INSERT INTO facture_abonnement (tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
+       VALUES ($1, $2, $3, $4, $5, 'INSTALLATION')
+       RETURNING id`,
+      [client.id, client.formule_abonnement_id, client.formule_nom, periode, client.frais_installation_xof]
     );
 
     const factureResult = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [result.rows[0].id]);

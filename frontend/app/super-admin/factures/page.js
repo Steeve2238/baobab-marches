@@ -99,8 +99,11 @@ export default function SuperAdminFacturesPage() {
                       {facture.client_raison_sociale}
                     </Link>
                     <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
-                      {facture.periode} — {facture.formule_nom} —{" "}
-                      {Number(facture.montant_xof).toLocaleString()} XOF
+                      {facture.periode} —{" "}
+                      {facture.type_facture === "INSTALLATION"
+                        ? t("saInvoiceTypeInstallation")
+                        : t("saInvoiceTypeAbonnement")}{" "}
+                      ({facture.formule_nom}) — {Number(facture.montant_xof).toLocaleString()} XOF
                     </div>
                   </div>
                   <span

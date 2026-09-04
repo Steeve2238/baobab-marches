@@ -6,7 +6,13 @@ import { superAdminApi } from "../../../lib/superAdminApi";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import SuperAdminShell from "../../../lib/components/SuperAdminShell";
 
-const FORM_VIDE = { nom: "", plafond_utilisateurs: "", prix_mensuel_xof: "", ordre_affichage: "" };
+const FORM_VIDE = {
+  nom: "",
+  plafond_utilisateurs: "",
+  prix_mensuel_xof: "",
+  frais_installation_xof: "",
+  ordre_affichage: "",
+};
 
 // Catalogue des formules d'abonnement (plateforme, pas de tenant_id) - les 3
 // formules de depart (Essentiel/Croissance/Entreprise) sont des valeurs
@@ -48,6 +54,7 @@ export default function SuperAdminFormulesPage() {
         nom: form.nom,
         plafond_utilisateurs: form.plafond_utilisateurs ? Number(form.plafond_utilisateurs) : null,
         prix_mensuel_xof: Number(form.prix_mensuel_xof),
+        frais_installation_xof: form.frais_installation_xof ? Number(form.frais_installation_xof) : 0,
         ordre_affichage: form.ordre_affichage ? Number(form.ordre_affichage) : 0,
       });
       setFormules((prev) => [...prev, nouvelle]);
@@ -63,6 +70,7 @@ export default function SuperAdminFormulesPage() {
       nom: formule.nom,
       plafond_utilisateurs: formule.plafond_utilisateurs ?? "",
       prix_mensuel_xof: formule.prix_mensuel_xof,
+      frais_installation_xof: formule.frais_installation_xof ?? 0,
       ordre_affichage: formule.ordre_affichage,
     });
   }
@@ -74,6 +82,7 @@ export default function SuperAdminFormulesPage() {
         nom: formEdition.nom,
         plafond_utilisateurs: formEdition.plafond_utilisateurs ? Number(formEdition.plafond_utilisateurs) : null,
         prix_mensuel_xof: Number(formEdition.prix_mensuel_xof),
+        frais_installation_xof: Number(formEdition.frais_installation_xof) || 0,
         ordre_affichage: Number(formEdition.ordre_affichage),
       });
       setFormules((prev) => prev.map((f) => (f.id === id ? maj : f)));
@@ -122,6 +131,15 @@ export default function SuperAdminFormulesPage() {
           min="0"
           value={form.prix_mensuel_xof}
           onChange={(e) => setForm((f) => ({ ...f, prix_mensuel_xof: e.target.value }))}
+          style={inputStyle}
+        />
+        <label style={{ ...labelStyle, marginTop: 10 }}>{t("saInstallationFeeLabel")}</label>
+        <input
+          type="number"
+          min="0"
+          placeholder="0"
+          value={form.frais_installation_xof}
+          onChange={(e) => setForm((f) => ({ ...f, frais_installation_xof: e.target.value }))}
           style={inputStyle}
         />
         <label style={{ ...labelStyle, marginTop: 10 }}>{t("saDisplayOrderLabel")}</label>
@@ -174,6 +192,16 @@ export default function SuperAdminFormulesPage() {
                     />
                   </div>
                   <div>
+                    <label style={labelStyle}>{t("saInstallationFeeLabel")}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formEdition.frais_installation_xof}
+                      onChange={(e) => setFormEdition((f) => ({ ...f, frais_installation_xof: e.target.value }))}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
                     <label style={labelStyle}>{t("saDisplayOrderLabel")}</label>
                     <input
                       type="number"
@@ -200,6 +228,12 @@ export default function SuperAdminFormulesPage() {
                       {formule.plafond_utilisateurs
                         ? `${formule.plafond_utilisateurs} ${t("saUsersCount")} max`
                         : t("saUnlimitedUsers")}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+                      {t("saInstallationFeeLabel")}:{" "}
+                      {Number(formule.frais_installation_xof) > 0
+                        ? `${Number(formule.frais_installation_xof).toLocaleString()} XOF`
+                        : t("saNoInstallationFee")}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>

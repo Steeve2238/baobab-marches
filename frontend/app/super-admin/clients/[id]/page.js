@@ -93,6 +93,16 @@ export default function SuperAdminClientDetailPage() {
     }
   }
 
+  async function handleGenererFactureInstallation() {
+    setErreur("");
+    try {
+      const nouvelle = await superAdminApi.genererFactureInstallation(client.id);
+      setFactures((prev) => [nouvelle, ...prev]);
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
   async function handleMarquerPayee(factureId) {
     setErreur("");
     try {
@@ -231,9 +241,14 @@ export default function SuperAdminClientDetailPage() {
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h3 style={{ fontSize: 13.5, color: "var(--petrol)" }}>{t("saInvoicesSection")}</h3>
-          <button onClick={handleGenererFacture} style={boutonSecondaireStyle}>
-            {t("saGenerateInvoiceButton")}
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={handleGenererFactureInstallation} style={boutonSecondaireStyle}>
+              {t("saGenerateInstallationInvoiceButton")}
+            </button>
+            <button onClick={handleGenererFacture} style={boutonSecondaireStyle}>
+              {t("saGenerateInvoiceButton")}
+            </button>
+          </div>
         </div>
         {factures.length === 0 ? (
           <p style={{ fontSize: 12, color: "var(--sub)" }}>{t("saNoInvoices")}</p>
@@ -249,7 +264,11 @@ export default function SuperAdminClientDetailPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13 }}>
-                        {facture.periode} — {facture.formule_nom}
+                        {facture.periode} —{" "}
+                        {facture.type_facture === "INSTALLATION"
+                          ? t("saInvoiceTypeInstallation")
+                          : t("saInvoiceTypeAbonnement")}{" "}
+                        ({facture.formule_nom})
                       </div>
                       <div style={{ fontSize: 12, color: "var(--sub)" }}>
                         {Number(facture.montant_xof).toLocaleString()} XOF
