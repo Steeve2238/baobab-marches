@@ -16,15 +16,25 @@ router.post("/login", async (req, res) => {
 
   try {
     const userResult = await db.query(
-      `SELECT id, tenant_id, nom, prenom, email, mot_de_passe_hash, mot_de_passe_temporaire,
-              langue_preferee, actif
-       FROM utilisateur WHERE email = $1`,
+      `SELECT u.id, u.tenant_id, u.nom, u.prenom, u.email, u.mot_de_passe_hash, u.mot_de_passe_temporaire,
+              u.langue_preferee, u.actif, te.actif AS tenant_actif
+       FROM utilisateur u
+       JOIN tenant te ON te.id = u.tenant_id
+       WHERE u.email = $1`,
       [email]
     );
     const user = userResult.rows[0];
 
     if (!user || !user.actif) {
       return res.status(401).json({ error: t(req, "LOGIN_INVALID") });
+    }
+
+    // L'entreprise elle-meme peut etre suspendue depuis le Super Admin
+    // (tenant.actif) independamment du statut de chaque utilisateur - ce
+    // champ existait deja dans le schema d'origine mais n'etait verifie nulle
+    // part avant l'ajout du module Super Admin (04/09/2026).
+    if (!user.tenant_actif) {
+      return res.status(401).json({ error: t(req, "LOGIN_TENANT_SUSPENDU") });
     }
 
     const passwordOk = await bcrypt.compare(mot_de_passe, user.mot_de_passe_hash);

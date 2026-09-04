@@ -86,4 +86,50 @@ function requireRole(...allowedCodes) {
   };
 }
 
-module.exports = { requireAuth, requireRole };
+/**
+ * Verifie un token Super Admin - completement distinct du circuit
+ * requireAuth/requireRole ci-dessus : le Super Admin n'appartient a AUCUN
+ * tenant (table administrateur_plateforme, sans tenant_id), c'est le
+ * proprietaire de la plateforme (Steeve), pas un role a l'interieur d'une
+ * entreprise cliente. Le payload du token porte `superAdminId` (jamais
+ * `sub`/`tenantId`) pour qu'un token tenant ne puisse jamais etre pris par
+ * erreur pour un token Super Admin, et inversement (voir routes/superAdmin.js
+ * pour l'emission de ce token).
+ */
+async function requireSuperAdmin(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ error: t(req, "AUTH_REQUIRED") });
+  }
+
+  let payload;
+  try {
+    payload = verifyToken(token);
+  } catch (err) {
+    return res.status(401).json({ error: t(req, "SESSION_INVALID") });
+  }
+
+  if (!payload.superAdminId) {
+    return res.status(401).json({ error: t(req, "SESSION_INVALID") });
+  }
+
+  try {
+    const result = await db.query(
+      `SELECT id, email, nom, actif FROM administrateur_plateforme WHERE id = $1`,
+      [payload.superAdminId]
+    );
+    const admin = result.rows[0];
+    if (!admin || !admin.actif) {
+      return res.status(401).json({ error: t(req, "SESSION_INVALID") });
+    }
+    req.superAdmin = { id: admin.id, email: admin.email, nom: admin.nom };
+    next();
+  } catch (err) {
+    console.error(err);
+    return res.status(401).json({ error: t(req, "SESSION_INVALID") });
+  }
+}
+
+module.exports = { requireAuth, requireRole, requireSuperAdmin };
