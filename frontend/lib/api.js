@@ -412,4 +412,42 @@ export const api = {
     formData.append("fichier", fichier);
     return requestUpload(`/rh/fiches-temps/${id}/importer`, formData);
   },
+
+  // Module Ventes/Negoce (Consultation -> Devis -> Facture -> Bon de livraison)
+  getParametresVentes: () => request("/parametres/ventes"),
+  patchParametresVentes: (data) => request("/parametres/ventes", { method: "PATCH", body: JSON.stringify(data) }),
+  uploaderLogoVentes: (fichier) => {
+    const formData = new FormData();
+    formData.append("logo", fichier);
+    return requestUpload("/parametres/ventes/logo", formData);
+  },
+  supprimerLogoVentes: () => request("/parametres/ventes/logo", { method: "DELETE" }),
+
+  getClientsCommerciaux: () => request("/ventes/clients"),
+  createClientCommercial: (data) => request("/ventes/clients", { method: "POST", body: JSON.stringify(data) }),
+  patchClientCommercial: (id, data) => request(`/ventes/clients/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getConsultations: (statut) => request(`/ventes/consultations${statut ? `?statut=${statut}` : ""}`),
+  createConsultation: (data) => request("/ventes/consultations", { method: "POST", body: JSON.stringify(data) }),
+  patchConsultation: (id, data) => request(`/ventes/consultations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getDevisListe: (statut) => request(`/ventes/devis${statut ? `?statut=${statut}` : ""}`),
+  getDevis: (id) => request(`/ventes/devis/${id}`),
+  createDevis: (data) => request("/ventes/devis", { method: "POST", body: JSON.stringify(data) }),
+  patchDevis: (id, data) => request(`/ventes/devis/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  changerStatutDevis: (id, statut) => request(`/ventes/devis/${id}/statut`, { method: "PATCH", body: JSON.stringify({ statut }) }),
+  validerDevis: (id) => request(`/ventes/devis/${id}/valider`, { method: "POST" }),
+  genererFactureDepuisDevis: (id, data) => request(`/ventes/devis/${id}/generer-facture`, { method: "POST", body: JSON.stringify(data || {}) }),
+
+  getFacturesVente: (statut) => request(`/ventes/factures${statut ? `?statut=${statut}` : ""}`),
+  getFactureVente: (id) => request(`/ventes/factures/${id}`),
+  patchFactureVente: (id, data) => request(`/ventes/factures/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  marquerFactureVentePayee: (id, data) => request(`/ventes/factures/${id}/marquer-payee`, { method: "PATCH", body: JSON.stringify(data) }),
+  annulerFactureVente: (id) => request(`/ventes/factures/${id}/annuler`, { method: "PATCH" }),
+  genererBlDepuisFacture: (id) => request(`/ventes/factures/${id}/generer-bl`, { method: "POST" }),
+
+  getBlListe: (statut) => request(`/ventes/bl${statut ? `?statut=${statut}` : ""}`),
+  getBl: (id) => request(`/ventes/bl/${id}`),
+  patchBl: (id, data) => request(`/ventes/bl/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  marquerBlLivre: (id) => request(`/ventes/bl/${id}/marquer-livre`, { method: "PATCH" }),
 };

@@ -21,6 +21,7 @@ const concurrenceRoutes = require("./routes/concurrence");
 const parcAutoRoutes = require("./routes/parcAuto");
 const rhRoutes = require("./routes/rh");
 const superAdminRoutes = require("./routes/superAdmin");
+const ventesRoutes = require("./routes/ventes");
 const { t } = require("./utils/i18n");
 
 const app = express();
@@ -51,6 +52,7 @@ app.use("/api/concurrence", concurrenceRoutes);
 app.use("/api/parc-auto", parcAutoRoutes);
 app.use("/api/rh", rhRoutes);
 app.use("/api/super-admin", superAdminRoutes);
+app.use("/api/ventes", ventesRoutes);
 
 // Gestionnaire d'erreur generique (dernier recours)
 app.use((err, req, res, next) => {
