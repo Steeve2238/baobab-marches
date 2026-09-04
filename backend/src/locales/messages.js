@@ -310,6 +310,9 @@ const MESSAGES = {
     VENTE_BL_GENERATE_ERROR: "Erreur lors de la generation du bon de livraison.",
     VENTE_FACTURE_ALREADY_HAS_BL: "Un bon de livraison existe deja pour cette facture.",
 
+    VENTE_STATISTIQUES_FETCH_ERROR: "Erreur lors de la recuperation des statistiques.",
+    VENTE_SUIVI_FETCH_ERROR: "Erreur lors de la recuperation du suivi.",
+
     VENTE_PARAMETRES_FETCH_ERROR: "Erreur lors de la recuperation des parametres de vente.",
     VENTE_PARAMETRES_UPDATE_ERROR: "Erreur lors de la mise a jour des parametres de vente.",
     VENTE_TAUX_TVA_INVALID: "Le taux de TVA doit etre un nombre entre 0 et 100.",
@@ -625,6 +628,9 @@ const MESSAGES = {
     VENTE_BL_UPDATE_ERROR: "Error while updating the delivery note.",
     VENTE_BL_GENERATE_ERROR: "Error while generating the delivery note.",
     VENTE_FACTURE_ALREADY_HAS_BL: "A delivery note already exists for this invoice.",
+
+    VENTE_STATISTIQUES_FETCH_ERROR: "Error while retrieving statistics.",
+    VENTE_SUIVI_FETCH_ERROR: "Error while retrieving the tracking overview.",
 
     VENTE_PARAMETRES_FETCH_ERROR: "Error while retrieving sales settings.",
     VENTE_PARAMETRES_UPDATE_ERROR: "Error while updating sales settings.",

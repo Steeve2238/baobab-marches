@@ -840,4 +840,106 @@ router.patch("/bl/:id/marquer-livre", requireRole(...ROLES_FACTURATION), async (
   }
 });
 
+// ----------------------------------------------------------------------------
+// Statistiques et suivi consolide (demandes de Steeve du 04/09/2026, en
+// complement du chantier initial) - lecture seule, pas de restriction de
+// role (meme principe que le reste des GET de ce module).
+// ----------------------------------------------------------------------------
+
+// GET /statistiques - chiffres globaux pour le pipeline commercial : ce que
+// Steeve appelait "le tableau de suivi Excel" cote statistiques (repartition
+// des devis par statut, CA facture/paye/impaye, taux de conversion). Les
+// pourcentages de conversion sont calcules cote frontend a partir des
+// compteurs bruts renvoyes ici (evite de dupliquer une logique
+// d'arrondi/formatage des deux cotes).
+router.get("/statistiques", async (req, res) => {
+  const tenantId = req.user.tenantId;
+  try {
+    const [consultationsResult, devisResult, devisFacturesResult, facturesResult] = await Promise.all([
+      db.query(`SELECT statut, COUNT(*)::int AS n FROM consultation WHERE tenant_id = $1 GROUP BY statut`, [tenantId]),
+      db.query(`SELECT statut, COUNT(*)::int AS n FROM devis WHERE tenant_id = $1 GROUP BY statut`, [tenantId]),
+      db.query(
+        `SELECT COUNT(*)::int AS n FROM devis d JOIN facture_vente f ON f.devis_id = d.id WHERE d.tenant_id = $1`,
+        [tenantId]
+      ),
+      db.query(
+        `SELECT statut, COUNT(*)::int AS n, COALESCE(SUM(total_ht),0) AS total_ht, COALESCE(SUM(total_ttc),0) AS total_ttc
+         FROM facture_vente WHERE tenant_id = $1 GROUP BY statut`,
+        [tenantId]
+      ),
+    ]);
+
+    const consultationsParStatut = { RECUE: 0, DEVIS_EN_COURS: 0, CONVERTIE: 0, SANS_SUITE: 0 };
+    let consultationsTotal = 0;
+    for (const row of consultationsResult.rows) {
+      consultationsParStatut[row.statut] = row.n;
+      consultationsTotal += row.n;
+    }
+
+    const devisParStatut = { BROUILLON: 0, ENVOYE: 0, VALIDE: 0, REFUSE: 0, EXPIRE: 0 };
+    let devisTotal = 0;
+    for (const row of devisResult.rows) {
+      devisParStatut[row.statut] = row.n;
+      devisTotal += row.n;
+    }
+
+    const facturesParStatut = { IMPAYEE: { n: 0, total_ttc: 0 }, PAYEE: { n: 0, total_ttc: 0 }, ANNULEE: { n: 0, total_ttc: 0 } };
+    let facturesTotal = 0;
+    for (const row of facturesResult.rows) {
+      facturesParStatut[row.statut] = { n: row.n, total_ttc: Number(row.total_ttc) };
+      facturesTotal += row.n;
+    }
+    // Chiffre d'affaires "actif" = hors factures annulees (une facture
+    // annulee ne represente pas une vente reelle).
+    const totalTtcPaye = facturesParStatut.PAYEE.total_ttc;
+    const totalTtcImpaye = facturesParStatut.IMPAYEE.total_ttc;
+
+    res.json({
+      consultations: { total: consultationsTotal, par_statut: consultationsParStatut },
+      devis: { total: devisTotal, par_statut: devisParStatut, convertis_en_facture: devisFacturesResult.rows[0].n },
+      factures: {
+        total: facturesTotal,
+        par_statut: facturesParStatut,
+        total_ttc_facture: totalTtcPaye + totalTtcImpaye,
+        total_ttc_paye: totalTtcPaye,
+        total_ttc_impaye: totalTtcImpaye,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_STATISTIQUES_FETCH_ERROR") });
+  }
+});
+
+// GET /suivi - vue consolidee "une ligne par devis", enrichie de sa facture
+// et son BL s'ils existent : equivalent generique du tableau "Suivi Global"
+// que Steeve tenait a la main dans Excel, toujours a jour puisque genere a
+// la volee depuis les memes donnees que les pages Devis/Factures/BL.
+router.get("/suivi", async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT
+         d.id AS devis_id, d.numero AS devis_numero, d.statut AS devis_statut,
+         d.date_devis, d.objet, d.total_ht AS devis_total_ht, d.total_ttc AS devis_total_ttc,
+         cl.nom AS client_nom,
+         f.id AS facture_id, f.numero AS facture_numero, f.mois_emission AS facture_mois_emission,
+         f.statut AS facture_statut, f.date_facture, f.date_echeance,
+         f.total_ttc AS facture_total_ttc, f.reference_bc_client,
+         bl.id AS bl_id, bl.numero AS bl_numero, bl.statut AS bl_statut, bl.date_bl
+       FROM devis d
+       JOIN client_commercial cl ON cl.id = d.client_commercial_id
+       LEFT JOIN facture_vente f ON f.devis_id = d.id
+       LEFT JOIN bon_livraison bl ON bl.facture_vente_id = f.id
+       WHERE d.tenant_id = $1
+       ORDER BY d.date_devis DESC, d.date_creation DESC
+       LIMIT 500`,
+      [req.user.tenantId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_SUIVI_FETCH_ERROR") });
+  }
+});
+
 module.exports = router;

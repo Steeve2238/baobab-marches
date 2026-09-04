@@ -450,4 +450,7 @@ export const api = {
   getBl: (id) => request(`/ventes/bl/${id}`),
   patchBl: (id, data) => request(`/ventes/bl/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   marquerBlLivre: (id) => request(`/ventes/bl/${id}/marquer-livre`, { method: "PATCH" }),
+
+  getStatistiquesVentes: () => request(`/ventes/statistiques`),
+  getSuiviVentes: () => request(`/ventes/suivi`),
 };
