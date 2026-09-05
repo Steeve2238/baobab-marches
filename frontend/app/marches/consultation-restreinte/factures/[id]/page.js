@@ -237,9 +237,37 @@ export default function FactureVenteDetailPage() {
           <div style={{ fontWeight: 700, fontSize: 12.5 }}>{entete?.signataire_nom}</div>
           <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{entete?.signataire_titre}</div>
         </div>
+
+        {piedDePage(entete).length > 0 && (
+          <div
+            style={{
+              marginTop: 40,
+              paddingTop: 12,
+              borderTop: "1px solid var(--line)",
+              textAlign: "center",
+              fontSize: 10.5,
+              color: "var(--sub)",
+            }}
+          >
+            {piedDePage(entete).join(" · ")}
+          </div>
+        )}
       </div>
     </AppShell>
   );
+}
+
+// Pied de page (mentions legales) des documents imprimables - RCCM, NINEA,
+// site web, coordonnees bancaires (voir migration
+// 018_facturation_entete_pied_de_page.sql) : seuls les champs renseignes par
+// l'entreprise s'affichent, rien n'est obligatoire.
+function piedDePage(entete) {
+  return [
+    entete?.rccm ? `RCCM ${entete.rccm}` : null,
+    entete?.ninea ? `NINEA ${entete.ninea}` : null,
+    entete?.site_web || null,
+    entete?.coordonnees_bancaires || null,
+  ].filter(Boolean);
 }
 
 const boutonPrincipalStyle = {

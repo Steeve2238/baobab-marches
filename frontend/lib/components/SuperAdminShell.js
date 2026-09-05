@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/super-admin/clients", key: "saNavClients" },
   { href: "/super-admin/formules", key: "saNavFormules" },
   { href: "/super-admin/factures", key: "saNavFactures" },
+  { href: "/super-admin/parametres", key: "saNavParametres" },
 ];
 
 /**

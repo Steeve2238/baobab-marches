@@ -1,75 +1,71 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "../../../lib/api";
+import { useRouter } from "next/navigation";
+import { superAdminApi } from "../../../lib/superAdminApi";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
-import AppShell from "../../../lib/components/AppShell";
+import SuperAdminShell from "../../../lib/components/SuperAdminShell";
 
-export default function EnteteSettingsPage() {
+// Parametres d'entete + pied de page + logo du Super Admin lui-meme (Steeve /
+// YMS Groupe), utilises sur les factures d'abonnement generees pour les
+// clients (voir super-admin/factures/[id]/page.js) - demande explicite de
+// Steeve le 05/09/2026, meme principe que l'entete du module Ventes cote
+// client (voir app/parametres/entete/page.js) mais pour la plateforme
+// elle-meme.
+export default function SuperAdminParametresPage() {
+  const router = useRouter();
   const { t } = useLangue();
   const [form, setForm] = useState({
     raison_sociale: "",
     adresse: "",
     telephone: "",
     email: "",
-    signataire_nom: "",
-    signataire_titre: "",
     rccm: "",
     ninea: "",
     site_web: "",
     coordonnees_bancaires: "",
   });
+  const [logo, setLogo] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [enregistrement, setEnregistrement] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
-  const [erreur, setErreur] = useState("");
-
-  // Parametres du module Ventes : taux de TVA systematique + logo, utilises
-  // automatiquement sur chaque devis/facture genere (voir routes/ventes.js
-  // cote backend). Regroupes sur cette meme page d'en-tete de structure :
-  // ce sont les memes informations d'identite de l'entreprise.
-  const [tauxTva, setTauxTva] = useState("18");
-  const [logo, setLogo] = useState(null);
-  const [enregistrementTva, setEnregistrementTva] = useState(false);
-  const [confirmationTva, setConfirmationTva] = useState(false);
   const [televersementLogo, setTeleversementLogo] = useState(false);
+  const [erreur, setErreur] = useState("");
   const inputLogoRef = useRef(null);
 
   useEffect(() => {
-    api
-      .getEntete()
-      .then((data) =>
+    superAdminApi
+      .getParametresEntete()
+      .then((data) => {
         setForm({
           raison_sociale: data.raison_sociale || "",
           adresse: data.adresse || "",
           telephone: data.telephone || "",
           email: data.email || "",
-          signataire_nom: data.signataire_nom || "",
-          signataire_titre: data.signataire_titre || "",
           rccm: data.rccm || "",
           ninea: data.ninea || "",
           site_web: data.site_web || "",
           coordonnees_bancaires: data.coordonnees_bancaires || "",
-        })
-      )
-      .catch((err) => setErreur(err.message))
-      .finally(() => setChargement(false));
-
-    api
-      .getParametresVentes()
-      .then((data) => {
-        setTauxTva(String(data.taux_tva_pourcentage));
+        });
         setLogo(data.logo_base64 ? { base64: data.logo_base64, mime: data.logo_type_mime } : null);
       })
-      .catch(() => {});
-  }, []);
+      .catch((err) => {
+        if (err.status === 401) {
+          router.push("/super-admin/login");
+          return;
+        }
+        setErreur(err.message);
+      })
+      .finally(() => setChargement(false));
+  }, [router]);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setEnregistrement(true);
     setConfirmation(false);
+    setErreur("");
     try {
-      await api.updateEntete(form);
+      await superAdminApi.patchParametresEntete(form);
       setConfirmation(true);
       setTimeout(() => setConfirmation(false), 2500);
     } catch (err) {
@@ -79,29 +75,13 @@ export default function EnteteSettingsPage() {
     }
   }
 
-  async function handleEnregistrerTva(e) {
-    e.preventDefault();
-    setEnregistrementTva(true);
-    setConfirmationTva(false);
-    setErreur("");
-    try {
-      await api.patchParametresVentes({ taux_tva_pourcentage: Number(tauxTva) });
-      setConfirmationTva(true);
-      setTimeout(() => setConfirmationTva(false), 2500);
-    } catch (err) {
-      setErreur(err.message);
-    } finally {
-      setEnregistrementTva(false);
-    }
-  }
-
   async function handleChoisirLogo(e) {
     const fichier = e.target.files?.[0];
     if (!fichier) return;
     setTeleversementLogo(true);
     setErreur("");
     try {
-      const maj = await api.uploaderLogoVentes(fichier);
+      const maj = await superAdminApi.uploaderLogoEntete(fichier);
       setLogo(maj.logo_base64 ? { base64: maj.logo_base64, mime: maj.logo_type_mime } : null);
     } catch (err) {
       setErreur(err.message);
@@ -115,7 +95,7 @@ export default function EnteteSettingsPage() {
     setTeleversementLogo(true);
     setErreur("");
     try {
-      await api.supprimerLogoVentes();
+      await superAdminApi.supprimerLogoEntete();
       setLogo(null);
     } catch (err) {
       setErreur(err.message);
@@ -125,13 +105,44 @@ export default function EnteteSettingsPage() {
   }
 
   return (
-    <AppShell title={t("enteteTitle")}>
-      <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 16 }}>{t("enteteDescription")}</p>
+    <SuperAdminShell title={t("saParametresPageTitle")}>
+      <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 16 }}>{t("saParametresPageDescription")}</p>
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       {!chargement && (
         <form onSubmit={handleSubmit} className="card" style={{ maxWidth: 560 }}>
+          <label style={labelStyle}>{t("venteLogoLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+            {logo ? (
+              <img
+                src={`data:${logo.mime};base64,${logo.base64}`}
+                alt="logo"
+                style={{ maxWidth: 100, maxHeight: 70, objectFit: "contain", border: "1px solid var(--line)", borderRadius: 8, padding: 4 }}
+              />
+            ) : (
+              <span style={{ fontSize: 12, color: "var(--sub)" }}>{t("venteNoLogo")}</span>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => inputLogoRef.current?.click()}
+                disabled={televersementLogo}
+                style={boutonSecondaireStyle}
+              >
+                {televersementLogo ? t("saCreating") : t("venteUploadLogoButton")}
+              </button>
+              {logo && (
+                <button type="button" onClick={handleSupprimerLogo} disabled={televersementLogo} style={boutonSecondaireStyle}>
+                  {t("venteRemoveLogoButton")}
+                </button>
+              )}
+            </div>
+            <input ref={inputLogoRef} type="file" accept="image/png,image/jpeg" onChange={handleChoisirLogo} style={{ display: "none" }} />
+          </div>
+
+          <h3 style={{ fontSize: 12.5, color: "var(--petrol)", marginBottom: 10 }}>{t("enteteTitle")}</h3>
+
           <label style={labelStyle}>{t("raisonSocialeLabel")}</label>
           <input
             value={form.raison_sociale}
@@ -158,20 +169,6 @@ export default function EnteteSettingsPage() {
             type="email"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            style={inputStyle}
-          />
-
-          <label style={{ ...labelStyle, marginTop: 12 }}>{t("signataireNomLabel")}</label>
-          <input
-            value={form.signataire_nom}
-            onChange={(e) => setForm((f) => ({ ...f, signataire_nom: e.target.value }))}
-            style={inputStyle}
-          />
-
-          <label style={{ ...labelStyle, marginTop: 12 }}>{t("signataireTitreLabel")}</label>
-          <input
-            value={form.signataire_titre}
-            onChange={(e) => setForm((f) => ({ ...f, signataire_titre: e.target.value }))}
             style={inputStyle}
           />
 
@@ -208,74 +205,15 @@ export default function EnteteSettingsPage() {
             style={inputStyle}
           />
 
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18 }}>
             <button type="submit" disabled={enregistrement} style={boutonPrincipalStyle}>
               {t("save")}
             </button>
-            {confirmation && (
-              <span style={{ fontSize: 12.5, color: "var(--vert)" }}>{t("savedConfirmation")}</span>
-            )}
+            {confirmation && <span style={{ fontSize: 12.5, color: "var(--vert)" }}>{t("savedConfirmation")}</span>}
           </div>
         </form>
       )}
-
-      {!chargement && (
-        <div className="card" style={{ maxWidth: 560, marginTop: 16 }}>
-          <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 4 }}>{t("venteParametresSection")}</h3>
-          <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 14 }}>{t("venteParametresDescription")}</p>
-
-          <label style={labelStyle}>{t("venteLogoLabel")}</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
-            {logo ? (
-              <img
-                src={`data:${logo.mime};base64,${logo.base64}`}
-                alt="logo"
-                style={{ maxWidth: 100, maxHeight: 70, objectFit: "contain", border: "1px solid var(--line)", borderRadius: 8, padding: 4 }}
-              />
-            ) : (
-              <span style={{ fontSize: 12, color: "var(--sub)" }}>{t("venteNoLogo")}</span>
-            )}
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                type="button"
-                onClick={() => inputLogoRef.current?.click()}
-                disabled={televersementLogo}
-                style={boutonSecondaireStyle}
-              >
-                {televersementLogo ? t("saCreating") : t("venteUploadLogoButton")}
-              </button>
-              {logo && (
-                <button type="button" onClick={handleSupprimerLogo} disabled={televersementLogo} style={boutonSecondaireStyle}>
-                  {t("venteRemoveLogoButton")}
-                </button>
-              )}
-            </div>
-            <input ref={inputLogoRef} type="file" accept="image/png,image/jpeg" onChange={handleChoisirLogo} style={{ display: "none" }} />
-          </div>
-
-          <form onSubmit={handleEnregistrerTva}>
-            <label style={labelStyle}>{t("venteTauxTvaLabel")}</label>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.5"
-                value={tauxTva}
-                onChange={(e) => setTauxTva(e.target.value)}
-                style={{ ...inputStyle, width: 120 }}
-              />
-              <span style={{ fontSize: 13 }}>%</span>
-              <button type="submit" disabled={enregistrementTva} style={boutonPrincipalStyle}>
-                {t("save")}
-              </button>
-              {confirmationTva && <span style={{ fontSize: 12.5, color: "var(--vert)" }}>{t("savedConfirmation")}</span>}
-            </div>
-            <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 6 }}>{t("venteTauxTvaNote")}</p>
-          </form>
-        </div>
-      )}
-    </AppShell>
+    </SuperAdminShell>
   );
 }
 

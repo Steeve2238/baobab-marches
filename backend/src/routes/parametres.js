@@ -22,7 +22,8 @@ const uploadLogo = multer({
 router.get("/entete", async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT raison_sociale, adresse, telephone, email, signataire_nom, signataire_titre
+      `SELECT raison_sociale, adresse, telephone, email, signataire_nom, signataire_titre,
+              rccm, ninea, site_web, coordonnees_bancaires
        FROM tenant WHERE id = $1`,
       [req.user.tenantId]
     );
@@ -38,7 +39,18 @@ router.get("/entete", async (req, res) => {
 
 // PATCH /api/parametres/entete
 router.patch("/entete", async (req, res) => {
-  const { raison_sociale, adresse, telephone, email, signataire_nom, signataire_titre } = req.body;
+  const {
+    raison_sociale,
+    adresse,
+    telephone,
+    email,
+    signataire_nom,
+    signataire_titre,
+    rccm,
+    ninea,
+    site_web,
+    coordonnees_bancaires,
+  } = req.body;
   try {
     const result = await db.query(
       `UPDATE tenant
@@ -47,9 +59,14 @@ router.patch("/entete", async (req, res) => {
            telephone = $3,
            email = $4,
            signataire_nom = $5,
-           signataire_titre = $6
-       WHERE id = $7
-       RETURNING raison_sociale, adresse, telephone, email, signataire_nom, signataire_titre`,
+           signataire_titre = $6,
+           rccm = $7,
+           ninea = $8,
+           site_web = $9,
+           coordonnees_bancaires = $10
+       WHERE id = $11
+       RETURNING raison_sociale, adresse, telephone, email, signataire_nom, signataire_titre,
+                 rccm, ninea, site_web, coordonnees_bancaires`,
       [
         raison_sociale || null,
         adresse || null,
@@ -57,6 +74,10 @@ router.patch("/entete", async (req, res) => {
         email || null,
         signataire_nom || null,
         signataire_titre || null,
+        rccm || null,
+        ninea || null,
+        site_web || null,
+        coordonnees_bancaires || null,
         req.user.tenantId,
       ]
     );

@@ -106,18 +106,23 @@ export default function SuperAdminFacturesPage() {
                       ({facture.formule_nom}) — {Number(facture.montant_xof).toLocaleString()} XOF
                     </div>
                   </div>
-                  <span
-                    style={{
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      padding: "3px 8px",
-                      borderRadius: 20,
-                      whiteSpace: "nowrap",
-                      ...style,
-                    }}
-                  >
-                    {t(`saFactureStatut_${facture.statut}`)}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 700,
+                        padding: "3px 8px",
+                        borderRadius: 20,
+                        whiteSpace: "nowrap",
+                        ...style,
+                      }}
+                    >
+                      {t(`saFactureStatut_${facture.statut}`)}
+                    </span>
+                    <Link href={`/super-admin/factures/${facture.id}`} style={boutonSecondaireStyle}>
+                      {t("saViewButton")}
+                    </Link>
+                  </div>
                 </div>
                 {facture.statut === "IMPAYEE" && (
                   <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>

@@ -75,6 +75,28 @@ async function request(path, options = {}) {
   return data;
 }
 
+// Variante pour l'upload de fichier (logo) : pas de "Content-Type" force a
+// JSON, le navigateur doit fixer lui-meme le boundary multipart - meme
+// principe que requestUpload() dans lib/api.js (espace client).
+async function requestUpload(path, formData) {
+  const token = getToken();
+  const langue = getLangueLocale() || "fr";
+  const headers = {
+    "Accept-Language": langue,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { method: "POST", headers, body: formData });
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    const erreur = new Error(data.error || `Erreur ${res.status}`);
+    erreur.status = res.status;
+    throw erreur;
+  }
+  return data;
+}
+
 export const superAdminApi = {
   login: (email, mot_de_passe) =>
     request("/super-admin/auth/login", { method: "POST", body: JSON.stringify({ email, mot_de_passe }) }),
@@ -99,7 +121,18 @@ export const superAdminApi = {
   patchFormule: (id, data) =>
     request(`/super-admin/formules/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  getParametresEntete: () => request("/super-admin/parametres/entete"),
+  patchParametresEntete: (data) =>
+    request("/super-admin/parametres/entete", { method: "PATCH", body: JSON.stringify(data) }),
+  uploaderLogoEntete: (fichier) => {
+    const formData = new FormData();
+    formData.append("logo", fichier);
+    return requestUpload("/super-admin/parametres/entete/logo", formData);
+  },
+  supprimerLogoEntete: () => request("/super-admin/parametres/entete/logo", { method: "DELETE" }),
+
   getFactures: (statut) => request(`/super-admin/factures${statut ? `?statut=${statut}` : ""}`),
+  getFacture: (id) => request(`/super-admin/factures/${id}`),
   getFacturesClient: (clientId) => request(`/super-admin/clients/${clientId}/factures`),
   genererFacture: (clientId, periode) =>
     request(`/super-admin/clients/${clientId}/factures/generer`, {

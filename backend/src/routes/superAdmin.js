@@ -1,5 +1,6 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const multer = require("multer");
 const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
 const { signToken } = require("../utils/jwt");
@@ -82,6 +83,93 @@ router.post("/auth/changer-mot-de-passe", requireSuperAdmin, async (req, res) =>
 // Super Admin de langues differentes sont crees un jour.
 
 router.use(requireSuperAdmin);
+
+// ---------------------------------------------------------------------------
+// Parametres de facturation du Super Admin (entete + pied de page + logo,
+// utilises sur les factures d'abonnement - voir GET /factures/:id plus bas).
+// Table singleton plateforme_parametres (une seule ligne, voir migration
+// 018_facturation_entete_pied_de_page.sql) : la plateforme n'a qu'un seul
+// proprietaire (Steeve), contrairement a "tenant" (une ligne par client).
+// ---------------------------------------------------------------------------
+
+const MIMETYPES_LOGO_ACCEPTES = ["image/png", "image/jpeg"];
+const uploadLogoPlateforme = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 Mo
+});
+
+// GET /api/super-admin/parametres/entete
+router.get("/parametres/entete", async (req, res) => {
+  try {
+    const result = await db.query(`SELECT * FROM plateforme_parametres WHERE id = true`);
+    res.json(result.rows[0] || {});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "ENTETE_FETCH_ERROR") });
+  }
+});
+
+// PATCH /api/super-admin/parametres/entete
+router.patch("/parametres/entete", async (req, res) => {
+  const { raison_sociale, adresse, telephone, email, rccm, ninea, site_web, coordonnees_bancaires } = req.body;
+  try {
+    const result = await db.query(
+      `UPDATE plateforme_parametres
+       SET raison_sociale = $1, adresse = $2, telephone = $3, email = $4,
+           rccm = $5, ninea = $6, site_web = $7, coordonnees_bancaires = $8
+       WHERE id = true
+       RETURNING *`,
+      [
+        raison_sociale || null,
+        adresse || null,
+        telephone || null,
+        email || null,
+        rccm || null,
+        ninea || null,
+        site_web || null,
+        coordonnees_bancaires || null,
+      ]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "ENTETE_UPDATE_ERROR") });
+  }
+});
+
+// POST /api/super-admin/parametres/entete/logo
+router.post("/parametres/entete/logo", uploadLogoPlateforme.single("logo"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: t(req, "VENTE_LOGO_FILE_REQUIRED") });
+  }
+  if (!MIMETYPES_LOGO_ACCEPTES.includes(req.file.mimetype)) {
+    return res.status(400).json({ error: t(req, "VENTE_LOGO_TYPE_INVALID") });
+  }
+  try {
+    const base64 = req.file.buffer.toString("base64");
+    const result = await db.query(
+      `UPDATE plateforme_parametres SET logo_base64 = $1, logo_type_mime = $2 WHERE id = true RETURNING *`,
+      [base64, req.file.mimetype]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_LOGO_UPLOAD_ERROR") });
+  }
+});
+
+// DELETE /api/super-admin/parametres/entete/logo
+router.delete("/parametres/entete/logo", async (req, res) => {
+  try {
+    const result = await db.query(
+      `UPDATE plateforme_parametres SET logo_base64 = NULL, logo_type_mime = NULL WHERE id = true RETURNING *`
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_LOGO_UPLOAD_ERROR") });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Statistiques
@@ -393,10 +481,26 @@ router.patch("/formules/:id", async (req, res) => {
 const SELECT_FACTURE = `
   SELECT f.id, f.tenant_id, f.formule_abonnement_id, f.formule_nom, f.periode, f.montant_xof,
          f.type_facture, f.statut, f.date_generation, f.date_paiement, f.mode_paiement, f.notes,
-         te.raison_sociale AS client_raison_sociale
+         te.raison_sociale AS client_raison_sociale, te.adresse AS client_adresse
   FROM facture_abonnement f
   JOIN tenant te ON te.id = f.tenant_id
 `;
+
+// GET /api/super-admin/factures/:id - detail complet, pour l'affichage et
+// l'impression d'une facture d'abonnement (voir
+// frontend/app/super-admin/factures/[id]/page.js).
+router.get("/factures/:id", async (req, res) => {
+  try {
+    const result = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "SUPER_ADMIN_FACTURE_NOT_FOUND") });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "SUPER_ADMIN_FACTURE_FETCH_ERROR") });
+  }
+});
 
 // GET /api/super-admin/factures - vue globale (toutes les entreprises), pour
 // reperer d'un coup d'oeil les impayes. Filtre optionnel ?statut=IMPAYEE
