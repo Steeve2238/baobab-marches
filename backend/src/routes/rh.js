@@ -679,10 +679,15 @@ router.get("/demandes/mes", async (req, res) => {
 // GET /api/rh/demandes/a-valider - demandes SOUMISE en attente de ma
 // validation (ADMIN voit tout ; les autres seulement les demandes dont le
 // role requis pour l'ETAPE COURANTE correspond a l'un de leurs roles ACTUELS).
+// Un validateur universel (Phase 2, 05/09/2026) voit aussi tout, sur le meme
+// principe qu'ADMIN : il doit pouvoir decouvrir ce qui attend une validation
+// pour agir en backup, pas seulement valider une demande dont il connaitrait
+// deja l'identifiant.
 router.get("/demandes/a-valider", async (req, res) => {
   try {
     const estAdmin = req.user.roles.includes("ADMIN");
-    if (estAdmin) {
+    const estValidateurUniversel = !!req.user.permissions?.validateurUniversel;
+    if (estAdmin || estValidateurUniversel) {
       const result = await db.query(`${SELECT_DEMANDE} AND d.statut = 'SOUMISE' ORDER BY d.date_soumission ASC`, [
         req.user.tenantId,
       ]);
@@ -712,12 +717,16 @@ async function chargerDemandeAvecAcces(req, res, { exigerProprietaire = false, e
   const employe = await chargerEmployeCourant(req.user.tenantId, req.user.sub);
   const estProprietaire = !!employe && employe.id === demande.employe_id;
   const estAdmin = req.user.roles.includes("ADMIN");
+  // Validateur universel (Phase 2, 05/09/2026) : meme acces qu'ADMIN pour la
+  // lecture d'une demande RH - coherent avec le fait qu'il peut la
+  // valider/rejeter sans porter le role approbateur configure.
+  const estValidateurUniversel = !!req.user.permissions?.validateurUniversel;
 
   if (exigerProprietaire && !estProprietaire && !estAdmin) {
     res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
     return null;
   }
-  if (exigerApprobateur && !estAdmin) {
+  if (exigerApprobateur && !estAdmin && !estValidateurUniversel) {
     const roleIds = await chargerRoleIdsUtilisateur(req.user.tenantId, req.user.sub);
     const estApprobateur = demande.role_approbateur_id && roleIds.includes(demande.role_approbateur_id);
     if (!estApprobateur) {
@@ -725,8 +734,9 @@ async function chargerDemandeAvecAcces(req, res, { exigerProprietaire = false, e
       return null;
     }
   }
-  if (!exigerProprietaire && !exigerApprobateur && !estProprietaire && !estAdmin) {
-    // Lecture simple (GET /:id) : proprietaire, approbateur potentiel ou ADMIN.
+  if (!exigerProprietaire && !exigerApprobateur && !estProprietaire && !estAdmin && !estValidateurUniversel) {
+    // Lecture simple (GET /:id) : proprietaire, approbateur potentiel, ADMIN
+    // ou validateur universel.
     const roleIds = await chargerRoleIdsUtilisateur(req.user.tenantId, req.user.sub);
     const estApprobateurPotentiel = demande.role_approbateur_id && roleIds.includes(demande.role_approbateur_id);
     if (!estApprobateurPotentiel) {
@@ -896,8 +906,14 @@ router.patch("/demandes/:id/valider", async (req, res) => {
     }
     const demande = demandeResult.rows[0];
 
+    // Validateur universel (Directeur General / Directeur Financier, Phase 2
+    // du systeme de permissions par role, 05/09/2026) : peut valider/rejeter
+    // n'importe quelle demande RH a la place du role approbateur configure,
+    // meme sans porter ce role - backup mutuel demande explicitement par
+    // Steeve ("toute action de validation, dans tout module").
     const estAdmin = req.user.roles.includes("ADMIN");
-    if (!estAdmin) {
+    const estValidateurUniversel = !!req.user.permissions?.validateurUniversel;
+    if (!estAdmin && !estValidateurUniversel) {
       const roleIds = await chargerRoleIdsUtilisateur(req.user.tenantId, req.user.sub);
       const estApprobateur = demande.role_approbateur_id && roleIds.includes(demande.role_approbateur_id);
       if (!estApprobateur) {
@@ -1278,12 +1294,17 @@ async function chargerFicheTempsAvecAcces(req, res, { exigerProprietaire = false
   const employe = await chargerEmployeCourant(req.user.tenantId, req.user.sub);
   const estProprietaire = !!employe && employe.id === fiche.employe_id;
   const estAdmin = req.user.roles.includes("ADMIN");
+  // Validateur universel (Phase 2 systeme de permissions, 05/09/2026) : meme
+  // principe que pour les demandes RH ci-dessus - peut valider/rejeter/
+  // consulter en tant qu'approbateur potentiel n'importe quelle fiche de
+  // temps, sans porter le role approbateur configure.
+  const estValidateurUniversel = !!req.user.permissions?.validateurUniversel;
 
   if (exigerProprietaire && !estProprietaire && !estAdmin) {
     res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
     return null;
   }
-  if (exigerApprobateur && !estAdmin) {
+  if (exigerApprobateur && !estAdmin && !estValidateurUniversel) {
     const roleIds = await chargerRoleIdsUtilisateur(req.user.tenantId, req.user.sub);
     const estApprobateur = fiche.role_approbateur_id && roleIds.includes(fiche.role_approbateur_id);
     if (!estApprobateur) {
@@ -1291,7 +1312,7 @@ async function chargerFicheTempsAvecAcces(req, res, { exigerProprietaire = false
       return null;
     }
   }
-  if (!exigerProprietaire && !exigerApprobateur && !estProprietaire && !estAdmin) {
+  if (!exigerProprietaire && !exigerApprobateur && !estProprietaire && !estAdmin && !estValidateurUniversel) {
     const roleIds = await chargerRoleIdsUtilisateur(req.user.tenantId, req.user.sub);
     const estApprobateurPotentiel = fiche.role_approbateur_id && roleIds.includes(fiche.role_approbateur_id);
     if (!estApprobateurPotentiel) {
@@ -1391,11 +1412,13 @@ router.get("/fiches-temps/mes", async (req, res) => {
 });
 
 // GET /api/rh/fiches-temps/a-valider - fiches SOUMISE en attente (meme
-// logique d'acces que /demandes/a-valider).
+// logique d'acces que /demandes/a-valider, y compris pour le validateur
+// universel - Phase 2, 05/09/2026).
 router.get("/fiches-temps/a-valider", async (req, res) => {
   try {
     const estAdmin = req.user.roles.includes("ADMIN");
-    if (estAdmin) {
+    const estValidateurUniversel = !!req.user.permissions?.validateurUniversel;
+    if (estAdmin || estValidateurUniversel) {
       const result = await db.query(
         `${SELECT_FICHE_TEMPS} AND f.statut_validation = 'SOUMISE' ORDER BY f.date_soumission ASC`,
         [req.user.tenantId]

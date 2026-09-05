@@ -90,6 +90,14 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
       // a deja acces de fait (le tableau de bord EST le portefeuille des
       // dossiers) - meme regle que requireModule cote backend.
       if (item.moduleKey === "dossiers" && permissions.tableauDeBord) return true;
+      // "marches" fait aussi exception pour un validateur universel (DG /
+      // Directeur Financier, Phase 2 du systeme de permissions par role,
+      // 05/09/2026) : meme sans "marches" dans son perimetre standard
+      // (ex Directeur Financier = Financement uniquement), il doit pouvoir
+      // consulter et valider/refuser un devis en l'absence de l'autre
+      // validateur - voir le meme raisonnement cote backend dans
+      // routes/ventes.js.
+      if (item.moduleKey === "marches" && permissions.validateurUniversel) return true;
       return (permissions.modules || []).includes(item.moduleKey);
     }
     return true;

@@ -123,6 +123,42 @@ function requireRole(...allowedCodes) {
 }
 
 /**
+ * Variante de requireRole pour les actions de VALIDATION au sens strict
+ * (approuver/rejeter une action faite par un profil assistant - jamais pour
+ * une simple creation) : accepte en plus tout utilisateur "validateur
+ * universel" (role.validateur_universel, cf req.user.permissions calcule par
+ * requireAuth ci-dessus), meme s'il ne porte aucun des codes de role listes.
+ *
+ * Construit le 05/09/2026 (Phase 2 du systeme de permissions par role) a la
+ * demande explicite de Steeve : le Directeur General et le Directeur
+ * Financier (les deux seuls roles marques validateur_universel par la
+ * migration 017) doivent pouvoir se couvrir mutuellement - "si le directeur
+ * general n'est pas la... si le directeur financier n'est pas la, c'est le
+ * directeur general qui va signer" - portee choisie la plus large parmi les
+ * options proposees ("toute action de validation, dans tout module"), donc
+ * UN SEUL statut (validateur_universel) fait office d'autorite de validation
+ * partout, plutot qu'un statut distinct par module.
+ *
+ * A utiliser a la place de requireRole(...) uniquement sur les routes qui
+ * valident/rejettent une action deja soumise par quelqu'un d'autre - jamais
+ * sur les routes de creation/edition simple.
+ */
+function requireRoleOuValidateurUniversel(...allowedCodes) {
+  return (req, res, next) => {
+    const userRoles = req.user?.roles || [];
+    const permissions = req.user?.permissions;
+    if (userRoles.includes("ADMIN") || permissions?.validateurUniversel) {
+      return next();
+    }
+    const hasAccess = userRoles.some((r) => allowedCodes.includes(r));
+    if (!hasAccess) {
+      return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
+    }
+    next();
+  };
+}
+
+/**
  * Systeme de permissions par role (construit le 04/09/2026 a la demande de
  * Steeve, cf conversation "architecture de l'organisation de l'entreprise") -
  * s'appuie sur req.user.permissions deja calcule par requireAuth ci-dessus
@@ -214,4 +250,11 @@ async function requireSuperAdmin(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, requireRole, requireModule, blockLectureSeule, requireSuperAdmin };
+module.exports = {
+  requireAuth,
+  requireRole,
+  requireRoleOuValidateurUniversel,
+  requireModule,
+  blockLectureSeule,
+  requireSuperAdmin,
+};

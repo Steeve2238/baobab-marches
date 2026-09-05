@@ -32,12 +32,19 @@ export default function DevisDetailPage() {
   const [chargement, setChargement] = useState(true);
   const [action, setAction] = useState(false);
   const [referenceBc, setReferenceBc] = useState("");
+  const [permissions, setPermissions] = useState(null);
 
   function charger() {
-    Promise.all([api.getDevis(params.id), api.getEntete(), api.getParametresVentes()])
-      .then(([devisData, enteteData, parametresData]) => {
+    Promise.all([
+      api.getDevis(params.id),
+      api.getEntete(),
+      api.getParametresVentes(),
+      api.getPermissions().catch(() => null),
+    ])
+      .then(([devisData, enteteData, parametresData, permissionsData]) => {
         setDevis(devisData);
         setEntete({ ...enteteData, ...parametresData });
+        setPermissions(permissionsData);
       })
       .catch((err) => {
         if (err.status === 401) {
@@ -107,7 +114,11 @@ export default function DevisDetailPage() {
 
   const style = STATUT_STYLE[devis.statut] || {};
   const peutEditer = ["BROUILLON", "ENVOYE"].includes(devis.statut);
-  const peutValider = peutEditer && possedeRole(["DIRECTION"]);
+  // Validateur universel (Directeur General ou Directeur Financier - Phase 2
+  // du systeme de permissions par role, 05/09/2026) : peut valider un devis
+  // meme sans porter le code de role DIRECTION, en plus/back-up de celui-ci
+  // (voir requireRoleOuValidateurUniversel cote backend).
+  const peutValider = peutEditer && (possedeRole(["DIRECTION"]) || !!permissions?.validateurUniversel);
   const peutFacturer = devis.statut === "VALIDE" && !devis.facture && possedeRole(["COMPTABLE", "FINANCIER"]);
 
   return (

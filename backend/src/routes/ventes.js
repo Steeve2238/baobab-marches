@@ -1,11 +1,38 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth, requireRole, requireModule } = require("../middleware/auth");
+const { requireAuth, requireRole, requireRoleOuValidateurUniversel, requireModule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireModule("marches"));
+
+// Le Directeur Financier n'a normalement PAS "marches" dans son perimetre
+// (perimetre standard = Financement uniquement, voir migration
+// 017_permissions_roles.sql) - mais Steeve a explicitement demande qu'un
+// validateur universel (DG ou Directeur Financier) puisse valider/refuser un
+// devis en l'absence de l'autre ("si le directeur financier n'est pas la,
+// c'est le directeur general qui va signer, si vice versa" - Phase 2 du
+// systeme de permissions par role, 05/09/2026). Deux niveaux d'exception,
+// pour rester aussi precis que possible sans elargir son perimetre reel :
+//   - LECTURE (GET) : toujours autorisee pour un validateur universel, meme
+//     sans "marches" dans ses modules - il doit pouvoir consulter un devis
+//     (et son contexte : client, consultation liee...) avant de decider,
+//     comme le ferait n'importe quel approbateur.
+//   - ECRITURE : seules les 2 routes de DECISION sur un devis (valider /
+//     changer son statut, ce qui couvre le refus) sont autorisees sans
+//     "marches" - la creation de devis/consultations et la facturation
+//     restent hors de son perimetre standard, inchangees.
+router.use((req, res, next) => {
+  const estValidateurUniversel = !!req.user?.permissions?.validateurUniversel;
+  if (estValidateurUniversel) {
+    if (req.method === "GET") return next();
+    const estRouteDecisionDevis =
+      (req.method === "POST" && /^\/devis\/[^/]+\/valider$/.test(req.path)) ||
+      (req.method === "PATCH" && /^\/devis\/[^/]+\/statut$/.test(req.path));
+    if (estRouteDecisionDevis) return next();
+  }
+  return requireModule("marches")(req, res, next);
+});
 
 // ----------------------------------------------------------------------------
 // Module Ventes/Negoce (cadre avec Steeve le 04/09/2026, voir
@@ -18,7 +45,14 @@ router.use(requireModule("marches"));
 // codes ; ADMIN passe toujours, comme partout ailleurs sur la plateforme) :
 //   - COMMERCIAL / ADMINISTRATIF : enregistre les consultations, cree/edite
 //     les devis.
-//   - DIRECTION : valide un devis avant qu'il ne puisse etre facture.
+//   - Validation d'un devis : tout "validateur universel" (Directeur General
+//     ou Directeur Financier - voir requireRoleOuValidateurUniversel,
+//     Phase 2 du systeme de permissions par role, 05/09/2026), plus DIRECTION
+//     par son code de role pour compatibilite si un tenant a un role
+//     DIRECTION qui n'a pas (encore) coche validateur_universel. Ce n'est
+//     PLUS reserve au seul code de role "DIRECTION" en dur : Steeve a
+//     explicitement demande que le Directeur Financier puisse valider a la
+//     place du Directeur General en cas d'absence, et inversement.
 //   - COMPTABLE / FINANCIER : genere facture puis bon de livraison, suit les
 //     paiements et les livraisons.
 // La LECTURE (GET) n'est pas restreinte par role : "consultation restreinte"
@@ -434,8 +468,10 @@ router.patch("/devis/:id", requireRole(...ROLES_CREATION), async (req, res) => {
 
 // PATCH /devis/:id/statut - transitions manuelles simples (ENVOYE, REFUSE,
 // EXPIRE). La transition vers VALIDE passe exclusivement par /valider
-// ci-dessous (trace qui a valide et quand).
-router.patch("/devis/:id/statut", requireRole(...ROLES_CREATION, ...ROLES_VALIDATION), async (req, res) => {
+// ci-dessous (trace qui a valide et quand). REFUSE est une decision de
+// validation (rejet) : ouverte aussi a tout validateur universel, pas
+// seulement au code de role DIRECTION.
+router.patch("/devis/:id/statut", requireRoleOuValidateurUniversel(...ROLES_CREATION, ...ROLES_VALIDATION), async (req, res) => {
   const { id } = req.params;
   const { statut } = req.body;
   if (!["ENVOYE", "REFUSE", "EXPIRE"].includes(statut)) {
@@ -456,9 +492,11 @@ router.patch("/devis/:id/statut", requireRole(...ROLES_CREATION, ...ROLES_VALIDA
   }
 });
 
-// POST /devis/:id/valider - reserve a la Direction (ou ADMIN). Un devis
-// valide devient facturable ; il n'est plus modifiable au-dela.
-router.post("/devis/:id/valider", requireRole(...ROLES_VALIDATION), async (req, res) => {
+// POST /devis/:id/valider - reserve a un validateur universel (Directeur
+// General ou Directeur Financier - voir requireRoleOuValidateurUniversel) ou
+// au code de role DIRECTION pour compatibilite, plus ADMIN. Un devis valide
+// devient facturable ; il n'est plus modifiable au-dela.
+router.post("/devis/:id/valider", requireRoleOuValidateurUniversel(...ROLES_VALIDATION), async (req, res) => {
   const { id } = req.params;
   const client = await db.pool.connect();
   try {
