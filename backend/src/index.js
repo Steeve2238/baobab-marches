@@ -30,7 +30,19 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", service: "baobab-marches-backend" });
+  res.json({
+    status: "ok",
+    service: "baobab-marches-backend",
+    // Diagnostic temporaire (05/09/2026) : verifie que Passenger transmet
+    // bien les variables d'environnement definies dans cPanel au processus
+    // qu'il demarre. A retirer une fois le probleme de connexion resolu.
+    diagnosticEnv: {
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      hasJwtSecret: !!process.env.JWT_SECRET,
+      hasJwtExpiresIn: !!process.env.JWT_EXPIRES_IN,
+      nodeEnv: process.env.NODE_ENV || null,
+    },
+  });
 });
 
 app.use("/api/auth", authRoutes);
