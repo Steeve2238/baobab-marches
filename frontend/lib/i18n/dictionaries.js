@@ -250,6 +250,12 @@ export const DICTIONARIES = {
     deleteRole: "Supprimer",
     roleDeleteConfirm: "Supprimer ce rôle ?",
     roleFormError: "Le code et le libellé sont obligatoires.",
+    rolePerimetreLegend: "Périmètre d'accès",
+    roleModulesLabel: "Modules visibles",
+    roleTableauDeBordLabel: "Tableau de bord général",
+    roleLectureSeuleLabel: "Lecture seule (aucune modification possible)",
+    roleValidateurUniverselLabel: "Validateur universel (peut valider à la place d'un autre profil absent)",
+    roleAdminAccesTotal: "Accès total à tout, toujours (rôle administrateur).",
 
     usersPageTitle: "Utilisateurs",
     newUser: "Nouvel utilisateur",
@@ -299,6 +305,15 @@ export const DICTIONARIES = {
     marchesAppelOffresDesc:
       "Marchés publics soumis à mise en concurrence : maîtres d'ouvrage, historique de la concurrence, clauses à risque.",
     marchesOuvrirLabel: "Ouvrir",
+
+    navDossiers: "Dossiers",
+    dossiersPageTitle: "Dossiers",
+    dossiersPageSubtitle: "Portefeuille complet des dossiers, tous modules confondus.",
+    dossiersAucun: "Aucun dossier pour l'instant.",
+    dossiersColonneReference: "Référence",
+    dossiersColonneMaitreOuvrage: "Maître d'ouvrage",
+    dossiersColonneStatut: "Statut",
+    dossiersColonneDateCreation: "Créé le",
 
     maitreOuvrageLabel: "Maître d'ouvrage",
     selectMaitreOuvrage: "Sélectionner un maître d'ouvrage",
@@ -1077,6 +1092,12 @@ export const DICTIONARIES = {
     deleteRole: "Delete",
     roleDeleteConfirm: "Delete this role?",
     roleFormError: "Code and label are required.",
+    rolePerimetreLegend: "Access scope",
+    roleModulesLabel: "Visible modules",
+    roleTableauDeBordLabel: "General dashboard",
+    roleLectureSeuleLabel: "Read-only (no changes allowed)",
+    roleValidateurUniverselLabel: "Universal validator (can validate in place of another absent profile)",
+    roleAdminAccesTotal: "Always has full access to everything (administrator role).",
 
     usersPageTitle: "Users",
     newUser: "New user",
@@ -1126,6 +1147,15 @@ export const DICTIONARIES = {
     marchesAppelOffresDesc:
       "Public contracts subject to competitive bidding: contracting authorities, competitor history, risk clauses.",
     marchesOuvrirLabel: "Open",
+
+    navDossiers: "Files",
+    dossiersPageTitle: "Files",
+    dossiersPageSubtitle: "Full portfolio of files, across all modules.",
+    dossiersAucun: "No files yet.",
+    dossiersColonneReference: "Reference",
+    dossiersColonneMaitreOuvrage: "Contracting authority",
+    dossiersColonneStatut: "Status",
+    dossiersColonneDateCreation: "Created on",
 
     maitreOuvrageLabel: "Contracting authority",
     selectMaitreOuvrage: "Select a contracting authority",

@@ -5,17 +5,26 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useLangue } from "../i18n/LanguageContext";
 import LanguageSwitcher from "../i18n/LanguageSwitcher";
-import { clearToken, clearUtilisateurCourant, estAdmin, getUtilisateurCourant } from "../api";
+import { api, clearToken, clearUtilisateurCourant, estAdmin, getUtilisateurCourant } from "../api";
 
+// moduleKey / tableauDeBordOnly reprennent exactement les cles renvoyees par
+// GET /api/auth/permissions (voir middleware/auth.js cote backend, systeme de
+// permissions par role construit le 04-05/09/2026 a la demande de Steeve) :
+// un element sans l'une de ces deux marques reste visible pour tout
+// utilisateur connecte (ex "Mes taches", "Mes demandes RH" - universels,
+// jamais restreints par role). adminOnly reste un affichage separe (roles /
+// utilisateurs / RH personnel), independant du systeme de permissions par
+// module.
 const NAV_ITEMS = [
-  { href: "/dashboard", key: "navDashboard" },
+  { href: "/dashboard", key: "navDashboard", tableauDeBordOnly: true },
   { href: "/mes-taches", key: "navMyTasks" },
-  { href: "/financement", key: "navFinancing" },
-  { href: "/logistique", key: "navLogistics" },
-  { href: "/fournisseurs", key: "navSuppliers" },
-  { href: "/courriers", key: "navLetters" },
-  { href: "/parc-auto", key: "navParcAuto" },
-  { href: "/marches", key: "navMarches" },
+  { href: "/financement", key: "navFinancing", moduleKey: "financement" },
+  { href: "/logistique", key: "navLogistics", moduleKey: "logistique" },
+  { href: "/fournisseurs", key: "navSuppliers", moduleKey: "fournisseurs" },
+  { href: "/courriers", key: "navLetters", moduleKey: "courriers" },
+  { href: "/parc-auto", key: "navParcAuto", moduleKey: "parc-auto" },
+  { href: "/marches", key: "navMarches", moduleKey: "marches" },
+  { href: "/dossiers", key: "navDossiers", moduleKey: "dossiers" },
   { href: "/rh/demandes", key: "navDemandesRH" },
   { href: "/rh/fiches-temps", key: "navFichesTemps" },
   { href: "/rh/personnel", key: "navRH", adminOnly: true },
@@ -44,10 +53,19 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
   // langue choisie.
   const [profil, setProfil] = useState(null);
   const [estAdminConnecte, setEstAdminConnecte] = useState(false);
+  // null tant que non chargees : les entrees de menu filtrees par module (ou
+  // par tableau de bord) restent masquees jusque-la, meme principe de
+  // securite deja applique aux liens adminOnly ci-dessous (on prefere ne rien
+  // montrer plutot que de montrer puis retirer un lien).
+  const [permissions, setPermissions] = useState(null);
 
   useEffect(() => {
     setProfil(getUtilisateurCourant());
     setEstAdminConnecte(estAdmin());
+    api
+      .getPermissions()
+      .then(setPermissions)
+      .catch(() => setPermissions(null));
   }, []);
 
   function handleLogout() {
@@ -62,7 +80,20 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
   // la connexion, le backend renverra 403 de toute facon a la moindre
   // requete (voir requireRole cote backend) - ce filtre est un confort
   // d'affichage, pas un controle d'acces.
-  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || estAdminConnecte);
+  const navItems = NAV_ITEMS.filter((item) => {
+    if (item.adminOnly) return estAdminConnecte;
+    if (item.tableauDeBordOnly) return !!permissions?.tableauDeBord;
+    if (item.moduleKey) {
+      if (!permissions) return false;
+      if (permissions.admin) return true;
+      // "dossiers" fait exception : quiconque a le tableau de bord general y
+      // a deja acces de fait (le tableau de bord EST le portefeuille des
+      // dossiers) - meme regle que requireModule cote backend.
+      if (item.moduleKey === "dossiers" && permissions.tableauDeBord) return true;
+      return (permissions.modules || []).includes(item.moduleKey);
+    }
+    return true;
+  });
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>

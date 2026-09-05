@@ -47,17 +47,53 @@ async function requireAuth(req, res, next) {
     }
 
     const rolesResult = await db.query(
-      `SELECT r.code FROM role r
+      `SELECT r.code, r.perimetre_json, r.lecture_seule, r.validateur_universel
+       FROM role r
        JOIN utilisateur_role ur ON ur.role_id = r.id
        WHERE ur.utilisateur_id = $1`,
       [user.id]
     );
 
+    const roles = rolesResult.rows.map((r) => r.code);
+
+    // Permissions agregees (04/09/2026, construction du systeme de
+    // permissions par role demande par Steeve) : un utilisateur peut porter
+    // plusieurs roles (ex ADMIN+DIRECTION), donc on fait l'UNION des modules
+    // visibles/du tableau de bord/du statut validateur universel sur tous
+    // ses roles - et "lecture seule" ne s'applique que si TOUS ses roles le
+    // sont (un seul role d'ecriture suffit a debloquer l'ecriture). ADMIN
+    // court-circuite tout, meme principe que requireRole ci-dessous : accede
+    // a tout, jamais en lecture seule, toujours validateur universel.
+    let permissions;
+    if (roles.includes("ADMIN")) {
+      permissions = { admin: true, modules: null, tableauDeBord: true, lectureSeule: false, validateurUniversel: true };
+    } else {
+      const modules = new Set();
+      let tableauDeBord = false;
+      let validateurUniversel = false;
+      let auMoinsUnRoleEcriture = false;
+      for (const r of rolesResult.rows) {
+        const perimetre = r.perimetre_json || {};
+        (perimetre.modules || []).forEach((m) => modules.add(m));
+        if (perimetre.tableauDeBord) tableauDeBord = true;
+        if (r.validateur_universel) validateurUniversel = true;
+        if (!r.lecture_seule) auMoinsUnRoleEcriture = true;
+      }
+      permissions = {
+        admin: false,
+        modules: Array.from(modules),
+        tableauDeBord,
+        lectureSeule: rolesResult.rows.length > 0 && !auMoinsUnRoleEcriture,
+        validateurUniversel,
+      };
+    }
+
     req.user = {
       sub: user.id,
       tenantId: user.tenant_id,
       email: user.email,
-      roles: rolesResult.rows.map((r) => r.code),
+      roles,
+      permissions,
     };
     next();
   } catch (err) {
@@ -84,6 +120,52 @@ function requireRole(...allowedCodes) {
     }
     next();
   };
+}
+
+/**
+ * Systeme de permissions par role (construit le 04/09/2026 a la demande de
+ * Steeve, cf conversation "architecture de l'organisation de l'entreprise") -
+ * s'appuie sur req.user.permissions deja calcule par requireAuth ci-dessus
+ * (union des roles portes par l'utilisateur). A utiliser apres requireAuth,
+ * jamais seul.
+ *
+ * requireModule("dossiers") bloque l'acces a un module tant que le role de
+ * l'utilisateur ne le liste pas explicitement dans son perimetre_json.modules
+ * (colonne configurable depuis l'ecran Roles). Le module "dossiers" fait
+ * exception : quiconque a le tableau de bord general (tableauDeBord) y a
+ * aussi acces en lecture de fait, puisque le tableau de bord EST le
+ * portefeuille des dossiers - sans ca, le Directeur Financier (qui a le
+ * tableau de bord mais pas forcement "dossiers" dans son perimetre) verrait
+ * son tableau de bord planter.
+ */
+function requireModule(moduleKey) {
+  return (req, res, next) => {
+    const permissions = req.user?.permissions;
+    if (!permissions) {
+      return res.status(403).json({ error: t(req, "MODULE_FORBIDDEN") });
+    }
+    if (permissions.admin) return next();
+    if (permissions.modules.includes(moduleKey)) return next();
+    if (moduleKey === "dossiers" && permissions.tableauDeBord) return next();
+    return res.status(403).json({ error: t(req, "MODULE_FORBIDDEN") });
+  };
+}
+
+/**
+ * Bloque toute methode d'ecriture (tout sauf GET) pour un utilisateur dont
+ * TOUS les roles sont marques "lecture seule" (cas du Directeur General,
+ * qui doit pouvoir tout consulter mais ne jamais rien modifier). ADMIN n'est
+ * jamais concerne. A poser en meme temps que requireModule, apres
+ * requireAuth, sur les fichiers de routes ou la notion de lecture seule doit
+ * s'appliquer telle quelle (le module Marche a son propre systeme de roles
+ * plus fin ROLES_CREATION/VALIDATION/FACTURATION et n'utilise pas encore ce
+ * middleware generique, voir ventes.js).
+ */
+function blockLectureSeule(req, res, next) {
+  if (req.method === "GET") return next();
+  const permissions = req.user?.permissions;
+  if (!permissions || permissions.admin || !permissions.lectureSeule) return next();
+  return res.status(403).json({ error: t(req, "LECTURE_SEULE_FORBIDDEN") });
 }
 
 /**
@@ -132,4 +214,4 @@ async function requireSuperAdmin(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, requireRole, requireSuperAdmin };
+module.exports = { requireAuth, requireRole, requireModule, blockLectureSeule, requireSuperAdmin };

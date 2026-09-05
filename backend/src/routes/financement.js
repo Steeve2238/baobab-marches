@@ -1,11 +1,13 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { evaluerExpression } = require("../services/regleEngine");
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireModule("financement"));
+router.use(blockLectureSeule);
 
 // Correspondance besoin de financement -> type de facilite recherche.
 // Configurable en dur pour l'instant (liste fermee des besoins types) ;

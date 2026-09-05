@@ -32,15 +32,15 @@ router.get("/", async (req, res) => {
 // librement definis par tenant (section 3 du CDC) : pas de liste figee cote
 // code, chaque entreprise cliente de la plateforme organise les siens.
 router.post("/", requireRole("ADMIN"), async (req, res) => {
-  const { code, libelle, perimetre_json, lecture_seule } = req.body;
+  const { code, libelle, perimetre_json, lecture_seule, validateur_universel } = req.body;
   if (!code || !libelle) {
     return res.status(400).json({ error: t(req, "ROLE_FIELDS_REQUIRED") });
   }
 
   try {
     const result = await db.query(
-      `INSERT INTO role (tenant_id, code, libelle, perimetre_json, lecture_seule)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO role (tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
       [
         req.user.tenantId,
@@ -48,6 +48,7 @@ router.post("/", requireRole("ADMIN"), async (req, res) => {
         libelle.trim(),
         perimetre_json || {},
         lecture_seule || false,
+        validateur_universel || false,
       ]
     );
     res.status(201).json(result.rows[0]);
@@ -66,17 +67,25 @@ router.post("/", requireRole("ADMIN"), async (req, res) => {
 // de la confusion sans benefice reel.
 router.patch("/:id", requireRole("ADMIN"), async (req, res) => {
   const { id } = req.params;
-  const { libelle, perimetre_json, lecture_seule } = req.body;
+  const { libelle, perimetre_json, lecture_seule, validateur_universel } = req.body;
 
   try {
     const result = await db.query(
       `UPDATE role
        SET libelle = COALESCE($1, libelle),
            perimetre_json = COALESCE($2, perimetre_json),
-           lecture_seule = COALESCE($3, lecture_seule)
-       WHERE id = $4 AND tenant_id = $5
+           lecture_seule = COALESCE($3, lecture_seule),
+           validateur_universel = COALESCE($4, validateur_universel)
+       WHERE id = $5 AND tenant_id = $6
        RETURNING *`,
-      [libelle || null, perimetre_json || null, lecture_seule != null ? lecture_seule : null, id, req.user.tenantId]
+      [
+        libelle || null,
+        perimetre_json || null,
+        lecture_seule != null ? lecture_seule : null,
+        validateur_universel != null ? validateur_universel : null,
+        id,
+        req.user.tenantId,
+      ]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "ROLE_NOT_FOUND") });

@@ -1,10 +1,11 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth, requireRole, requireModule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireModule("marches"));
 
 // ----------------------------------------------------------------------------
 // Module Ventes/Negoce (cadre avec Steeve le 04/09/2026, voir

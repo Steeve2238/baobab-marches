@@ -1,11 +1,13 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { evaluerEcartMarge } = require("../services/anticipationEngine");
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireModule("dossiers"));
+router.use(blockLectureSeule);
 
 /**
  * Calcule le cout de revient et la marge a partir des composantes saisies.

@@ -8,6 +8,8 @@ const MESSAGES = {
     AUTH_REQUIRED: "Authentification requise.",
     SESSION_INVALID: "Session invalide ou expiree.",
     ROLE_FORBIDDEN: "Acces non autorise pour ce role.",
+    MODULE_FORBIDDEN: "Votre role n'a pas acces a ce module.",
+    LECTURE_SEULE_FORBIDDEN: "Votre role est en lecture seule : aucune modification n'est autorisee.",
 
     LOGIN_MISSING_FIELDS: "Email et mot de passe requis.",
     LOGIN_INVALID: "Identifiants incorrects.",
@@ -327,6 +329,8 @@ const MESSAGES = {
     AUTH_REQUIRED: "Authentication required.",
     SESSION_INVALID: "Invalid or expired session.",
     ROLE_FORBIDDEN: "Access not authorized for this role.",
+    MODULE_FORBIDDEN: "Your role does not have access to this module.",
+    LECTURE_SEULE_FORBIDDEN: "Your role is read-only: no changes are allowed.",
 
     LOGIN_MISSING_FIELDS: "Email and password are required.",
     LOGIN_INVALID: "Incorrect credentials.",

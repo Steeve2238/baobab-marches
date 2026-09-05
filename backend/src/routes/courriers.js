@@ -1,11 +1,13 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { rendreTemplate, construireContexte } = require("../services/courrierEngine");
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireModule("courriers"));
+router.use(blockLectureSeule);
 
 // ----------------------------------------------------------------------------
 // Modeles de courriers (tenant-scope)

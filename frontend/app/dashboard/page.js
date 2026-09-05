@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const [modelesCourrier, setModelesCourrier] = useState([]);
   const [utilisateurs, setUtilisateurs] = useState([]);
   const [roles, setRoles] = useState([]);
+  const [permissions, setPermissions] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [filtreGroupe, setFiltreGroupe] = useState(null);
@@ -42,47 +43,83 @@ export default function DashboardPage() {
   useEffect(() => {
     async function charger() {
       try {
+        // Permissions d'abord (systeme de permissions par role, 04-05/09/2026) :
+        // certains profils qui accedent au tableau de bord (tableauDeBord true)
+        // n'ont neanmoins pas tous les modules dans leur perimetre - ex.
+        // Directeur Financier (financement uniquement) ou Directeur Technique
+        // (pas financement/marches/courriers). On n'appelle donc que les
+        // routes de module que le profil connecte peut effectivement lire,
+        // pour ne jamais provoquer un 403 evitable.
+        const permissionsData = await api.getPermissions().catch(() => null);
+        setPermissions(permissionsData);
+        const modulesAutorises = permissionsData?.admin ? null : new Set(permissionsData?.modules || []);
+        const autorise = (moduleKey) => modulesAutorises === null || modulesAutorises.has(moduleKey);
+
         // Les stats "par domaine" ci-dessous s'appuient sur des listes
         // globales deja exposees par chaque module (pas de nouvelle route
         // backend) : ce sont des compteurs d'INVENTAIRE (ce qui est
         // configure aujourd'hui), pas encore des stats d'ACTIVITE agregees
         // sur l'ensemble des dossiers (montant total finance, delai moyen
         // reel...) - celles-ci demanderaient une route d'agregation dediee.
-        const [
-          dossiersData,
-          signauxData,
-          fournisseursData,
-          partenairesData,
-          incotermsData,
-          transitairesData,
-          modelesCourrierData,
-          utilisateursData,
-          rolesData,
-        ] = await Promise.all([
+        //
+        // Promise.allSettled (et non Promise.all, jusqu'au 05/09/2026) : avec
+        // Promise.all, un seul module hors du perimetre du profil connecte
+        // (403 attendu, pas une panne) faisait echouer TOUT le chargement et
+        // affichait une page d'erreur generique a la place du tableau de
+        // bord entier - y compris pour les sections auxquelles la personne a
+        // bien droit.
+        const resultats = await Promise.allSettled([
           api.getDossiers(),
           api.getSignaux(),
-          api.getFournisseurs(),
-          api.getPartenaires(),
-          api.getIncoterms(),
-          api.getTransitaires(),
-          api.getModelesCourrier(),
+          autorise("fournisseurs") ? api.getFournisseurs() : Promise.resolve([]),
+          autorise("financement") ? api.getPartenaires() : Promise.resolve([]),
+          autorise("logistique") ? api.getIncoterms() : Promise.resolve([]),
+          autorise("logistique") ? api.getTransitaires() : Promise.resolve([]),
+          autorise("courriers") ? api.getModelesCourrier() : Promise.resolve([]),
           api.getUtilisateurs(),
           api.getRoles(),
         ]);
-        setDossiers(dossiersData);
-        setSignaux(signauxData);
-        setFournisseurs(fournisseursData);
-        setPartenaires(partenairesData);
-        setIncoterms(incotermsData);
-        setTransitaires(transitairesData);
-        setModelesCourrier(modelesCourrierData);
-        setUtilisateurs(utilisateursData);
-        setRoles(rolesData);
+        const [
+          dossiersR,
+          signauxR,
+          fournisseursR,
+          partenairesR,
+          incotermsR,
+          transitairesR,
+          modelesCourrierR,
+          utilisateursR,
+          rolesR,
+        ] = resultats;
+
+        setDossiers(dossiersR.status === "fulfilled" ? dossiersR.value : []);
+        setSignaux(signauxR.status === "fulfilled" ? signauxR.value : []);
+        setFournisseurs(fournisseursR.status === "fulfilled" ? fournisseursR.value : []);
+        setPartenaires(partenairesR.status === "fulfilled" ? partenairesR.value : []);
+        setIncoterms(incotermsR.status === "fulfilled" ? incotermsR.value : []);
+        setTransitaires(transitairesR.status === "fulfilled" ? transitairesR.value : []);
+        setModelesCourrier(modelesCourrierR.status === "fulfilled" ? modelesCourrierR.value : []);
+        setUtilisateurs(utilisateursR.status === "fulfilled" ? utilisateursR.value : []);
+        setRoles(rolesR.status === "fulfilled" ? rolesR.value : []);
+
+        // Si TOUS les appels echouent, c'est vraisemblablement une session
+        // invalide/expiree (et non un simple 403 de perimetre localise) - on
+        // redirige alors vers la connexion, comme le faisait l'ancienne
+        // version a base de Promise.all pour toute erreur.
+        if (resultats.every((r) => r.status === "rejected")) {
+          const message = resultats[0].reason?.message || "";
+          if (
+            String(message).includes("Authentification") ||
+            String(message).includes("expiree") ||
+            String(message).includes("Authentication") ||
+            String(message).includes("expired")
+          ) {
+            router.push("/login");
+            return;
+          }
+          setErreur(message || t("defaultLoadError"));
+        }
       } catch (err) {
         setErreur(err.message || t("defaultLoadError"));
-        if (String(err.message).includes("Authentification") || String(err.message).includes("expiree") || String(err.message).includes("Authentication") || String(err.message).includes("expired")) {
-          router.push("/login");
-        }
       } finally {
         setChargement(false);
       }
@@ -122,9 +159,14 @@ export default function DashboardPage() {
   const nbAssurances = partenaires.filter((p) => p.type === "ASSURANCE").length;
   const utilisateursActifs = utilisateurs.filter((u) => u.actif).length;
 
-  const domaines = [
+  // moduleKey : null = jamais filtre (routes utilisateurs/roles non
+  // restreintes par module cote backend, voir routes/utilisateurs.js et
+  // roles.js) ; sinon la carte n'apparait que si le profil connecte a ce
+  // module dans son perimetre (memes cles que permissions.modules).
+  const domainesDefinis = [
     {
       href: "/fournisseurs",
+      moduleKey: "fournisseurs",
       titre: t("domainSuppliers"),
       lignes: [
         { valeur: fournisseurs.length, libelle: t("domainSuppliersCount") },
@@ -133,6 +175,7 @@ export default function DashboardPage() {
     },
     {
       href: "/financement",
+      moduleKey: "financement",
       titre: t("domainFinancing"),
       lignes: [
         { valeur: partenaires.length, libelle: t("domainPartnersCount") },
@@ -141,6 +184,7 @@ export default function DashboardPage() {
     },
     {
       href: "/logistique",
+      moduleKey: "logistique",
       titre: t("domainLogistics"),
       lignes: [
         { valeur: incoterms.length, libelle: t("domainIncotermsCount") },
@@ -149,11 +193,13 @@ export default function DashboardPage() {
     },
     {
       href: "/courriers",
+      moduleKey: "courriers",
       titre: t("domainLetters"),
       lignes: [{ valeur: modelesCourrier.length, libelle: t("domainTemplatesCount") }],
     },
     {
       href: "/utilisateurs",
+      moduleKey: null,
       titre: t("domainTeam"),
       lignes: [
         { valeur: `${utilisateursActifs} / ${utilisateurs.length}`, libelle: t("domainActiveUsers") },
@@ -161,6 +207,9 @@ export default function DashboardPage() {
       ],
     },
   ];
+  const domaines = domainesDefinis.filter(
+    (d) => !d.moduleKey || permissions?.admin || (permissions?.modules || []).includes(d.moduleKey)
+  );
 
   return (
     <AppShell title={t("navDashboard")}>
@@ -305,9 +354,15 @@ export default function DashboardPage() {
                   {t("clearFilter")}
                 </button>
               )}
-              <Link href="/dossiers/nouveau" style={boutonNouveauDossierStyle}>
-                + {t("newDossierButton")}
-              </Link>
+              {/* Masque en mode lecture seule (Directeur General) : le clic
+                  aboutirait de toute facon a un 403 cote backend
+                  (blockLectureSeule sur dossiers.js), autant ne pas exposer
+                  un bouton qui ne peut jamais fonctionner pour ce profil. */}
+              {!permissions?.lectureSeule && (
+                <Link href="/dossiers/nouveau" style={boutonNouveauDossierStyle}>
+                  + {t("newDossierButton")}
+                </Link>
+              )}
             </div>
           </div>
 

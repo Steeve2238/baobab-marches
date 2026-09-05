@@ -1,12 +1,14 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { evaluerExpression } = require("../services/regleEngine");
 const { evaluerRisqueLogistique } = require("../services/anticipationEngine");
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireModule("logistique"));
+router.use(blockLectureSeule);
 
 const CODE_FORMULE_DEFAUT = "COUT_LOGISTIQUE_STANDARD_DEFAUT";
 const EXPRESSION_DEFAUT =

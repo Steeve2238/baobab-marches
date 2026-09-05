@@ -75,6 +75,16 @@ router.post("/login", async (req, res) => {
   }
 });
 
+// GET /api/auth/permissions - permissions agregees de l'utilisateur connecte
+// (union de tous ses roles), calculees fraichement par requireAuth a chaque
+// requete - jamais mises en cache dans le token, pour que l'admin puisse
+// changer les permissions d'un role et voir l'effet immediatement, sans que
+// la personne concernee ait besoin de se reconnecter (meme principe que
+// req.user.roles). Consommee par AppShell pour construire le menu de gauche.
+router.get("/permissions", requireAuth, async (req, res) => {
+  res.json(req.user.permissions);
+});
+
 // POST /api/auth/changer-mot-de-passe
 router.post("/changer-mot-de-passe", requireAuth, async (req, res) => {
   const { nouveau_mot_de_passe } = req.body;

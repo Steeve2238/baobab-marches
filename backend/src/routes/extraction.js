@@ -1,12 +1,14 @@
 const express = require("express");
 const multer = require("multer");
 const db = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { extraireTexteFichier, extraireClauses } = require("../services/extractionEngine");
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireModule("dossiers"));
+router.use(blockLectureSeule);
 
 const MIMETYPES_ACCEPTES = [
   "application/pdf",

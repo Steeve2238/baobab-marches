@@ -1,10 +1,12 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
 const router = express.Router();
 router.use(requireAuth);
+router.use(requireModule("dossiers"));
+router.use(blockLectureSeule);
 
 // GET /api/dossiers - liste des dossiers du tenant courant
 router.get("/", async (req, res) => {
