@@ -18,6 +18,29 @@ const uploadLogo = multer({
   limits: { fileSize: 2 * 1024 * 1024 }, // 2 Mo
 });
 
+// Convertit une erreur Multer (ex : fichier trop volumineux) en reponse JSON
+// claire, au lieu de la laisser remonter jusqu'au gestionnaire d'erreur
+// generique de index.js (message non specifique "Erreur serveur inattendue").
+// Necessaire car un multer.MulterError leve pendant le parsing du flux
+// multipart survient AVANT le try/catch de la route - il faut l'intercepter
+// en enveloppant upload.single(...) plutot que de l'utiliser tel quel comme
+// middleware de route (bug reel rencontre le 05/09/2026 : upload d'un vrai
+// logo > 2 Mo renvoyait un message generique et illisible pour l'utilisateur).
+function televerserLogo(middlewareMulter) {
+  return (req, res, next) => {
+    middlewareMulter(req, res, (err) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ error: t(req, "VENTE_LOGO_TOO_LARGE") });
+        }
+        console.error(err);
+        return res.status(500).json({ error: t(req, "VENTE_LOGO_UPLOAD_ERROR") });
+      }
+      next();
+    });
+  };
+}
+
 // GET /api/parametres/entete
 router.get("/entete", async (req, res) => {
   try {
@@ -136,7 +159,7 @@ router.patch("/ventes", requireRole("ADMIN"), async (req, res) => {
 });
 
 // POST /api/parametres/ventes/logo
-router.post("/ventes/logo", requireRole("ADMIN"), uploadLogo.single("logo"), async (req, res) => {
+router.post("/ventes/logo", requireRole("ADMIN"), televerserLogo(uploadLogo.single("logo")), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: t(req, "VENTE_LOGO_FILE_REQUIRED") });
   }
