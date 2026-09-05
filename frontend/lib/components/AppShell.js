@@ -14,9 +14,8 @@ const NAV_ITEMS = [
   { href: "/logistique", key: "navLogistics" },
   { href: "/fournisseurs", key: "navSuppliers" },
   { href: "/courriers", key: "navLetters" },
-  { href: "/concurrence", key: "navConcurrence" },
   { href: "/parc-auto", key: "navParcAuto" },
-  { href: "/ventes/consultations", key: "navVentes" },
+  { href: "/marches", key: "navMarches" },
   { href: "/rh/demandes", key: "navDemandesRH" },
   { href: "/rh/fiches-temps", key: "navFichesTemps" },
   { href: "/rh/personnel", key: "navRH", adminOnly: true },
@@ -31,7 +30,7 @@ const NAV_ITEMS = [
  * zone de contenu. Utiliser sur chaque page apres connexion pour une
  * navigation coherente dans toute l'application.
  */
-export default function AppShell({ children, title, backHref, subNav }) {
+export default function AppShell({ children, title, backHref, backLabelKey, subNav }) {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useLangue();
@@ -88,7 +87,15 @@ export default function AppShell({ children, title, backHref, subNav }) {
             l'entree de navigation Ventes qui a fait deborder la liste). */}
         <nav style={{ padding: "8px 12px", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
           {navItems.map((item) => {
-            const actif = pathname === item.href;
+            // Egalite stricte ou prefixe (pour les modules a plusieurs
+            // sous-pages, ex "/marches/consultation-restreinte/devis" doit
+            // garder l'entree "Marche" active) - avant la fusion
+            // Ventes/Concurrence sous "Marche" (04/09/2026), seule l'egalite
+            // stricte etait utilisee et les sous-pages ne mettaient rien en
+            // surbrillance dans la barre laterale (la sous-navigation en
+            // haut de page suffisait pour ce cas precis, mais ne s'applique
+            // pas a l'ecran de choix /marches lui-meme).
+            const actif = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <Link
                 key={item.href}
@@ -184,7 +191,7 @@ export default function AppShell({ children, title, backHref, subNav }) {
                   href={backHref}
                   style={{ fontSize: 12.5, color: "var(--sub)", display: "block", marginBottom: 6 }}
                 >
-                  ← {t("backToDashboard")}
+                  ← {t(backLabelKey || "backToDashboard")}
                 </Link>
               )}
               {title && <h1 style={{ fontSize: 19, color: "var(--petrol)" }}>{title}</h1>}

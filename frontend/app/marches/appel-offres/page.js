@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "../../lib/api";
-import { useLangue } from "../../lib/i18n/LanguageContext";
-import AppShell from "../../lib/components/AppShell";
+import { api } from "../../../lib/api";
+import { useLangue } from "../../../lib/i18n/LanguageContext";
+import AppShell from "../../../lib/components/AppShell";
 
 const RESULTATS = ["GAGNE", "PERDU", "INFRUCTUEUX"];
 const NIVEAUX_RISQUE = ["FAIBLE", "MOYEN", "ELEVE"];
@@ -131,7 +131,7 @@ export default function ConcurrencePage() {
   }
 
   return (
-    <AppShell title={t("concurrencePageTitle")}>
+    <AppShell title={t("concurrencePageTitle")} backHref="/marches" backLabelKey="backToMarches">
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: -6, marginBottom: 16 }}>
         {t("concurrencePageSubtitle")}
       </p>

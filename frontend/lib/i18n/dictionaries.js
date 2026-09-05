@@ -285,9 +285,20 @@ export const DICTIONARIES = {
     noRoleOption: "Aucun rôle",
     noPersonOption: "Aucune personne",
 
-    navConcurrence: "Concurrence",
     concurrencePageTitle: "Intelligence concurrentielle & juridique",
     concurrencePageSubtitle: "Historique des offres concurrentes et bibliothèque de clauses à risque récurrentes.",
+
+    navMarches: "Marché",
+    backToMarches: "Changer de type de marché",
+    marchesPageTitle: "Marché",
+    marchesPageSubtitle: "Choisissez le type de marché à traiter.",
+    marchesConsultationRestreinteTitle: "Consultation restreinte",
+    marchesConsultationRestreinteDesc:
+      "Négoce privé : clients, devis, factures, bons de livraison, suivi et statistiques.",
+    marchesAppelOffresTitle: "Appel d'offres",
+    marchesAppelOffresDesc:
+      "Marchés publics soumis à mise en concurrence : maîtres d'ouvrage, historique de la concurrence, clauses à risque.",
+    marchesOuvrirLabel: "Ouvrir",
 
     maitreOuvrageLabel: "Maître d'ouvrage",
     selectMaitreOuvrage: "Sélectionner un maître d'ouvrage",
@@ -694,7 +705,6 @@ export const DICTIONARIES = {
     saInvoiceTypeAbonnement: "Abonnement mensuel",
     saGenerateInstallationInvoiceButton: "Générer la facture d'installation",
 
-    navVentes: "Ventes",
     navVentesConsultations: "Consultations",
     navVentesDevis: "Devis",
     navVentesFactures: "Factures",
@@ -1102,9 +1112,20 @@ export const DICTIONARIES = {
     noRoleOption: "No role",
     noPersonOption: "No person",
 
-    navConcurrence: "Competition",
     concurrencePageTitle: "Competitive & legal intelligence",
     concurrencePageSubtitle: "Competitor bid history and library of recurring risk clauses.",
+
+    navMarches: "Markets",
+    backToMarches: "Switch market type",
+    marchesPageTitle: "Markets",
+    marchesPageSubtitle: "Choose which type of market to work on.",
+    marchesConsultationRestreinteTitle: "Restricted consultation",
+    marchesConsultationRestreinteDesc:
+      "Private sales: clients, quotes, invoices, delivery notes, tracking and statistics.",
+    marchesAppelOffresTitle: "Public tender",
+    marchesAppelOffresDesc:
+      "Public contracts subject to competitive bidding: contracting authorities, competitor history, risk clauses.",
+    marchesOuvrirLabel: "Open",
 
     maitreOuvrageLabel: "Contracting authority",
     selectMaitreOuvrage: "Select a contracting authority",
@@ -1510,7 +1531,6 @@ export const DICTIONARIES = {
     saInvoiceTypeAbonnement: "Monthly subscription",
     saGenerateInstallationInvoiceButton: "Generate setup invoice",
 
-    navVentes: "Sales",
     navVentesConsultations: "Consultations",
     navVentesDevis: "Quotes",
     navVentesFactures: "Invoices",
