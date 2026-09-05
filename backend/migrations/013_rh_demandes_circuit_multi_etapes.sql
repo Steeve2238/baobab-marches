@@ -22,7 +22,7 @@
 -- chaine dediee pour eux via /rh/circuit-approbation.
 
 CREATE TABLE IF NOT EXISTS etape_approbation_rh (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     type_demande        TEXT NOT NULL,
     ordre               INTEGER NOT NULL,               -- 1, 2, 3... ordre de la chaine
@@ -56,7 +56,7 @@ ALTER TABLE demande_rh ADD COLUMN IF NOT EXISTS etape_courante INTEGER;
 -- une seule etape - remplace desormais le seul enregistrement final sur
 -- demande_rh pour les circuits a plusieurs etapes).
 CREATE TABLE IF NOT EXISTS decision_etape_demande_rh (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     demande_rh_id       UUID NOT NULL REFERENCES demande_rh(id) ON DELETE CASCADE,
     ordre               INTEGER NOT NULL,
     libelle             TEXT NOT NULL,

@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
@@ -103,11 +104,12 @@ router.post("/", async (req, res) => {
   try {
     const result = await db.query(
       `INSERT INTO dossier_ao
-         (tenant_id, reference_externe, intitule, maitre_ouvrage_id, secteur,
+         (id, tenant_id, reference_externe, intitule, maitre_ouvrage_id, secteur,
           montant_estime, devise, date_limite_soumission, statut)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'ANALYSE')
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ANALYSE')
        RETURNING *`,
       [
+        uuidv4(),
         req.user.tenantId,
         reference_externe || null,
         intitule,

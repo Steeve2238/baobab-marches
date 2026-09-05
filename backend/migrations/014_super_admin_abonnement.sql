@@ -22,7 +22,7 @@
 -- cette migration ajoute juste la reference vers la formule d'abonnement.
 
 CREATE TABLE IF NOT EXISTS administrateur_plateforme (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     email                   TEXT NOT NULL UNIQUE,
     nom                     TEXT NOT NULL,
     mot_de_passe_hash       TEXT NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS administrateur_plateforme (
 );
 
 CREATE TABLE IF NOT EXISTS formule_abonnement (
-    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                    UUID PRIMARY KEY,
     nom                   TEXT NOT NULL,
     plafond_utilisateurs  INTEGER,                        -- NULL = illimite
     prix_mensuel_xof      NUMERIC(12,0) NOT NULL,
@@ -47,7 +47,7 @@ ALTER TABLE tenant ADD COLUMN IF NOT EXISTS formule_abonnement_id UUID REFERENCE
 -- un changement de prix de la formule apres coup ne doit jamais modifier une
 -- facture deja generee.
 CREATE TABLE IF NOT EXISTS facture_abonnement (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     formule_abonnement_id   UUID REFERENCES formule_abonnement(id),
     formule_nom             TEXT NOT NULL,
@@ -67,21 +67,26 @@ CREATE INDEX IF NOT EXISTS idx_facture_abonnement_statut ON facture_abonnement(s
 -- Formules de depart proposees a Steeve (voir echange du 04/09/2026) -
 -- entierement modifiables ensuite depuis le Super Admin, ce ne sont que des
 -- valeurs de demarrage.
-INSERT INTO formule_abonnement (nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage)
-SELECT 'Essentiel', 5, 50000, 1
+-- gen_random_uuid()/uuid_generate_v4() indisponibles sur certains serveurs
+-- PostgreSQL mutualises (extensions pgcrypto/uuid-ossp absentes, sans acces
+-- superutilisateur pour les installer) : on genere l'identifiant avec
+-- md5(random()::text || clock_timestamp()::text)::uuid, qui ne depend que de
+-- fonctions du coeur de PostgreSQL et fonctionne sur toute version.
+INSERT INTO formule_abonnement (id, nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage)
+SELECT md5(random()::text || clock_timestamp()::text)::uuid, 'Essentiel', 5, 50000, 1
 WHERE NOT EXISTS (SELECT 1 FROM formule_abonnement WHERE nom = 'Essentiel');
 
-INSERT INTO formule_abonnement (nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage)
-SELECT 'Croissance', 15, 120000, 2
+INSERT INTO formule_abonnement (id, nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage)
+SELECT md5(random()::text || clock_timestamp()::text)::uuid, 'Croissance', 15, 120000, 2
 WHERE NOT EXISTS (SELECT 1 FROM formule_abonnement WHERE nom = 'Croissance');
 
-INSERT INTO formule_abonnement (nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage)
-SELECT 'Entreprise', NULL, 250000, 3
+INSERT INTO formule_abonnement (id, nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage)
+SELECT md5(random()::text || clock_timestamp()::text)::uuid, 'Entreprise', NULL, 250000, 3
 WHERE NOT EXISTS (SELECT 1 FROM formule_abonnement WHERE nom = 'Entreprise');
 
 -- Compte Super Admin de Steeve. Mot de passe temporaire : SuperAdmin@2026
 -- (hache bcrypt ci-dessous, cout 10) - a changer a la premiere connexion,
 -- comme pour tout nouveau compte utilisateur cree sur la plateforme.
-INSERT INTO administrateur_plateforme (email, nom, mot_de_passe_hash, mot_de_passe_temporaire)
-SELECT 'ymsgroupe@gmail.com', 'Steeve Yana', '$2a$10$93R0Mp3w8UZn2EG4lUzwteP38YJrS38NhRNpw7l4qO97LDRlK/VkO', true
+INSERT INTO administrateur_plateforme (id, email, nom, mot_de_passe_hash, mot_de_passe_temporaire)
+SELECT md5(random()::text || clock_timestamp()::text)::uuid, 'ymsgroupe@gmail.com', 'Steeve Yana', '$2a$10$93R0Mp3w8UZn2EG4lUzwteP38YJrS38NhRNpw7l4qO97LDRlK/VkO', true
 WHERE NOT EXISTS (SELECT 1 FROM administrateur_plateforme WHERE email = 'ymsgroupe@gmail.com');

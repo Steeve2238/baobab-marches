@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_fiche_temps_tenant ON fiche_temps(tenant_id);
 
 -- Lignes de saisie (v2) : plusieurs lignes possibles par jour.
 CREATE TABLE IF NOT EXISTS ligne_fiche_temps (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     fiche_temps_id      UUID NOT NULL REFERENCES fiche_temps(id) ON DELETE CASCADE,
     jour                DATE NOT NULL,
     domaine_type        TEXT NOT NULL,                 -- DOSSIER | AUTRE

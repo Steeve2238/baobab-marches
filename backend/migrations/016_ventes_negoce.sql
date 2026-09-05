@@ -60,7 +60,7 @@ ALTER TABLE tenant
 -- EAU...), a ne pas confondre avec les "tenants" de la plateforme Baobab.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS client_commercial (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     nom                 TEXT NOT NULL,
     adresse             TEXT,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS compteur_numerotation (
 -- repasser par une fiche de consultation.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS consultation (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     client_commercial_id    UUID NOT NULL REFERENCES client_commercial(id),
     objet                   TEXT NOT NULL,
@@ -113,7 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_consultation_statut ON consultation(statut);
 -- figes a chaque enregistrement des lignes (voir routes/ventes.js).
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS devis (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     numero                  TEXT NOT NULL,
     consultation_id         UUID REFERENCES consultation(id),
@@ -140,7 +140,7 @@ CREATE INDEX IF NOT EXISTS idx_devis_statut ON devis(statut);
 CREATE INDEX IF NOT EXISTS idx_devis_client ON devis(client_commercial_id);
 
 CREATE TABLE IF NOT EXISTS devis_ligne (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     devis_id            UUID NOT NULL REFERENCES devis(id) ON DELETE CASCADE,
     ordre               INTEGER NOT NULL DEFAULT 0,
     designation         TEXT NOT NULL,
@@ -159,7 +159,7 @@ CREATE INDEX IF NOT EXISTS idx_devis_ligne_devis ON devis_ligne(devis_id);
 -- lignes du devis a cet instant.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS facture_vente (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     numero                  TEXT NOT NULL,               -- ex "2026-096" (annee-sequence, sans le mois)
     mois_emission           INTEGER NOT NULL,             -- mois de generation, pour l'affichage "2026-08-096"
@@ -185,7 +185,7 @@ CREATE INDEX IF NOT EXISTS idx_facture_vente_statut ON facture_vente(statut);
 CREATE INDEX IF NOT EXISTS idx_facture_vente_client ON facture_vente(client_commercial_id);
 
 CREATE TABLE IF NOT EXISTS facture_vente_ligne (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     facture_vente_id    UUID NOT NULL REFERENCES facture_vente(id) ON DELETE CASCADE,
     ordre               INTEGER NOT NULL DEFAULT 0,
     designation         TEXT NOT NULL,
@@ -203,7 +203,7 @@ CREATE INDEX IF NOT EXISTS idx_facture_vente_ligne_facture ON facture_vente_lign
 -- facture pour couvrir le cas d'une livraison partielle.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS bon_livraison (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     numero                  TEXT NOT NULL,               -- identique au numero de la facture_vente liee
     mois_emission           INTEGER NOT NULL,
@@ -220,7 +220,7 @@ CREATE INDEX IF NOT EXISTS idx_bon_livraison_tenant ON bon_livraison(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_bon_livraison_facture ON bon_livraison(facture_vente_id);
 
 CREATE TABLE IF NOT EXISTS bon_livraison_ligne (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     bon_livraison_id    UUID NOT NULL REFERENCES bon_livraison(id) ON DELETE CASCADE,
     ordre               INTEGER NOT NULL DEFAULT 0,
     designation         TEXT NOT NULL,

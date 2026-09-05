@@ -1,4 +1,5 @@
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 
 const CODE_INDICATEUR_ECART_MARGE = "ECART_MARGE";
 const SEUILS_DEFAUT_ECART_MARGE = { alerte: 2, critique: 5 }; // en points de pourcentage
@@ -17,10 +18,11 @@ async function obtenirIndicateurEcartMarge(tenantId) {
   if (existant.rows[0]) return existant.rows[0];
 
   const cree = await db.query(
-    `INSERT INTO indicateur_definition (tenant_id, code, libelle, domaine, seuil_alerte_json)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO indicateur_definition (id, tenant_id, code, libelle, domaine, seuil_alerte_json)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
+      uuidv4(),
       tenantId,
       CODE_INDICATEUR_ECART_MARGE,
       "Ecart entre marge visee et marge reelle",
@@ -45,9 +47,9 @@ async function evaluerEcartMarge({ tenantId, dossierId, dossierIntitule, margePc
   const ecart = Number(margePctVisee) - Number(margePctReelle); // >0 = marge en dessous de la cible
 
   await db.query(
-    `INSERT INTO indicateur_valeur (indicateur_definition_id, dossier_ao_id, valeur)
-     VALUES ($1, $2, $3)`,
-    [indicateur.id, dossierId, ecart]
+    `INSERT INTO indicateur_valeur (id, indicateur_definition_id, dossier_ao_id, valeur)
+     VALUES ($1, $2, $3, $4)`,
+    [uuidv4(), indicateur.id, dossierId, ecart]
   );
 
   const seuils = indicateur.seuil_alerte_json || SEUILS_DEFAUT_ECART_MARGE;
@@ -82,10 +84,10 @@ async function evaluerEcartMarge({ tenantId, dossierId, dossierIntitule, margePc
   }
 
   const cree = await db.query(
-    `INSERT INTO signal_anticipation (tenant_id, dossier_ao_id, indicateur_definition_id, severite, message)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO signal_anticipation (id, tenant_id, dossier_ao_id, indicateur_definition_id, severite, message)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [tenantId, dossierId, indicateur.id, severite, message]
+    [uuidv4(), tenantId, dossierId, indicateur.id, severite, message]
   );
   return cree.rows[0];
 }
@@ -104,10 +106,11 @@ async function obtenirIndicateurRisqueLogistique(tenantId) {
   if (existant.rows[0]) return existant.rows[0];
 
   const cree = await db.query(
-    `INSERT INTO indicateur_definition (tenant_id, code, libelle, domaine, seuil_alerte_json)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO indicateur_definition (id, tenant_id, code, libelle, domaine, seuil_alerte_json)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
+      uuidv4(),
       tenantId,
       CODE_INDICATEUR_RISQUE_LOGISTIQUE,
       "Risque de retard / penalite logistique",
@@ -147,9 +150,9 @@ async function evaluerRisqueLogistique({
         )}, non encore receptionnee) - risque de penalite si la livraison n'est pas imminente.`;
 
   await db.query(
-    `INSERT INTO indicateur_valeur (indicateur_definition_id, dossier_ao_id, valeur)
-     VALUES ($1, $2, $3)`,
-    [indicateur.id, dossierId, statutPenalite === "ENCOURUE" ? 1 : 0.5]
+    `INSERT INTO indicateur_valeur (id, indicateur_definition_id, dossier_ao_id, valeur)
+     VALUES ($1, $2, $3, $4)`,
+    [uuidv4(), indicateur.id, dossierId, statutPenalite === "ENCOURUE" ? 1 : 0.5]
   );
 
   const signalExistant = await db.query(
@@ -170,10 +173,10 @@ async function evaluerRisqueLogistique({
   }
 
   const cree = await db.query(
-    `INSERT INTO signal_anticipation (tenant_id, dossier_ao_id, indicateur_definition_id, severite, message)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO signal_anticipation (id, tenant_id, dossier_ao_id, indicateur_definition_id, severite, message)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [tenantId, dossierId, indicateur.id, severite, message]
+    [uuidv4(), tenantId, dossierId, indicateur.id, severite, message]
   );
   return cree.rows[0];
 }

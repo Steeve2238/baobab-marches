@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
@@ -34,9 +35,9 @@ router.post("/", async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO maitre_ouvrage (tenant_id, nom, categorie, ppm_entite_id)
-       VALUES ($1, $2, $3, $4) RETURNING *`,
-      [req.user.tenantId, nom, categorie || null, ppm_entite_id || null]
+      `INSERT INTO maitre_ouvrage (id, tenant_id, nom, categorie, ppm_entite_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [uuidv4(), req.user.tenantId, nom, categorie || null, ppm_entite_id || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

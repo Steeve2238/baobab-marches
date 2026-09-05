@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { evaluerExpression, validerExpression } = require("../services/regleEngine");
@@ -43,10 +44,10 @@ router.post("/formules", async (req, res) => {
 
   try {
     const result = await db.query(
-      `INSERT INTO regle_formule (tenant_id, code, libelle, expression, description)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO regle_formule (id, tenant_id, code, libelle, expression, description)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [req.user.tenantId, code, libelle, expression, description || null]
+      [uuidv4(), req.user.tenantId, code, libelle, expression, description || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -153,10 +154,10 @@ router.post("/dossiers/:dossierId/parametres", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO regle_parametre (dossier_ao_id, regle_formule_id, parametres_json)
-       VALUES ($1, $2, $3)
+      `INSERT INTO regle_parametre (id, dossier_ao_id, regle_formule_id, parametres_json)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [dossierId, regle_formule_id, parametres_json || {}]
+      [uuidv4(), dossierId, regle_formule_id, parametres_json || {}]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

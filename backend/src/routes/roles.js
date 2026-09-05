@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
@@ -39,10 +40,11 @@ router.post("/", requireRole("ADMIN"), async (req, res) => {
 
   try {
     const result = await db.query(
-      `INSERT INTO role (tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO role (id, tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
+        uuidv4(),
         req.user.tenantId,
         code.trim().toUpperCase().replace(/\s+/g, "_"),
         libelle.trim(),

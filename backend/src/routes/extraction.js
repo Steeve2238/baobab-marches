@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { extraireTexteFichier, extraireClauses } = require("../services/extractionEngine");
@@ -58,11 +59,12 @@ router.post("/dossiers/:dossierId/analyser", upload.single("fichier"), async (re
     for (const clause of clausesCandidates) {
       const result = await db.query(
         `INSERT INTO clause_extraite
-           (dossier_ao_id, type_clause, libelle, valeur_numerique, valeur_texte,
+           (id, dossier_ao_id, type_clause, libelle, valeur_numerique, valeur_texte,
             article_reference, niveau_vigilance, valide_par_juridique)
-         VALUES ($1, $2, $3, $4, $5, $6, 'A_VERIFIER', false)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'A_VERIFIER', false)
          RETURNING *`,
         [
+          uuidv4(),
           dossierId,
           clause.type_clause,
           clause.libelle,

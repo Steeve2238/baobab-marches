@@ -1,6 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { genererMotDePasseTemporaire } = require("../utils/motDePasseTemporaire");
@@ -84,10 +85,10 @@ router.post("/", requireRole("ADMIN"), async (req, res) => {
     const hash = await bcrypt.hash(motDePasseTemporaire, 10);
 
     const userResult = await client.query(
-      `INSERT INTO utilisateur (tenant_id, nom, prenom, email, mot_de_passe_hash, mot_de_passe_temporaire)
-       VALUES ($1, $2, $3, $4, $5, true)
+      `INSERT INTO utilisateur (id, tenant_id, nom, prenom, email, mot_de_passe_hash, mot_de_passe_temporaire)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
        RETURNING id, nom, prenom, email, actif, mot_de_passe_temporaire, date_creation`,
-      [req.user.tenantId, nom, prenom, email, hash]
+      [uuidv4(), req.user.tenantId, nom, prenom, email, hash]
     );
     const utilisateur = userResult.rows[0];
 

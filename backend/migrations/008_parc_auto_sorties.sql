@@ -19,7 +19,7 @@ ALTER TABLE vehicule
     ADD COLUMN kilometrage_actuel NUMERIC(10,1);
 
 CREATE TABLE sortie_vehicule (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     vehicule_id             UUID NOT NULL REFERENCES vehicule(id),
     dossier_ao_id           UUID REFERENCES dossier_ao(id),      -- "activite liee", facultative

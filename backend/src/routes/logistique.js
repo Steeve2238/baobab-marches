@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { evaluerExpression } = require("../services/regleEngine");
@@ -22,10 +23,11 @@ async function obtenirFormuleParDefaut(tenantId) {
   if (existante.rows[0]) return existante.rows[0];
 
   const creee = await db.query(
-    `INSERT INTO regle_formule (tenant_id, code, libelle, expression, description)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO regle_formule (id, tenant_id, code, libelle, expression, description)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
+      uuidv4(),
       tenantId,
       CODE_FORMULE_DEFAUT,
       "Cout logistique standard (assurance + transport + douane + manutention)",
@@ -80,10 +82,10 @@ router.post("/incoterms", async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO incoterm_scenario (tenant_id, code, repartition_couts_json, regle_calcul_id)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO incoterm_scenario (id, tenant_id, code, repartition_couts_json, regle_calcul_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [req.user.tenantId, code, repartition_couts_json || {}, regle_calcul_id || null]
+      [uuidv4(), req.user.tenantId, code, repartition_couts_json || {}, regle_calcul_id || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -193,10 +195,10 @@ router.post("/transitaires", async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO transitaire (tenant_id, nom, contact_json)
-       VALUES ($1, $2, $3)
+      `INSERT INTO transitaire (id, tenant_id, nom, contact_json)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [req.user.tenantId, nom, contact_json || {}]
+      [uuidv4(), req.user.tenantId, nom, contact_json || {}]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -237,10 +239,11 @@ router.post("/transitaires/:id/historique", async (req, res) => {
     }
     const result = await db.query(
       `INSERT INTO transitaire_historique
-         (transitaire_id, dossier_ao_id, delai_jours, retard, difficulte_type, date_expedition, date_livraison)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+         (id, transitaire_id, dossier_ao_id, delai_jours, retard, difficulte_type, date_expedition, date_livraison)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
+        uuidv4(),
         id,
         dossier_ao_id || null,
         delai_jours || null,
@@ -307,11 +310,12 @@ router.post("/dossiers/:dossierId/suivis", async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO suivi_logistique
-         (dossier_ao_id, transitaire_id, incoterm_scenario_id, date_depart,
+         (id, dossier_ao_id, transitaire_id, incoterm_scenario_id, date_depart,
           date_arrivee_prevue, date_arrivee_reelle, montant_ttc, statut_penalite)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
       [
+        uuidv4(),
         dossierId,
         transitaire_id || null,
         incoterm_scenario_id || null,

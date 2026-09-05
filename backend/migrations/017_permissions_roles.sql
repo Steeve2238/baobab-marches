@@ -34,22 +34,28 @@ ALTER TABLE role
 -- Roles, comme n'importe quel autre role.
 -- --------------------------------------------------------------------------
 
-INSERT INTO role (tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
-SELECT t.id, 'ADMINISTRATIF', 'Assistant(e) administratif(ve)',
+-- gen_random_uuid()/uuid_generate_v4() indisponibles sur certains serveurs
+-- PostgreSQL mutualises (extensions pgcrypto/uuid-ossp absentes, sans acces
+-- superutilisateur pour les installer) : on genere un identifiant distinct par
+-- ligne (une par tenant existant) avec md5(random()::text ||
+-- clock_timestamp()::text)::uuid, qui ne depend que de fonctions du coeur de
+-- PostgreSQL et fonctionne sur toute version.
+INSERT INTO role (id, tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
+SELECT md5(random()::text || clock_timestamp()::text || t.id::text)::uuid, t.id, 'ADMINISTRATIF', 'Assistant(e) administratif(ve)',
        '{"modules":["marches","parc-auto","logistique","fournisseurs","courriers"],"tableauDeBord":false}'::jsonb,
        false, false
 FROM tenant t
 ON CONFLICT (tenant_id, code) DO NOTHING;
 
-INSERT INTO role (tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
-SELECT t.id, 'COMPTABLE', 'Assistant(e) comptable',
+INSERT INTO role (id, tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
+SELECT md5(random()::text || clock_timestamp()::text || t.id::text)::uuid, t.id, 'COMPTABLE', 'Assistant(e) comptable',
        '{"modules":["marches","parc-auto","logistique","fournisseurs","courriers"],"tableauDeBord":false}'::jsonb,
        false, false
 FROM tenant t
 ON CONFLICT (tenant_id, code) DO NOTHING;
 
-INSERT INTO role (tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
-SELECT t.id, 'TECHNIQUE', 'Directeur(trice) technique',
+INSERT INTO role (id, tenant_id, code, libelle, perimetre_json, lecture_seule, validateur_universel)
+SELECT md5(random()::text || clock_timestamp()::text || t.id::text)::uuid, t.id, 'TECHNIQUE', 'Directeur(trice) technique',
        '{"modules":["dossiers","logistique","parc-auto","fournisseurs"],"tableauDeBord":true}'::jsonb,
        false, false
 FROM tenant t

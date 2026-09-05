@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { genererChronogrammeStandard } = require("../services/chronogrammeEngine");
@@ -140,10 +141,10 @@ router.post("/:dossierId/generer", async (req, res) => {
     for (const tache of taches) {
       const result = await db.query(
         `INSERT INTO chronogramme_tache
-           (dossier_ao_id, phase, intitule, jalon_relatif, date_echeance, statut, ordre_affichage)
-         VALUES ($1, $2, $3, $4, $5, 'A_FAIRE', $6)
+           (id, dossier_ao_id, phase, intitule, jalon_relatif, date_echeance, statut, ordre_affichage)
+         VALUES ($1, $2, $3, $4, $5, $6, 'A_FAIRE', $7)
          RETURNING *`,
-        [dossierId, tache.phase, tache.intitule, tache.jalon_relatif, tache.date_echeance, tache.ordre_affichage]
+        [uuidv4(), dossierId, tache.phase, tache.intitule, tache.jalon_relatif, tache.date_echeance, tache.ordre_affichage]
       );
       inserees.push(result.rows[0]);
     }
@@ -194,11 +195,12 @@ router.post("/:dossierId/taches", async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO chronogramme_tache
-         (dossier_ao_id, phase, intitule, jalon_relatif, date_echeance, role_porteur_id,
+         (id, dossier_ao_id, phase, intitule, jalon_relatif, date_echeance, role_porteur_id,
           assigne_utilisateur_id, document_attendu, statut, ordre_affichage)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'A_FAIRE', COALESCE($9, 0))
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'A_FAIRE', COALESCE($10, 0))
        RETURNING *`,
       [
+        uuidv4(),
         dossierId,
         phase,
         intitule,

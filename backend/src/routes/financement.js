@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { evaluerExpression } = require("../services/regleEngine");
@@ -37,10 +38,11 @@ async function obtenirFormuleParDefaut(tenantId) {
   if (existante.rows[0]) return existante.rows[0];
 
   const creee = await db.query(
-    `INSERT INTO regle_formule (tenant_id, code, libelle, expression, description)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO regle_formule (id, tenant_id, code, libelle, expression, description)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
     [
+      uuidv4(),
       tenantId,
       CODE_FORMULE_DEFAUT,
       "Cout standard d'une facilite (interet + commission + TAF)",
@@ -77,10 +79,10 @@ router.post("/partenaires", async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO partenaire_financier (tenant_id, nom, type_partenaire, contact_json)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO partenaire_financier (id, tenant_id, nom, type_partenaire, contact_json)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [req.user.tenantId, nom, type_partenaire, contact_json || {}]
+      [uuidv4(), req.user.tenantId, nom, type_partenaire, contact_json || {}]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -128,10 +130,10 @@ router.post("/partenaires/:id/grilles", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO grille_tarifaire (tenant_id, partenaire_id, version_label, date_effet)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO grille_tarifaire (id, tenant_id, partenaire_id, version_label, date_effet)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [req.user.tenantId, id, version_label, date_effet || null]
+      [uuidv4(), req.user.tenantId, id, version_label, date_effet || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -216,11 +218,12 @@ router.post("/grilles/:id/lignes", async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO ligne_credit_tarif
-         (grille_tarifaire_id, type_facilite, taux_annuel, commission_pct, taf_pct,
+         (id, grille_tarifaire_id, type_facilite, taux_annuel, commission_pct, taf_pct,
           forfait_min_periode, periode_facturation, plafond_montant, regle_formule_id)
-       VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'TRIMESTRE'), $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'TRIMESTRE'), $9, $10)
        RETURNING *`,
       [
+        uuidv4(),
         id,
         type_facilite,
         taux_annuel || null,
@@ -384,10 +387,11 @@ router.post("/dossiers/:dossierId/simulations", async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO simulation_financement
-         (dossier_ao_id, type_besoin, montant, duree_estimee_jours, resultat_json, option_recommandee_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
+         (id, dossier_ao_id, type_besoin, montant, duree_estimee_jours, resultat_json, option_recommandee_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
+        uuidv4(),
         dossierId,
         type_besoin,
         montant,

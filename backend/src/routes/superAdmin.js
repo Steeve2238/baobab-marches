@@ -1,6 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { signToken } = require("../utils/jwt");
 const { requireSuperAdmin } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
@@ -176,16 +177,16 @@ router.post("/clients", async (req, res) => {
     await client.query("BEGIN");
 
     const tenantResult = await client.query(
-      `INSERT INTO tenant (raison_sociale, secteur_activite, pays, formule_abonnement_id)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO tenant (id, raison_sociale, secteur_activite, pays, formule_abonnement_id)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
-      [raison_sociale, secteur_activite || null, pays || "Senegal", formule_abonnement_id || null]
+      [uuidv4(), raison_sociale, secteur_activite || null, pays || "Senegal", formule_abonnement_id || null]
     );
     const tenantId = tenantResult.rows[0].id;
 
     const roleResult = await client.query(
-      `INSERT INTO role (tenant_id, code, libelle) VALUES ($1, 'ADMIN', 'Administrateur') RETURNING id`,
-      [tenantId]
+      `INSERT INTO role (id, tenant_id, code, libelle) VALUES ($1, $2, 'ADMIN', 'Administrateur') RETURNING id`,
+      [uuidv4(), tenantId]
     );
     const roleAdminId = roleResult.rows[0].id;
 
@@ -193,10 +194,10 @@ router.post("/clients", async (req, res) => {
     const hash = await bcrypt.hash(motDePasseTemporaire, 10);
 
     const userResult = await client.query(
-      `INSERT INTO utilisateur (tenant_id, nom, prenom, email, mot_de_passe_hash, mot_de_passe_temporaire)
-       VALUES ($1, $2, $3, $4, $5, true)
+      `INSERT INTO utilisateur (id, tenant_id, nom, prenom, email, mot_de_passe_hash, mot_de_passe_temporaire)
+       VALUES ($1, $2, $3, $4, $5, $6, true)
        RETURNING id, nom, prenom, email`,
-      [tenantId, admin_nom, admin_prenom, admin_email, hash]
+      [uuidv4(), tenantId, admin_nom, admin_prenom, admin_email, hash]
     );
     const adminUser = userResult.rows[0];
 
@@ -215,10 +216,10 @@ router.post("/clients", async (req, res) => {
       if (formule && Number(formule.frais_installation_xof) > 0) {
         const periode = new Date().toISOString().slice(0, 7);
         const factureResult = await client.query(
-          `INSERT INTO facture_abonnement (tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
-           VALUES ($1, $2, $3, $4, $5, 'INSTALLATION')
+          `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
+           VALUES ($1, $2, $3, $4, $5, $6, 'INSTALLATION')
            RETURNING id`,
-          [tenantId, formule_abonnement_id, formule.nom, periode, formule.frais_installation_xof]
+          [uuidv4(), tenantId, formule_abonnement_id, formule.nom, periode, formule.frais_installation_xof]
         );
         factureInstallationId = factureResult.rows[0].id;
       }
@@ -342,9 +343,9 @@ router.post("/formules", async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO formule_abonnement (nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, frais_installation_xof)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [nom, plafond_utilisateurs || null, prix_mensuel_xof, ordre_affichage || 0, frais_installation_xof || 0]
+      `INSERT INTO formule_abonnement (id, nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, frais_installation_xof)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [uuidv4(), nom, plafond_utilisateurs || null, prix_mensuel_xof, ordre_affichage || 0, frais_installation_xof || 0]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -457,10 +458,10 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO facture_abonnement (tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
-       VALUES ($1, $2, $3, $4, $5, 'ABONNEMENT')
+      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ABONNEMENT')
        RETURNING id`,
-      [client.id, client.formule_abonnement_id, client.formule_nom, periode, client.prix_mensuel_xof]
+      [uuidv4(), client.id, client.formule_abonnement_id, client.formule_nom, periode, client.prix_mensuel_xof]
     );
 
     const factureResult = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [result.rows[0].id]);
@@ -502,10 +503,10 @@ router.post("/clients/:id/factures/generer-installation", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO facture_abonnement (tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
-       VALUES ($1, $2, $3, $4, $5, 'INSTALLATION')
+      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
+       VALUES ($1, $2, $3, $4, $5, $6, 'INSTALLATION')
        RETURNING id`,
-      [client.id, client.formule_abonnement_id, client.formule_nom, periode, client.frais_installation_xof]
+      [uuidv4(), client.id, client.formule_abonnement_id, client.formule_nom, periode, client.frais_installation_xof]
     );
 
     const factureResult = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [result.rows[0].id]);

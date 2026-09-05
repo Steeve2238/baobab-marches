@@ -24,7 +24,7 @@
 -- Le role ADMIN n'a pas besoin de figurer ici : il valide toujours tout
 -- (meme convention que requireRole cote backend).
 CREATE TABLE IF NOT EXISTS regle_approbation_rh (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     role_demandeur_id       UUID NOT NULL REFERENCES role(id) ON DELETE CASCADE,
     role_approbateur_id     UUID NOT NULL REFERENCES role(id) ON DELETE CASCADE,
@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS regle_approbation_rh (
 );
 
 CREATE TABLE IF NOT EXISTS demande_rh (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     employe_id              UUID NOT NULL REFERENCES employe(id) ON DELETE CASCADE,
     type_demande            TEXT NOT NULL,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS demande_rh (
 -- Historique des mouvements de solde de conges (audit), un mouvement par
 -- demande de type CONGE approuvee. Equivalent de rh_conges chez OGAA.
 CREATE TABLE IF NOT EXISTS conge_historique (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     employe_id              UUID NOT NULL REFERENCES employe(id) ON DELETE CASCADE,
     demande_rh_id           UUID NOT NULL REFERENCES demande_rh(id) ON DELETE CASCADE,

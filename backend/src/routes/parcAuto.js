@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
@@ -143,9 +144,9 @@ router.post("/vehicules", async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO vehicule (tenant_id, immatriculation, marque_modele, affectation_service, kilometrage_actuel)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.user.tenantId, immatriculation, marque_modele || null, affectation_service || null, kilometrage_actuel || null]
+      `INSERT INTO vehicule (id, tenant_id, immatriculation, marque_modele, affectation_service, kilometrage_actuel)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [uuidv4(), req.user.tenantId, immatriculation, marque_modele || null, affectation_service || null, kilometrage_actuel || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -317,12 +318,13 @@ router.post("/sorties", async (req, res) => {
 
     const inserted = await db.query(
       `INSERT INTO sortie_vehicule
-         (tenant_id, vehicule_id, dossier_ao_id, chauffeur_nom, chef_mission_nom, passagers,
+         (id, tenant_id, vehicule_id, dossier_ao_id, chauffeur_nom, chef_mission_nom, passagers,
           localite_depart, destination, itineraire, date_depart, kilometrage_depart,
           niveau_carburant_depart, statut)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, now()), $11, $12, 'EN_COURS')
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, now()), $12, $13, 'EN_COURS')
        RETURNING id`,
       [
+        uuidv4(),
         req.user.tenantId,
         vehicule_id,
         dossier_ao_id || null,
@@ -516,11 +518,12 @@ router.post("/entretiens", async (req, res) => {
 
     const inserted = await db.query(
       `INSERT INTO entretien_vehicule
-         (tenant_id, vehicule_id, type_entretien, date_entretien, kilometrage, prestataire,
+         (id, tenant_id, vehicule_id, type_entretien, date_entretien, kilometrage, prestataire,
           description, pieces_changees, cout, prochain_entretien_date, prochain_entretien_km, statut)
-       VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING id`,
       [
+        uuidv4(),
         req.user.tenantId,
         vehicule_id,
         type_entretien,

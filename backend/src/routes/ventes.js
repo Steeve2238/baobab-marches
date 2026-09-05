@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireRole, requireRoleOuValidateurUniversel, requireModule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
@@ -185,9 +186,9 @@ router.post("/clients", requireRole(...ROLES_CREATION, ...ROLES_FACTURATION), as
   }
   try {
     const result = await db.query(
-      `INSERT INTO client_commercial (tenant_id, nom, adresse, telephone, email)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [req.user.tenantId, nom.trim(), adresse || null, telephone || null, email || null]
+      `INSERT INTO client_commercial (id, tenant_id, nom, adresse, telephone, email)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [uuidv4(), req.user.tenantId, nom.trim(), adresse || null, telephone || null, email || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -248,9 +249,9 @@ router.post("/consultations", requireRole(...ROLES_CREATION), async (req, res) =
   }
   try {
     const result = await db.query(
-      `INSERT INTO consultation (tenant_id, client_commercial_id, objet, date_reception, notes, cree_par)
-       VALUES ($1, $2, $3, COALESCE($4, CURRENT_DATE), $5, $6) RETURNING *`,
-      [req.user.tenantId, client_commercial_id, objet.trim(), date_reception || null, notes || null, req.user.sub]
+      `INSERT INTO consultation (id, tenant_id, client_commercial_id, objet, date_reception, notes, cree_par)
+       VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7) RETURNING *`,
+      [uuidv4(), req.user.tenantId, client_commercial_id, objet.trim(), date_reception || null, notes || null, req.user.sub]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -356,13 +357,13 @@ router.post("/devis", requireRole(...ROLES_CREATION), async (req, res) => {
     const numero = formaterNumeroDevis(annee, mois, sequence);
 
     const devisResult = await client.query(
-      `INSERT INTO devis (tenant_id, numero, consultation_id, client_commercial_id, objet, date_devis,
+      `INSERT INTO devis (id, tenant_id, numero, consultation_id, client_commercial_id, objet, date_devis,
                            conditions_paiement, delai_livraison, validite_offre, taux_tva_pourcentage,
                            total_ht, montant_tva, total_ttc, cree_par)
-       VALUES ($1,$2,$3,$4,$5,COALESCE($6, CURRENT_DATE),$7,$8,$9,$10,$11,$12,$13,$14)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,$13,$14,$15)
        RETURNING *`,
       [
-        req.user.tenantId, numero, consultation_id || null, client_commercial_id, objet || null, date_devis || null,
+        uuidv4(), req.user.tenantId, numero, consultation_id || null, client_commercial_id, objet || null, date_devis || null,
         conditions_paiement || null, delai_livraison || null, validite_offre || null, tauxTva,
         calcul.total_ht, calcul.montant_tva, calcul.total_ttc, req.user.sub,
       ]
@@ -372,9 +373,9 @@ router.post("/devis", requireRole(...ROLES_CREATION), async (req, res) => {
     let ordre = 0;
     for (const ligne of calcul.lignes) {
       await client.query(
-        `INSERT INTO devis_ligne (devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [devis.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
+        `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [uuidv4(), devis.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
       );
     }
 
@@ -435,9 +436,9 @@ router.patch("/devis/:id", requireRole(...ROLES_CREATION), async (req, res) => {
       let ordre = 0;
       for (const ligne of calcul.lignes) {
         await client.query(
-          `INSERT INTO devis_ligne (devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
-           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-          [id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
+          `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [uuidv4(), id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
         );
       }
       totaux = calcul;
@@ -617,12 +618,12 @@ router.post("/devis/:id/generer-facture", requireRole(...ROLES_FACTURATION), asy
     const numero = formaterNumeroVente(annee, sequence);
 
     const factureResult = await client.query(
-      `INSERT INTO facture_vente (tenant_id, numero, mois_emission, devis_id, client_commercial_id,
+      `INSERT INTO facture_vente (id, tenant_id, numero, mois_emission, devis_id, client_commercial_id,
                                    reference_bc_client, taux_tva_pourcentage, total_ht, montant_tva, total_ttc,
                                    date_echeance, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [
-        req.user.tenantId, numero, mois, id, devis.client_commercial_id,
+        uuidv4(), req.user.tenantId, numero, mois, id, devis.client_commercial_id,
         reference_bc_client || null, devis.taux_tva_pourcentage, devis.total_ht, devis.montant_tva, devis.total_ttc,
         date_echeance || null, req.user.sub,
       ]
@@ -632,9 +633,9 @@ router.post("/devis/:id/generer-facture", requireRole(...ROLES_FACTURATION), asy
     let ordre = 0;
     for (const ligne of lignesDevis) {
       await client.query(
-        `INSERT INTO facture_vente_ligne (facture_vente_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [facture.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
+        `INSERT INTO facture_vente_ligne (id, facture_vente_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [uuidv4(), facture.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
       );
     }
 
@@ -786,18 +787,18 @@ router.post("/factures/:id/generer-bl", requireRole(...ROLES_FACTURATION), async
     // tirage sur le compteur VENTE) : reproduit la pratique observee chez
     // Steeve ou Facture et BL d'une meme transaction portent le meme numero.
     const blResult = await client.query(
-      `INSERT INTO bon_livraison (tenant_id, numero, mois_emission, facture_vente_id, client_commercial_id, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [req.user.tenantId, facture.numero, facture.mois_emission, id, facture.client_commercial_id, req.user.sub]
+      `INSERT INTO bon_livraison (id, tenant_id, numero, mois_emission, facture_vente_id, client_commercial_id, cree_par)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [uuidv4(), req.user.tenantId, facture.numero, facture.mois_emission, id, facture.client_commercial_id, req.user.sub]
     );
     const bl = blResult.rows[0];
 
     let ordre = 0;
     for (const ligne of lignesFacture) {
       await client.query(
-        `INSERT INTO bon_livraison_ligne (bon_livraison_id, ordre, designation, unite, quantite_livree)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [bl.id, ordre++, ligne.designation, ligne.unite, ligne.quantite]
+        `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [uuidv4(), bl.id, ordre++, ligne.designation, ligne.unite, ligne.quantite]
       );
     }
 
@@ -839,9 +840,9 @@ router.patch("/bl/:id", requireRole(...ROLES_FACTURATION), async (req, res) => {
         const quantite = Number(ligne.quantite_livree);
         if (!ligne.designation || !Number.isFinite(quantite) || quantite < 0) continue;
         await client.query(
-          `INSERT INTO bon_livraison_ligne (bon_livraison_id, ordre, designation, unite, quantite_livree)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [id, ordre++, ligne.designation, ligne.unite || "U", quantite]
+          `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [uuidv4(), id, ordre++, ligne.designation, ligne.unite || "U", quantite]
         );
       }
     }

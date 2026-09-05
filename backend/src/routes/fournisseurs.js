@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
@@ -56,8 +57,8 @@ router.post("/", async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO fournisseur (tenant_id, nom, pays) VALUES ($1, $2, $3) RETURNING *`,
-      [req.user.tenantId, nom, pays || null]
+      `INSERT INTO fournisseur (id, tenant_id, nom, pays) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [uuidv4(), req.user.tenantId, nom, pays || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -136,11 +137,12 @@ router.post("/dossiers/:dossierId/offres", async (req, res) => {
 
     const inserted = await db.query(
       `INSERT INTO offre_fournisseur
-         (dossier_ao_id, fournisseur_id, prix_exw, devise, delai_jours, delai_paiement_jours,
+         (id, dossier_ao_id, fournisseur_id, prix_exw, devise, delai_jours, delai_paiement_jours,
           condition_reglement, pourcentage_acompte, incoterm_scenario_id)
-       VALUES ($1, $2, $3, COALESCE($4, 'XOF'), $5, $6, $7, $8, $9)
+       VALUES ($1, $2, $3, $4, COALESCE($5, 'XOF'), $6, $7, $8, $9, $10)
        RETURNING id`,
       [
+        uuidv4(),
         dossierId,
         fournisseur_id,
         prix_exw || null,

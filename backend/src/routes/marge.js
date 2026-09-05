@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { evaluerEcartMarge } = require("../services/anticipationEngine");
@@ -100,12 +101,13 @@ router.post("/dossiers/:dossierId", async (req, res) => {
 
     const result = await db.query(
       `INSERT INTO calcul_marge
-         (dossier_ao_id, prix_achat_devise, taux_change, prix_cif, frais_douane_transit,
+         (id, dossier_ao_id, prix_achat_devise, taux_change, prix_cif, frais_douane_transit,
           frais_bancaires, frais_dao_caution, redevance_armp, cout_revient,
           marge_pct_visee, marge_pct_reelle, prix_final_ht_hd)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
+        uuidv4(),
         dossierId,
         champs.prix_achat_devise || null,
         champs.taux_change || null,

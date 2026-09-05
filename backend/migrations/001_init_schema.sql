@@ -23,14 +23,13 @@
 --      reference) afin que ce script s'execute tel quel sans erreur.
 -- ============================================================================
 
-CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- pour gen_random_uuid()
 
 -- ============================================================================
 -- 0. TENANTS, UTILISATEURS, ROLES (transverse a tous les modules)
 -- ============================================================================
 
 CREATE TABLE tenant (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     raison_sociale          TEXT NOT NULL,
     secteur_activite        TEXT,                      -- ex: BTP, import/export, industriel
     pays                    TEXT DEFAULT 'Senegal',
@@ -39,7 +38,7 @@ CREATE TABLE tenant (
 );
 
 CREATE TABLE utilisateur (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     nom                     TEXT NOT NULL,
     prenom                  TEXT NOT NULL,
@@ -52,7 +51,7 @@ CREATE TABLE utilisateur (
 
 -- Roles : librement definis par tenant (section 3 du CDC : pas de liste figee)
 CREATE TABLE role (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     code                TEXT NOT NULL,               -- ex: COMMERCIAL, FINANCIER, JURIDIQUE, TRANSIT, CONDUCTEUR_TRAVAUX, RH, DIRECTION, ADMIN
     libelle             TEXT NOT NULL,
@@ -75,7 +74,7 @@ CREATE TABLE utilisateur_role (
 -- ============================================================================
 
 CREATE TABLE regle_formule (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     code                TEXT NOT NULL,                    -- ex: REVISION_PRIX_ACT, PENALITE_RETARD, REMBOURSEMENT_AVANCE, INCOTERM_REPARTITION
     libelle             TEXT NOT NULL,
@@ -92,7 +91,7 @@ CREATE TABLE regle_formule (
 -- --- SOCLE COMMUN (mutualise entre tous les clients de la plateforme, PAS de tenant_id) ---
 
 CREATE TABLE ppm_shared_entite (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     nom                 TEXT NOT NULL,
     categorie           TEXT,                             -- Etat | Collectivite locale | Etablissement public | Societe nationale | Agence | Service deconcentre | Autre
     identifiant_source  TEXT,                              -- ex: idautorite du portail source
@@ -100,7 +99,7 @@ CREATE TABLE ppm_shared_entite (
 );
 
 CREATE TABLE ppm_shared_publication (
-    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                     UUID PRIMARY KEY,
     ppm_shared_entite_id   UUID NOT NULL REFERENCES ppm_shared_entite(id) ON DELETE CASCADE,
     annee_gestion          INTEGER NOT NULL,
     version_label          TEXT NOT NULL,                  -- ex: "Version 2 du 13/03/2026"
@@ -109,7 +108,7 @@ CREATE TABLE ppm_shared_publication (
 );
 
 CREATE TABLE ppm_shared_ligne (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                          UUID PRIMARY KEY,
     ppm_shared_publication_id  UUID NOT NULL REFERENCES ppm_shared_publication(id) ON DELETE CASCADE,
     reference                   TEXT NOT NULL,              -- ex: "F_DD_298"
     realisation_envisagee       TEXT NOT NULL,
@@ -127,7 +126,7 @@ CREATE TABLE ppm_shared_ligne (
 -- --- COUCHE PRIVEE (strictement cloisonnee par tenant) ---
 
 CREATE TABLE ppm_private_annotation (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     ppm_shared_ligne_id UUID NOT NULL REFERENCES ppm_shared_ligne(id) ON DELETE CASCADE,
     score_opportunite   NUMERIC(5,2),                       -- calcule a partir de l'historique propre au tenant
@@ -142,7 +141,7 @@ CREATE TABLE ppm_private_annotation (
 -- ============================================================================
 
 CREATE TABLE maitre_ouvrage (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     nom                 TEXT NOT NULL,
     categorie           TEXT,                               -- Etat, Collectivite locale, Etablissement public, Societe nationale...
@@ -150,7 +149,7 @@ CREATE TABLE maitre_ouvrage (
 );
 
 CREATE TABLE dossier_ao (
-    id                          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                          UUID PRIMARY KEY,
     tenant_id                   UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     reference_externe           TEXT,                        -- ex: "AO N 39/2021"
     intitule                    TEXT NOT NULL,
@@ -169,7 +168,7 @@ CREATE TABLE dossier_ao (
 
 -- Clauses extraites automatiquement du DAO (garanties, penalites, delais...)
 CREATE TABLE clause_extraite (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     type_clause         TEXT NOT NULL,
                         -- GARANTIE_SOUMISSION | GARANTIE_BONNE_EXECUTION | RETENUE_GARANTIE | AVANCE_DEMARRAGE
@@ -186,7 +185,7 @@ CREATE TABLE clause_extraite (
 
 -- Chronogramme retro-planifie (avant + apres soumission)
 CREATE TABLE chronogramme_tache (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     phase               TEXT NOT NULL,                        -- AVANT_SOUMISSION | NON_ATTRIBUTION | ATTRIBUTION_EXECUTION
     intitule            TEXT NOT NULL,
@@ -203,7 +202,7 @@ CREATE TABLE chronogramme_tache (
 -- ============================================================================
 
 CREATE TABLE partenaire_financier (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     nom                 TEXT NOT NULL,
     type_partenaire     TEXT NOT NULL,                        -- BANQUE | ASSURANCE
@@ -212,7 +211,7 @@ CREATE TABLE partenaire_financier (
 
 -- Grille tarifaire versionnee (statut EN_NEGOCIATION / ACTIVE - section 5.2 / 21.3)
 CREATE TABLE grille_tarifaire (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     partenaire_id       UUID NOT NULL REFERENCES partenaire_financier(id) ON DELETE CASCADE,
     version_label       TEXT NOT NULL,                        -- ex: "Proposition 22/07/2026"
@@ -223,7 +222,7 @@ CREATE TABLE grille_tarifaire (
 
 -- Une ligne = une facilite (LC, aval de traite, credit relais, avance sur marche...)
 CREATE TABLE ligne_credit_tarif (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     grille_tarifaire_id UUID NOT NULL REFERENCES grille_tarifaire(id) ON DELETE CASCADE,
     type_facilite       TEXT NOT NULL,
                         -- CREDIT_TRESORERIE | AVAL_TRAITE | AVANCE_MARCHE | LC_INTERNATIONAL | CREDIT_RELAIS | CAUTION_BANCAIRE
@@ -237,7 +236,7 @@ CREATE TABLE ligne_credit_tarif (
 
 -- Simulation de financement/garantie pour un dossier donne
 CREATE TABLE simulation_financement (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     type_besoin         TEXT NOT NULL,                        -- CAUTION_SOUMISSION | CAUTION_BONNE_EXECUTION | AVANCE_DEMARRAGE | LC
     montant             NUMERIC(18,2) NOT NULL,
@@ -253,7 +252,7 @@ CREATE TABLE simulation_financement (
 -- ============================================================================
 
 CREATE TABLE flux_tresorerie (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     sens                TEXT NOT NULL,                        -- ENCAISSEMENT | DECAISSEMENT
     categorie           TEXT NOT NULL,                        -- AVANCE_CLIENT | ACOMPTE | SOLDE | CAUTION | FOURNISSEUR | TRANSIT | COMMISSION_BANCAIRE | REMBOURSEMENT_AVANCE
@@ -269,7 +268,7 @@ CREATE TABLE flux_tresorerie (
 -- ============================================================================
 
 CREATE TABLE incoterm_scenario (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     code                TEXT NOT NULL,                        -- EXW, FOB, CIF, DAP, DDP...
     repartition_couts_json JSONB NOT NULL DEFAULT '{}',       -- regle de repartition acheteur/vendeur (parametrable)
@@ -277,14 +276,14 @@ CREATE TABLE incoterm_scenario (
 );
 
 CREATE TABLE transitaire (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     nom                 TEXT NOT NULL,
     contact_json        JSONB DEFAULT '{}'
 );
 
 CREATE TABLE transitaire_historique (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     transitaire_id      UUID NOT NULL REFERENCES transitaire(id) ON DELETE CASCADE,
     dossier_ao_id       UUID REFERENCES dossier_ao(id),
     delai_jours         INTEGER,
@@ -295,7 +294,7 @@ CREATE TABLE transitaire_historique (
 );
 
 CREATE TABLE suivi_logistique (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     transitaire_id      UUID REFERENCES transitaire(id),
     incoterm_scenario_id UUID REFERENCES incoterm_scenario(id),
@@ -311,7 +310,7 @@ CREATE TABLE suivi_logistique (
 -- ============================================================================
 
 CREATE TABLE calcul_marge (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     prix_achat_devise   NUMERIC(18,4),
     taux_change         NUMERIC(12,6),
@@ -332,7 +331,7 @@ CREATE TABLE calcul_marge (
 -- ============================================================================
 
 CREATE TABLE fournisseur (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     nom                 TEXT NOT NULL,
     pays                TEXT,
@@ -340,7 +339,7 @@ CREATE TABLE fournisseur (
 );
 
 CREATE TABLE offre_fournisseur (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     fournisseur_id      UUID NOT NULL REFERENCES fournisseur(id),
     prix_exw            NUMERIC(18,2),
@@ -355,7 +354,7 @@ CREATE TABLE offre_fournisseur (
 -- ============================================================================
 
 CREATE TABLE modele_courrier (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     type_courrier       TEXT NOT NULL,
                         -- DEMANDE_CLARIFICATION | DEMANDE_FINANCEMENT | DEMANDE_GARANTIE | DEMANDE_MAINLEVEE
@@ -367,7 +366,7 @@ CREATE TABLE modele_courrier (
 );
 
 CREATE TABLE courrier_genere (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     modele_courrier_id  UUID NOT NULL REFERENCES modele_courrier(id),
     contenu_final       TEXT NOT NULL,
@@ -380,7 +379,7 @@ CREATE TABLE courrier_genere (
 -- ============================================================================
 
 CREATE TABLE offre_concurrente_historique (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     dossier_ao_reference TEXT,                                -- reference de l'AO observe (peut etre externe/non gagne)
     maitre_ouvrage_id   UUID REFERENCES maitre_ouvrage(id),
@@ -392,7 +391,7 @@ CREATE TABLE offre_concurrente_historique (
 );
 
 CREATE TABLE clause_risque_bibliotheque (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     maitre_ouvrage_id   UUID REFERENCES maitre_ouvrage(id),
     pattern_description TEXT NOT NULL,                        -- description du pattern (pas de phrase verbatim sensible)
@@ -405,7 +404,7 @@ CREATE TABLE clause_risque_bibliotheque (
 -- ============================================================================
 
 CREATE TABLE vehicule (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     immatriculation     TEXT NOT NULL,
     marque_modele       TEXT,
@@ -413,14 +412,14 @@ CREATE TABLE vehicule (
 );
 
 CREATE TABLE badge_peage (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     vehicule_id         UUID REFERENCES vehicule(id),
     utilisateur_id      UUID REFERENCES utilisateur(id),
     token_id            TEXT NOT NULL
 );
 
 CREATE TABLE transaction_peage (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     badge_peage_id      UUID NOT NULL REFERENCES badge_peage(id),
     date_passage        TIMESTAMPTZ NOT NULL,
     gare                TEXT,
@@ -429,14 +428,14 @@ CREATE TABLE transaction_peage (
 );
 
 CREATE TABLE carte_carburant (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     vehicule_id         UUID REFERENCES vehicule(id),
     numero_carte        TEXT NOT NULL,
     solde_courant       NUMERIC(12,2) NOT NULL DEFAULT 0
 );
 
 CREATE TABLE transaction_carburant (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     carte_carburant_id  UUID NOT NULL REFERENCES carte_carburant(id),
     date_transaction    TIMESTAMPTZ NOT NULL,
     litres              NUMERIC(10,2),
@@ -449,7 +448,7 @@ CREATE TABLE transaction_carburant (
 -- ============================================================================
 
 CREATE TABLE employe (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     utilisateur_id      UUID REFERENCES utilisateur(id),
     poste               TEXT,
@@ -457,7 +456,7 @@ CREATE TABLE employe (
 );
 
 CREATE TABLE affectation_dossier (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     employe_id          UUID NOT NULL REFERENCES employe(id) ON DELETE CASCADE,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     role_sur_dossier    TEXT,
@@ -466,7 +465,7 @@ CREATE TABLE affectation_dossier (
 );
 
 CREATE TABLE fiche_temps (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     employe_id          UUID NOT NULL REFERENCES employe(id) ON DELETE CASCADE,
     dossier_ao_id       UUID REFERENCES dossier_ao(id),        -- imputation par dossier (amelioration vs OGAA generique)
     semaine_debut       DATE NOT NULL,
@@ -475,7 +474,7 @@ CREATE TABLE fiche_temps (
 );
 
 CREATE TABLE evaluation_post_ao (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     resultat            TEXT,                                  -- GAGNE | PERDU
     enseignements       TEXT,
@@ -487,7 +486,7 @@ CREATE TABLE evaluation_post_ao (
 -- ============================================================================
 
 CREATE TABLE chantier (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     nom                 TEXT NOT NULL,
     lot                 TEXT,
@@ -497,7 +496,7 @@ CREATE TABLE chantier (
 
 -- Bordereau des prix unitaires / detail quantitatif estimatif
 CREATE TABLE ligne_bpu_dqe (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     designation         TEXT NOT NULL,
     unite               TEXT,
@@ -507,7 +506,7 @@ CREATE TABLE ligne_bpu_dqe (
 );
 
 CREATE TABLE metre_contradictoire (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     chantier_id         UUID NOT NULL REFERENCES chantier(id) ON DELETE CASCADE,
     ligne_bpu_dqe_id    UUID REFERENCES ligne_bpu_dqe(id),
     quantite_executee   NUMERIC(14,3),
@@ -516,7 +515,7 @@ CREATE TABLE metre_contradictoire (
 );
 
 CREATE TABLE decompte (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     chantier_id         UUID NOT NULL REFERENCES chantier(id) ON DELETE CASCADE,
     type_decompte       TEXT NOT NULL,                        -- MENSUEL | FINAL | GENERAL_DEFINITIF
     periode             TEXT,
@@ -530,7 +529,7 @@ CREATE TABLE decompte (
 );
 
 CREATE TABLE regle_parametre (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     regle_formule_id    UUID NOT NULL REFERENCES regle_formule(id),
     parametres_json     JSONB NOT NULL DEFAULT '{}'            -- ex: {"a":0.4,"b":0.3,"c":0.3,"taux_penalite":0.004,"plafond":0.10}
@@ -541,7 +540,7 @@ CREATE TABLE regle_parametre (
 -- ============================================================================
 
 CREATE TABLE engin_materiel (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     designation         TEXT NOT NULL,
     type_engin          TEXT,                                 -- GRUE | PELLE | BETONNIERE | COMPACTEUR | ECHAFAUDAGE ...
@@ -550,7 +549,7 @@ CREATE TABLE engin_materiel (
 );
 
 CREATE TABLE affectation_engin (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     engin_materiel_id   UUID NOT NULL REFERENCES engin_materiel(id) ON DELETE CASCADE,
     chantier_id         UUID NOT NULL REFERENCES chantier(id) ON DELETE CASCADE,
     date_debut          DATE NOT NULL,
@@ -563,14 +562,14 @@ CREATE TABLE affectation_engin (
 -- ============================================================================
 
 CREATE TABLE sous_traitant (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     nom                 TEXT NOT NULL,
     agree_maitre_ouvrage BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE contrat_sous_traitance (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     sous_traitant_id    UUID NOT NULL REFERENCES sous_traitant(id),
     montant_sous_traite NUMERIC(18,2),
@@ -584,7 +583,7 @@ CREATE TABLE contrat_sous_traitance (
 -- ============================================================================
 
 CREATE TABLE garantie_travaux (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     dossier_ao_id       UUID NOT NULL REFERENCES dossier_ao(id) ON DELETE CASCADE,
     type_garantie       TEXT NOT NULL,                        -- BONNE_EXECUTION | TOUS_RISQUES_CHANTIER | DECENNALE | RC_TIERS | HSE
     montant             NUMERIC(18,2),
@@ -595,7 +594,7 @@ CREATE TABLE garantie_travaux (
 );
 
 CREATE TABLE reception (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     chantier_id         UUID NOT NULL REFERENCES chantier(id) ON DELETE CASCADE,
     type_reception      TEXT NOT NULL,                        -- PROVISOIRE | DEFINITIVE
     date_reception      DATE,
@@ -608,7 +607,7 @@ CREATE TABLE reception (
 -- ============================================================================
 
 CREATE TABLE manoeuvre_journalier (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     nom                 TEXT NOT NULL,
     piece_identite      TEXT,
@@ -617,7 +616,7 @@ CREATE TABLE manoeuvre_journalier (
 );
 
 CREATE TABLE pointage_journalier (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     manoeuvre_journalier_id UUID NOT NULL REFERENCES manoeuvre_journalier(id) ON DELETE CASCADE,
     chantier_id         UUID NOT NULL REFERENCES chantier(id) ON DELETE CASCADE,
     date_jour           DATE NOT NULL,
@@ -626,7 +625,7 @@ CREATE TABLE pointage_journalier (
 );
 
 CREATE TABLE effectif_prevu_chantier (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     chantier_id         UUID NOT NULL REFERENCES chantier(id) ON DELETE CASCADE,
     date_jour           DATE NOT NULL,
     effectif_prevu      INTEGER NOT NULL
@@ -637,7 +636,7 @@ CREATE TABLE effectif_prevu_chantier (
 -- ============================================================================
 
 CREATE TABLE indicateur_definition (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     code                TEXT NOT NULL,                        -- ex: ECART_MARGE, RISQUE_PENALITE, ECART_EFFECTIF
     libelle             TEXT NOT NULL,
@@ -646,7 +645,7 @@ CREATE TABLE indicateur_definition (
 );
 
 CREATE TABLE indicateur_valeur (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     indicateur_definition_id UUID NOT NULL REFERENCES indicateur_definition(id) ON DELETE CASCADE,
     dossier_ao_id       UUID REFERENCES dossier_ao(id),        -- nullable si indicateur transverse (ex: win rate global)
     valeur              NUMERIC(18,4),
@@ -654,7 +653,7 @@ CREATE TABLE indicateur_valeur (
 );
 
 CREATE TABLE signal_anticipation (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                  UUID PRIMARY KEY,
     tenant_id           UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     dossier_ao_id       UUID REFERENCES dossier_ao(id),
     indicateur_definition_id UUID REFERENCES indicateur_definition(id),

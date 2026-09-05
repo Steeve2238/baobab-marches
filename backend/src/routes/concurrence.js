@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
@@ -61,11 +62,12 @@ router.post("/historique", async (req, res) => {
   try {
     const inserted = await db.query(
       `INSERT INTO offre_concurrente_historique
-         (tenant_id, dossier_ao_reference, maitre_ouvrage_id, concurrent_nom,
+         (id, tenant_id, dossier_ao_reference, maitre_ouvrage_id, concurrent_nom,
           montant_offre, resultat, motif_echec, date_observation)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id`,
       [
+        uuidv4(),
         req.user.tenantId,
         dossier_ao_reference || null,
         maitre_ouvrage_id || null,
@@ -206,10 +208,11 @@ router.post("/clauses-risque", async (req, res) => {
   try {
     const inserted = await db.query(
       `INSERT INTO clause_risque_bibliotheque
-         (tenant_id, maitre_ouvrage_id, pattern_description, niveau_risque, type_clause, occurrences)
-       VALUES ($1, $2, $3, COALESCE($4, 'MOYEN'), $5, COALESCE($6, 1))
+         (id, tenant_id, maitre_ouvrage_id, pattern_description, niveau_risque, type_clause, occurrences)
+       VALUES ($1, $2, $3, $4, COALESCE($5, 'MOYEN'), $6, COALESCE($7, 1))
        RETURNING id`,
       [
+        uuidv4(),
         req.user.tenantId,
         maitre_ouvrage_id || null,
         pattern_description,
@@ -332,10 +335,10 @@ router.post("/clauses-risque/signaler", async (req, res) => {
 
     const cree = await db.query(
       `INSERT INTO clause_risque_bibliotheque
-         (tenant_id, maitre_ouvrage_id, pattern_description, niveau_risque, type_clause, occurrences)
-       VALUES ($1, $2, $3, 'MOYEN', $4, 1)
+         (id, tenant_id, maitre_ouvrage_id, pattern_description, niveau_risque, type_clause, occurrences)
+       VALUES ($1, $2, $3, $4, 'MOYEN', $5, 1)
        RETURNING *`,
-      [req.user.tenantId, dossier.maitre_ouvrage_id, libelle, type_clause]
+      [uuidv4(), req.user.tenantId, dossier.maitre_ouvrage_id, libelle, type_clause]
     );
     res.status(201).json({ clause: cree.rows[0], cree: true });
   } catch (err) {

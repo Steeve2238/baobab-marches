@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const XLSX = require("xlsx");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
@@ -159,11 +160,12 @@ router.post("/personnel", requireModule("rh"), async (req, res) => {
     }
 
     const insertResult = await db.query(
-      `INSERT INTO employe (tenant_id, utilisateur_id, poste, type_contrat, date_embauche,
+      `INSERT INTO employe (id, tenant_id, utilisateur_id, poste, type_contrat, date_embauche,
                              telephone, contact_urgence_nom, contact_urgence_telephone, solde_conges)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
+        uuidv4(),
         req.user.tenantId,
         utilisateur_id,
         poste || null,
@@ -539,9 +541,9 @@ router.put("/regles-approbation", requireModule("rh"), async (req, res) => {
     await client.query(`DELETE FROM regle_approbation_rh WHERE tenant_id = $1`, [req.user.tenantId]);
     for (const regle of regles) {
       await client.query(
-        `INSERT INTO regle_approbation_rh (tenant_id, role_demandeur_id, role_approbateur_id)
-         VALUES ($1, $2, $3)`,
-        [req.user.tenantId, regle.role_demandeur_id, regle.role_approbateur_id]
+        `INSERT INTO regle_approbation_rh (id, tenant_id, role_demandeur_id, role_approbateur_id)
+         VALUES ($1, $2, $3, $4)`,
+        [uuidv4(), req.user.tenantId, regle.role_demandeur_id, regle.role_approbateur_id]
       );
     }
 
@@ -631,9 +633,9 @@ router.put("/etapes-approbation", requireModule("rh"), async (req, res) => {
     ]);
     for (let i = 0; i < etapes.length; i++) {
       await client.query(
-        `INSERT INTO etape_approbation_rh (tenant_id, type_demande, ordre, libelle, role_approbateur_id)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [req.user.tenantId, type_demande, i + 1, etapes[i].libelle, etapes[i].role_approbateur_id || null]
+        `INSERT INTO etape_approbation_rh (id, tenant_id, type_demande, ordre, libelle, role_approbateur_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [uuidv4(), req.user.tenantId, type_demande, i + 1, etapes[i].libelle, etapes[i].role_approbateur_id || null]
       );
     }
 
@@ -785,9 +787,9 @@ router.post("/demandes", async (req, res) => {
     }
 
     const insertResult = await db.query(
-      `INSERT INTO demande_rh (tenant_id, employe_id, type_demande, details)
-       VALUES ($1, $2, $3, $4) RETURNING id`,
-      [req.user.tenantId, employe.id, type_demande, details]
+      `INSERT INTO demande_rh (id, tenant_id, employe_id, type_demande, details)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [uuidv4(), req.user.tenantId, employe.id, type_demande, details]
     );
 
     const demande = await db.query(`${SELECT_DEMANDE} AND d.id = $2`, [req.user.tenantId, insertResult.rows[0].id]);
@@ -937,9 +939,10 @@ router.patch("/demandes/:id/valider", async (req, res) => {
 
     await client.query(
       `INSERT INTO decision_etape_demande_rh
-         (demande_rh_id, ordre, libelle, role_approbateur_id, decideur_utilisateur_id, decision, motif_rejet)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+         (id, demande_rh_id, ordre, libelle, role_approbateur_id, decideur_utilisateur_id, decision, motif_rejet)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
+        uuidv4(),
         demande.id,
         etapeActuelle.ordre,
         etapeActuelle.libelle,
@@ -980,9 +983,9 @@ router.patch("/demandes/:id/valider", async (req, res) => {
         const soldeApres = soldeAvant - nbJours;
         await client.query(`UPDATE employe SET solde_conges = $1 WHERE id = $2`, [soldeApres, demande.employe_id]);
         await client.query(
-          `INSERT INTO conge_historique (tenant_id, employe_id, demande_rh_id, nb_jours, solde_avant, solde_apres)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [req.user.tenantId, demande.employe_id, demande.id, nbJours, soldeAvant, soldeApres]
+          `INSERT INTO conge_historique (id, tenant_id, employe_id, demande_rh_id, nb_jours, solde_avant, solde_apres)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [uuidv4(), req.user.tenantId, demande.employe_id, demande.id, nbJours, soldeAvant, soldeApres]
         );
       }
 
@@ -1367,9 +1370,9 @@ router.get("/fiches-temps/semaine", async (req, res) => {
     ]);
     if (fiche.rows.length === 0) {
       await db.query(
-        `INSERT INTO fiche_temps (tenant_id, employe_id, semaine_debut)
-         VALUES ($1, $2, $3) ON CONFLICT (employe_id, semaine_debut) DO NOTHING`,
-        [req.user.tenantId, employe.id, semaine_debut]
+        `INSERT INTO fiche_temps (id, tenant_id, employe_id, semaine_debut)
+         VALUES ($1, $2, $3, $4) ON CONFLICT (employe_id, semaine_debut) DO NOTHING`,
+        [uuidv4(), req.user.tenantId, employe.id, semaine_debut]
       );
       fiche = await db.query(`${SELECT_FICHE_TEMPS} AND f.employe_id = $2 AND f.semaine_debut = $3`, [
         req.user.tenantId,
@@ -1500,9 +1503,10 @@ router.put("/fiches-temps/:id/lignes", async (req, res) => {
       for (const ligne of req.body.lignes) {
         await client.query(
           `INSERT INTO ligne_fiche_temps
-             (fiche_temps_id, jour, domaine_type, dossier_ao_id, categorie_autre, precision_autre, tache, temps)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+             (id, fiche_temps_id, jour, domaine_type, dossier_ao_id, categorie_autre, precision_autre, tache, temps)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
+            uuidv4(),
             fiche.id,
             ligne.jour,
             ligne.domaine_type,
@@ -1715,9 +1719,9 @@ router.post("/fiches-temps/:id/importer", uploadExcel.single("fichier"), async (
       for (const ligne of lignesImportees) {
         await client.query(
           `INSERT INTO ligne_fiche_temps
-             (fiche_temps_id, jour, domaine_type, dossier_ao_id, categorie_autre, precision_autre, tache, temps)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [fiche.id, ligne.jour, ligne.domaine_type, ligne.dossier_ao_id, ligne.categorie_autre, ligne.precision_autre, ligne.tache, ligne.temps]
+             (id, fiche_temps_id, jour, domaine_type, dossier_ao_id, categorie_autre, precision_autre, tache, temps)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [uuidv4(), fiche.id, ligne.jour, ligne.domaine_type, ligne.dossier_ao_id, ligne.categorie_autre, ligne.precision_autre, ligne.tache, ligne.temps]
         );
       }
       await client.query("COMMIT");

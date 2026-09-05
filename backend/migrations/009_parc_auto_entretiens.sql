@@ -19,7 +19,7 @@ ALTER TABLE vehicule
     ADD COLUMN prochain_entretien_km NUMERIC(10,1);
 
 CREATE TABLE entretien_vehicule (
-    id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id                      UUID PRIMARY KEY,
     tenant_id               UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     vehicule_id             UUID NOT NULL REFERENCES vehicule(id),
     type_entretien          TEXT NOT NULL,   -- VIDANGE | REVISION | PNEUS | FREINS | REPARATION | CARROSSERIE | AUTRE

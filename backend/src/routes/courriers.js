@@ -1,5 +1,6 @@
 const express = require("express");
 const db = require("../db");
+const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { rendreTemplate, construireContexte } = require("../services/courrierEngine");
@@ -38,10 +39,10 @@ router.post("/modeles", async (req, res) => {
   }
   try {
     const result = await db.query(
-      `INSERT INTO modele_courrier (tenant_id, type_courrier, titre, corps_template, declencheur_evenement)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO modele_courrier (id, tenant_id, type_courrier, titre, corps_template, declencheur_evenement)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [req.user.tenantId, type_courrier, titre, corps_template, declencheur_evenement || null]
+      [uuidv4(), req.user.tenantId, type_courrier, titre, corps_template, declencheur_evenement || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
