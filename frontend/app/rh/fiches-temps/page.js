@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
@@ -76,12 +77,20 @@ export default function FichesTempsPage() {
   const [info, setInfo] = useState("");
   const [chargement, setChargement] = useState(true);
   const [enCours, setEnCours] = useState(false);
+  // Permissions recuperees uniquement pour savoir si CE compte peut se
+  // creer lui-meme une fiche employe (module "rh" ou ADMIN) quand il n'en a
+  // pas encore - voir pasDeFiche ci-dessous. Signale par Steeve le
+  // 05/09/2026 : un compte ADMIN sans fiche employe se retrouvait bloque
+  // devant un simple message ("contactez un administrateur") sans aucun
+  // moyen d'agir, meme lorsque CE compte est justement l'administrateur.
+  const [permissions, setPermissions] = useState(null);
 
   const jours = useMemo(() => joursDeLaSemaine(semaineDebut), [semaineDebut]);
   const nomsJours = NOMS_JOURS[langue] || NOMS_JOURS.fr;
 
   useEffect(() => {
     api.getDossiersDisponiblesFichesTemps().then(setDossiers).catch(() => {});
+    api.getPermissions().then(setPermissions).catch(() => setPermissions(null));
   }, []);
 
   useEffect(() => {
@@ -287,7 +296,26 @@ export default function FichesTempsPage() {
       {onglet === "ma-semaine" && (
         <>
           {pasDeFiche ? (
-            <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("pasDeFicheEmployeMessage")}</p>
+            <div>
+              <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("pasDeFicheEmployeMessage")}</p>
+              {(permissions?.admin || (permissions?.modules || []).includes("rh")) && (
+                <Link
+                  href="/rh/personnel/nouveau"
+                  style={{
+                    display: "inline-block",
+                    marginTop: 10,
+                    background: "var(--petrol)",
+                    color: "#fff",
+                    borderRadius: 8,
+                    padding: "8px 16px",
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                  }}
+                >
+                  {t("creerMaFicheEmployeButton")}
+                </Link>
+              )}
+            </div>
           ) : (
             <>
               <div className="card" style={{ marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>

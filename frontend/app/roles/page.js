@@ -21,6 +21,13 @@ const MODULES_DISPONIBLES = [
   { key: "parc-auto", labelKey: "navParcAuto" },
   { key: "marches", labelKey: "navMarches" },
   { key: "dossiers", labelKey: "navDossiers" },
+  // "rh" controle uniquement les pages de gestion RH reservees (Personnel,
+  // Regles/etapes d'approbation, Planning conges, Statistiques RH) - ajoute
+  // le 05/09/2026 a la demande de Steeve. "Mes demandes" et "Fiches de
+  // temps" restent volontairement HORS de ce perimetre : elles n'ont jamais
+  // ete gatees par module et le restent, ouvertes a tout employe connecte
+  // (voir AppShell.js et backend/src/routes/rh.js).
+  { key: "rh", labelKey: "navRH" },
 ];
 
 const FORM_VIDE = {

@@ -522,6 +522,7 @@ export const DICTIONARIES = {
     demandeAnnulee: "Demande annulée.",
     demandeDecidee: "Décision enregistrée.",
     pasDeFicheEmployeMessage: "Vous n'avez pas encore de fiche employé : contactez un administrateur pour en créer une avant de soumettre une demande.",
+    creerMaFicheEmployeButton: "Créer ma fiche employé",
     demandeurLabel: "Demandeur",
     approbateurLabel: "Approbateur",
 
@@ -1364,6 +1365,7 @@ export const DICTIONARIES = {
     demandeAnnulee: "Request cancelled.",
     demandeDecidee: "Decision recorded.",
     pasDeFicheEmployeMessage: "You do not have an employee record yet: contact an administrator to create one before submitting a request.",
+    creerMaFicheEmployeButton: "Create my employee record",
     demandeurLabel: "Requester",
     approbateurLabel: "Approver",
 

@@ -27,7 +27,7 @@ const NAV_ITEMS = [
   { href: "/dossiers", key: "navDossiers", moduleKey: "dossiers" },
   { href: "/rh/demandes", key: "navDemandesRH" },
   { href: "/rh/fiches-temps", key: "navFichesTemps" },
-  { href: "/rh/personnel", key: "navRH", adminOnly: true },
+  { href: "/rh/personnel", key: "navRH", moduleKey: "rh" },
   { href: "/roles", key: "navRoles", adminOnly: true },
   { href: "/utilisateurs", key: "navUsers", adminOnly: true },
   { href: "/parametres/entete", key: "navSettings" },

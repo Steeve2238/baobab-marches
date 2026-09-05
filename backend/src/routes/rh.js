@@ -2,7 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const XLSX = require("xlsx");
 const db = require("../db");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth, requireModule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
 const router = express.Router();
@@ -54,8 +54,12 @@ async function chargerRolesParEmploye(tenantId, utilisateurIds) {
   return map;
 }
 
-// GET /api/rh/personnel - liste complete (ADMIN)
-router.get("/personnel", requireRole("ADMIN"), async (req, res) => {
+// GET /api/rh/personnel - liste complete. Reserve au module "rh" du
+// perimetre de role (case a cocher ecran Roles, ajoutee le 05/09/2026 a la
+// demande de Steeve) - ADMIN passe toujours via requireModule, mais un role
+// non-ADMIN peut desormais aussi y avoir acces si Steeve le lui accorde
+// explicitement (ex un futur role "Responsable RH").
+router.get("/personnel", requireModule("rh"), async (req, res) => {
   try {
     const result = await db.query(`${SELECT_FICHE} ORDER BY u.nom ASC, u.prenom ASC`, [req.user.tenantId]);
     const rolesParUtilisateur = await chargerRolesParEmploye(
@@ -89,8 +93,8 @@ router.get("/personnel/moi", async (req, res) => {
 
 // GET /api/rh/personnel/utilisateurs-disponibles - utilisateurs du tenant
 // n'ayant pas encore de fiche employe (pour le formulaire de creation).
-// ADMIN uniquement (meme perimetre que la creation elle-meme).
-router.get("/personnel/utilisateurs-disponibles", requireRole("ADMIN"), async (req, res) => {
+// Module "rh" uniquement (meme perimetre que la creation elle-meme).
+router.get("/personnel/utilisateurs-disponibles", requireModule("rh"), async (req, res) => {
   try {
     const result = await db.query(
       `SELECT u.id, u.nom, u.prenom, u.email
@@ -128,8 +132,8 @@ router.get("/personnel/:id", async (req, res) => {
 });
 
 // POST /api/rh/personnel - creation d'une fiche employe pour un utilisateur
-// existant du tenant (ADMIN).
-router.post("/personnel", requireRole("ADMIN"), async (req, res) => {
+// existant du tenant. Module "rh" (voir plus haut).
+router.post("/personnel", requireModule("rh"), async (req, res) => {
   const {
     utilisateur_id,
     poste,
@@ -483,7 +487,7 @@ async function validerDetailsDemandeAsync(req, type_demande, details) {
 // GET /api/rh/regles-approbation - circuit historique a un seul niveau,
 // route par le role du demandeur (repli quand aucune chaine d'etapes n'est
 // configuree pour un type - voir plus haut).
-router.get("/regles-approbation", requireRole("ADMIN"), async (req, res) => {
+router.get("/regles-approbation", requireModule("rh"), async (req, res) => {
   try {
     const result = await db.query(
       `SELECT rr.id, rr.role_demandeur_id, rd.code AS role_demandeur_code, rd.libelle AS role_demandeur_libelle,
@@ -505,7 +509,7 @@ router.get("/regles-approbation", requireRole("ADMIN"), async (req, res) => {
 // PUT /api/rh/regles-approbation - remplace l'ensemble des regles du tenant
 // en une fois (plus simple a manipuler cote UI qu'un CRUD ligne par ligne).
 // body: { regles: [{ role_demandeur_id, role_approbateur_id }, ...] }
-router.put("/regles-approbation", requireRole("ADMIN"), async (req, res) => {
+router.put("/regles-approbation", requireModule("rh"), async (req, res) => {
   const { regles } = req.body;
   if (!Array.isArray(regles)) {
     return res.status(400).json({ error: t(req, "RH_REGLES_INVALID") });
@@ -565,7 +569,7 @@ router.put("/regles-approbation", requireRole("ADMIN"), async (req, res) => {
 
 // GET /api/rh/etapes-approbation?type_demande=FOURNITURES - chaine d'etapes
 // configuree pour un type de demande (vide = repli sur regles-approbation).
-router.get("/etapes-approbation", requireRole("ADMIN"), async (req, res) => {
+router.get("/etapes-approbation", requireModule("rh"), async (req, res) => {
   const { type_demande } = req.query;
   if (!TYPES_DEMANDE.includes(type_demande)) {
     return res.status(400).json({ error: t(req, "RH_TYPE_DEMANDE_INVALID") });
@@ -593,7 +597,7 @@ router.get("/etapes-approbation", requireRole("ADMIN"), async (req, res) => {
 // toujours renumerotee 1..N selon l'ordre du tableau, pour eviter tout
 // desaccord entre l'UI et la base). etapes: [] efface la chaine (repli sur
 // regles-approbation pour ce type).
-router.put("/etapes-approbation", requireRole("ADMIN"), async (req, res) => {
+router.put("/etapes-approbation", requireModule("rh"), async (req, res) => {
   const { type_demande, etapes } = req.body;
   if (!TYPES_DEMANDE.includes(type_demande)) {
     return res.status(400).json({ error: t(req, "RH_TYPE_DEMANDE_INVALID") });
@@ -1023,8 +1027,8 @@ router.patch("/demandes/:id/valider", async (req, res) => {
 // comme le fait deja OGAA de facon equivalente dans son propre planning.
 // ----------------------------------------------------------------------------
 
-// GET /api/rh/planning-conges?annee=2026 (ADMIN)
-router.get("/planning-conges", requireRole("ADMIN"), async (req, res) => {
+// GET /api/rh/planning-conges?annee=2026 - module "rh" (voir plus haut).
+router.get("/planning-conges", requireModule("rh"), async (req, res) => {
   try {
     const annee = parseInt(req.query.annee, 10) || new Date().getUTCFullYear();
 
@@ -1078,8 +1082,9 @@ router.get("/planning-conges", requireRole("ADMIN"), async (req, res) => {
   }
 });
 
-// GET /api/rh/statistiques?periode=mensuel|annuel&mois=YYYY-MM (ADMIN)
-router.get("/statistiques", requireRole("ADMIN"), async (req, res) => {
+// GET /api/rh/statistiques?periode=mensuel|annuel&mois=YYYY-MM - module "rh"
+// (voir plus haut).
+router.get("/statistiques", requireModule("rh"), async (req, res) => {
   try {
     const periode = req.query.periode === "annuel" ? "annuel" : "mensuel";
     const moisParam = /^\d{4}-\d{2}$/.test(req.query.mois || "") ? req.query.mois : new Date().toISOString().slice(0, 7);
