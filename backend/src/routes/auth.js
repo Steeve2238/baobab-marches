@@ -1,11 +1,33 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const { v4: uuidv4 } = require("uuid");
 const db = require("../db");
 const { signToken } = require("../utils/jwt");
 const { requireAuth } = require("../middleware/auth");
 const { t, LANGUES_SUPPORTEES } = require("../utils/i18n");
+const { envoyerEmailReinitialisation } = require("../utils/mailer");
 
 const router = express.Router();
+
+// ---------------------------------------------------------------------------
+// "Mot de passe oublie" - demande explicite de Steeve le 06/09/2026, pour les
+// utilisateurs clients (voir routes/superAdmin.js pour l'equivalent Super
+// Admin). Voir migration 019_reinitialisation_mot_de_passe.sql : le jeton
+// n'est jamais stocke en clair, seule son empreinte SHA-256 l'est.
+//
+// Duree de validite du jeton et fonctions communes aux deux espaces
+// (client + Super Admin) : dupliquees ici et dans superAdmin.js plutot que
+// factorisees dans un utilitaire partage - chaque espace reste volontairement
+// independant (voir note en tete de superAdmin.js sur l'authentification
+// completement separee), et la logique est assez courte pour que la
+// duplication reste lisible.
+// ---------------------------------------------------------------------------
+const DUREE_VALIDITE_JETON_MS = 60 * 60 * 1000; // 1 heure
+
+function hacherJeton(jetonEnClair) {
+  return crypto.createHash("sha256").update(jetonEnClair).digest("hex");
+}
 
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
@@ -72,6 +94,98 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: t(req, "LOGIN_SERVER_ERROR") });
+  }
+});
+
+// POST /api/auth/mot-de-passe-oublie - genere un jeton et envoie l'email de
+// reinitialisation. Repond TOUJOURS avec un succes generique, que l'email
+// corresponde ou non a un compte existant : reveler l'inexistence d'un
+// compte (via un message d'erreur different) permettrait a quiconque de
+// verifier quelles adresses sont enregistrees sur la plateforme.
+router.post("/mot-de-passe-oublie", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: t(req, "FORGOT_PASSWORD_EMAIL_REQUIRED") });
+  }
+
+  try {
+    const result = await db.query(
+      `SELECT id, nom, prenom, email FROM utilisateur WHERE email = $1 AND actif`,
+      [email]
+    );
+    const user = result.rows[0];
+
+    if (user) {
+      const jetonEnClair = crypto.randomBytes(32).toString("hex");
+      const dateExpiration = new Date(Date.now() + DUREE_VALIDITE_JETON_MS);
+
+      await db.query(
+        `INSERT INTO jeton_reinitialisation_mot_de_passe (id, type_compte, compte_id, jeton_hash, date_expiration)
+         VALUES ($1, 'UTILISATEUR', $2, $3, $4)`,
+        [uuidv4(), user.id, hacherJeton(jetonEnClair), dateExpiration]
+      );
+
+      const lienReinitialisation = `${process.env.FRONTEND_URL}/reinitialiser-mot-de-passe?jeton=${jetonEnClair}`;
+
+      try {
+        await envoyerEmailReinitialisation({
+          destinataire: user.email,
+          prenom: user.prenom,
+          lienReinitialisation,
+        });
+      } catch (errEmail) {
+        // On journalise l'echec d'envoi cote serveur (ex : SMTP non
+        // configure) mais on ne le repercute jamais au client - voir note
+        // ci-dessus sur le message generique.
+        console.error("Echec d'envoi de l'email de reinitialisation :", errEmail);
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: t(req, "FORGOT_PASSWORD_ERROR") });
+  }
+});
+
+// POST /api/auth/reinitialiser-mot-de-passe - valide le jeton recu par email
+// et enregistre le nouveau mot de passe.
+router.post("/reinitialiser-mot-de-passe", async (req, res) => {
+  const { jeton, nouveau_mot_de_passe } = req.body;
+  if (!jeton || !nouveau_mot_de_passe || nouveau_mot_de_passe.length < 8) {
+    return res.status(400).json({ error: t(req, "PASSWORD_TOO_SHORT") });
+  }
+
+  try {
+    const jetonHash = hacherJeton(jeton);
+    const result = await db.query(
+      `SELECT id, compte_id FROM jeton_reinitialisation_mot_de_passe
+       WHERE jeton_hash = $1 AND type_compte = 'UTILISATEUR' AND utilise = false AND date_expiration > now()`,
+      [jetonHash]
+    );
+    const ligneJeton = result.rows[0];
+    if (!ligneJeton) {
+      return res.status(400).json({ error: t(req, "RESET_PASSWORD_INVALID_TOKEN") });
+    }
+
+    const hash = await bcrypt.hash(nouveau_mot_de_passe, 10);
+    await db.query(`UPDATE utilisateur SET mot_de_passe_hash = $1, mot_de_passe_temporaire = false WHERE id = $2`, [
+      hash,
+      ligneJeton.compte_id,
+    ]);
+
+    // Marque ce jeton utilise ET invalide tout autre jeton en cours pour ce
+    // meme compte (ex : plusieurs demandes de reinitialisation successives).
+    await db.query(
+      `UPDATE jeton_reinitialisation_mot_de_passe SET utilise = true
+       WHERE type_compte = 'UTILISATEUR' AND compte_id = $1 AND utilise = false`,
+      [ligneJeton.compte_id]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: t(req, "FORGOT_PASSWORD_ERROR") });
   }
 });
 

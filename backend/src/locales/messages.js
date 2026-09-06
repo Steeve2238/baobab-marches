@@ -39,6 +39,9 @@ const MESSAGES = {
     PASSWORD_CHANGE_ERROR: "Erreur serveur lors du changement de mot de passe.",
     LANGUE_INVALID: "Langue invalide.",
     LANGUE_UPDATE_ERROR: "Erreur lors de la mise a jour de la langue.",
+    FORGOT_PASSWORD_EMAIL_REQUIRED: "Veuillez indiquer votre adresse email.",
+    FORGOT_PASSWORD_ERROR: "Erreur serveur lors de la demande de reinitialisation.",
+    RESET_PASSWORD_INVALID_TOKEN: "Ce lien de reinitialisation est invalide ou a expire. Merci de refaire une demande.",
 
     DOSSIERS_FETCH_ERROR: "Erreur lors de la recuperation des dossiers.",
     DOSSIER_NOT_FOUND: "Dossier introuvable.",
@@ -360,6 +363,9 @@ const MESSAGES = {
     PASSWORD_CHANGE_ERROR: "Server error while changing password.",
     LANGUE_INVALID: "Invalid language.",
     LANGUE_UPDATE_ERROR: "Error while updating language preference.",
+    FORGOT_PASSWORD_EMAIL_REQUIRED: "Please provide your email address.",
+    FORGOT_PASSWORD_ERROR: "Server error while requesting password reset.",
+    RESET_PASSWORD_INVALID_TOKEN: "This reset link is invalid or has expired. Please request a new one.",
 
     DOSSIERS_FETCH_ERROR: "Error while fetching files.",
     DOSSIER_NOT_FOUND: "File not found.",

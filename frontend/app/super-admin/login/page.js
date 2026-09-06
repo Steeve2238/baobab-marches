@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { superAdminApi, setSuperAdminToken, setSuperAdminCourant } from "../../../lib/superAdminApi";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import LanguageSwitcher from "../../../lib/i18n/LanguageSwitcher";
@@ -119,6 +120,12 @@ export default function SuperAdminLoginPage() {
           >
             {chargement ? t("signingIn") : t("signIn")}
           </button>
+
+          <div style={{ textAlign: "center", marginTop: 16 }}>
+            <Link href="/super-admin/mot-de-passe-oublie" style={{ fontSize: 12.5, color: "var(--petrol)" }}>
+              {t("forgotPasswordLink")}
+            </Link>
+          </div>
         </form>
       </div>
     </div>

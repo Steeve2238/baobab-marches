@@ -105,6 +105,13 @@ export const superAdminApi = {
       method: "POST",
       body: JSON.stringify({ nouveau_mot_de_passe }),
     }),
+  demanderReinitialisationMotDePasse: (email) =>
+    request("/super-admin/auth/mot-de-passe-oublie", { method: "POST", body: JSON.stringify({ email }) }),
+  reinitialiserMotDePasse: (jeton, nouveau_mot_de_passe) =>
+    request("/super-admin/auth/reinitialiser-mot-de-passe", {
+      method: "POST",
+      body: JSON.stringify({ jeton, nouveau_mot_de_passe }),
+    }),
 
   getStatistiques: () => request("/super-admin/statistiques"),
 

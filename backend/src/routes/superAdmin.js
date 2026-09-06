@@ -1,5 +1,6 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const multer = require("multer");
 const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
@@ -7,8 +8,18 @@ const { signToken } = require("../utils/jwt");
 const { requireSuperAdmin } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { genererMotDePasseTemporaire } = require("../utils/motDePasseTemporaire");
+const { envoyerEmailReinitialisation } = require("../utils/mailer");
 
 const router = express.Router();
+
+// Duree de validite + hachage du jeton de reinitialisation - voir
+// routes/auth.js pour l'explication complete (meme principe, espace Super
+// Admin separe, voir migration 019_reinitialisation_mot_de_passe.sql).
+const DUREE_VALIDITE_JETON_MS = 60 * 60 * 1000; // 1 heure
+
+function hacherJeton(jetonEnClair) {
+  return crypto.createHash("sha256").update(jetonEnClair).digest("hex");
+}
 
 // ---------------------------------------------------------------------------
 // Authentification Super Admin - completement separee de /api/auth (voir
@@ -49,6 +60,91 @@ router.post("/auth/login", async (req, res) => {
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: t(req, "LOGIN_SERVER_ERROR") });
+  }
+});
+
+// POST /api/super-admin/auth/mot-de-passe-oublie - meme principe que
+// /api/auth/mot-de-passe-oublie (voir routes/auth.js pour le detail des
+// commentaires), adapte a administrateur_plateforme. Reponse toujours
+// generique, meme raisonnement anti-enumeration de comptes.
+router.post("/auth/mot-de-passe-oublie", async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ error: t(req, "FORGOT_PASSWORD_EMAIL_REQUIRED") });
+  }
+
+  try {
+    const result = await db.query(
+      `SELECT id, nom, email FROM administrateur_plateforme WHERE email = $1 AND actif`,
+      [email]
+    );
+    const admin = result.rows[0];
+
+    if (admin) {
+      const jetonEnClair = crypto.randomBytes(32).toString("hex");
+      const dateExpiration = new Date(Date.now() + DUREE_VALIDITE_JETON_MS);
+
+      await db.query(
+        `INSERT INTO jeton_reinitialisation_mot_de_passe (id, type_compte, compte_id, jeton_hash, date_expiration)
+         VALUES ($1, 'SUPER_ADMIN', $2, $3, $4)`,
+        [uuidv4(), admin.id, hacherJeton(jetonEnClair), dateExpiration]
+      );
+
+      const lienReinitialisation = `${process.env.FRONTEND_URL}/super-admin/reinitialiser-mot-de-passe?jeton=${jetonEnClair}`;
+
+      try {
+        await envoyerEmailReinitialisation({
+          destinataire: admin.email,
+          prenom: admin.nom,
+          lienReinitialisation,
+        });
+      } catch (errEmail) {
+        console.error("Echec d'envoi de l'email de reinitialisation (Super Admin) :", errEmail);
+      }
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: t(req, "FORGOT_PASSWORD_ERROR") });
+  }
+});
+
+// POST /api/super-admin/auth/reinitialiser-mot-de-passe
+router.post("/auth/reinitialiser-mot-de-passe", async (req, res) => {
+  const { jeton, nouveau_mot_de_passe } = req.body;
+  if (!jeton || !nouveau_mot_de_passe || nouveau_mot_de_passe.length < 8) {
+    return res.status(400).json({ error: t(req, "PASSWORD_TOO_SHORT") });
+  }
+
+  try {
+    const jetonHash = hacherJeton(jeton);
+    const result = await db.query(
+      `SELECT id, compte_id FROM jeton_reinitialisation_mot_de_passe
+       WHERE jeton_hash = $1 AND type_compte = 'SUPER_ADMIN' AND utilise = false AND date_expiration > now()`,
+      [jetonHash]
+    );
+    const ligneJeton = result.rows[0];
+    if (!ligneJeton) {
+      return res.status(400).json({ error: t(req, "RESET_PASSWORD_INVALID_TOKEN") });
+    }
+
+    const hash = await bcrypt.hash(nouveau_mot_de_passe, 10);
+    await db.query(`UPDATE administrateur_plateforme SET mot_de_passe_hash = $1, mot_de_passe_temporaire = false WHERE id = $2`, [
+      hash,
+      ligneJeton.compte_id,
+    ]);
+
+    await db.query(
+      `UPDATE jeton_reinitialisation_mot_de_passe SET utilise = true
+       WHERE type_compte = 'SUPER_ADMIN' AND compte_id = $1 AND utilise = false`,
+      [ligneJeton.compte_id]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: t(req, "FORGOT_PASSWORD_ERROR") });
   }
 });
 

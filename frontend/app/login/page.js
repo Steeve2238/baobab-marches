@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { api, setToken, setUtilisateurCourant } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import LanguageSwitcher from "../../lib/i18n/LanguageSwitcher";
@@ -127,6 +128,12 @@ export default function LoginPage() {
           >
             {chargement ? t("signingIn") : t("signIn")}
           </button>
+
+          <div style={{ textAlign: "center", marginTop: 16 }}>
+            <Link href="/mot-de-passe-oublie" style={{ fontSize: 12.5, color: "var(--petrol)" }}>
+              {t("forgotPasswordLink")}
+            </Link>
+          </div>
         </form>
       </div>
     </div>

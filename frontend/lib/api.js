@@ -178,6 +178,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ nouveau_mot_de_passe }),
     }),
+  demanderReinitialisationMotDePasse: (email) =>
+    request("/auth/mot-de-passe-oublie", { method: "POST", body: JSON.stringify({ email }) }),
+  reinitialiserMotDePasse: (jeton, nouveau_mot_de_passe) =>
+    request("/auth/reinitialiser-mot-de-passe", {
+      method: "POST",
+      body: JSON.stringify({ jeton, nouveau_mot_de_passe }),
+    }),
   getDossiers: () => request("/dossiers"),
   createDossier: (data) => request("/dossiers", { method: "POST", body: JSON.stringify(data) }),
   getDossier: (id) => request(`/dossiers/${id}`),
