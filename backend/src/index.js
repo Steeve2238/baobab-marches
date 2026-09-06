@@ -36,6 +36,36 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// TEMPORAIRE - A RETIRER : diagnostic de l'envoi SMTP (mot de passe oublie,
+// 06/09/2026). Meme principe que le diagnosticEnv utilise pour l'incident de
+// redirection 307 : les logs Passenger ne sont pas accessibles en SSH sur cet
+// hebergement, donc on renvoie l'erreur exacte directement dans la reponse
+// JSON plutot que de chercher un fichier de log introuvable. A retirer des
+// que le probleme est identifie.
+// Usage : GET /api/diagnostic-smtp?email=une_adresse_a_toi@... (attention :
+// l'appel envoie reellement un email de test a cette adresse si tout marche)
+// ---------------------------------------------------------------------------
+app.get("/api/diagnostic-smtp", async (req, res) => {
+  const { envoyerEmailReinitialisation } = require("./utils/mailer");
+  try {
+    await envoyerEmailReinitialisation({
+      destinataire: req.query.email || process.env.SMTP_USER,
+      prenom: "Test",
+      lienReinitialisation: "https://exemple.com/diagnostic",
+    });
+    res.json({ success: true, message: "Email envoye sans erreur." });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: err.message,
+      code: err.code,
+      command: err.command,
+      response: err.response,
+    });
+  }
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/dossiers", dossiersRoutes);
 app.use("/api/chronogramme", chronogrammeRoutes);
