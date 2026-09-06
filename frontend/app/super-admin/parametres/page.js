@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { superAdminApi } from "../../../lib/superAdminApi";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import SuperAdminShell from "../../../lib/components/SuperAdminShell";
@@ -213,6 +214,17 @@ export default function SuperAdminParametresPage() {
           </div>
         </form>
       )}
+
+      <div className="card" style={{ maxWidth: 560, marginTop: 16 }}>
+        <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 4 }}>{t("securitySection")}</h3>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 14 }}>{t("securityDescription")}</p>
+        <Link
+          href="/super-admin/changer-mot-de-passe"
+          style={{ ...boutonSecondaireStyle, display: "inline-block", textDecoration: "none" }}
+        >
+          {t("securityChangePasswordLink")}
+        </Link>
+      </div>
     </SuperAdminShell>
   );
 }

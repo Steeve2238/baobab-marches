@@ -292,6 +292,10 @@ export const DICTIONARIES = {
     passwordsDontMatch: "Les mots de passe ne correspondent pas.",
     passwordTooShort: "Le mot de passe doit contenir au moins 8 caractères.",
 
+    securitySection: "Sécurité",
+    securityDescription: "Vous pouvez changer votre mot de passe à tout moment.",
+    securityChangePasswordLink: "Changer mon mot de passe",
+
     assignedToLabel: "Affectation",
     assignRoleLabel: "Rôle porteur",
     assignPersonLabel: "Personne assignée",
@@ -1146,6 +1150,10 @@ export const DICTIONARIES = {
     changePasswordButton: "Confirm",
     passwordsDontMatch: "Passwords do not match.",
     passwordTooShort: "Password must be at least 8 characters long.",
+
+    securitySection: "Security",
+    securityDescription: "You can change your password at any time.",
+    securityChangePasswordLink: "Change my password",
 
     assignedToLabel: "Assignment",
     assignRoleLabel: "Carrying role",

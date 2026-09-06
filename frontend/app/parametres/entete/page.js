@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
@@ -275,6 +276,17 @@ export default function EnteteSettingsPage() {
           </form>
         </div>
       )}
+
+      <div className="card" style={{ maxWidth: 560, marginTop: 16 }}>
+        <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 4 }}>{t("securitySection")}</h3>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 14 }}>{t("securityDescription")}</p>
+        <Link
+          href="/changer-mot-de-passe"
+          style={{ ...boutonSecondaireStyle, display: "inline-block", textDecoration: "none" }}
+        >
+          {t("securityChangePasswordLink")}
+        </Link>
+      </div>
     </AppShell>
   );
 }
