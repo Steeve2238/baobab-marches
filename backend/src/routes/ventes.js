@@ -3,6 +3,8 @@ const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireRoleOuValidateurUniversel, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
+const { genererChronogrammeConsultation } = require("../services/chronogrammeConsultationEngine");
+const { verifierAffectationValide } = require("../utils/affectationTache");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -278,15 +280,48 @@ router.post("/consultations", async (req, res) => {
   }
 });
 
+// GET /api/ventes/consultations/:id - fiche detaillee d'une consultation :
+// infos client, chronogramme (taches propres a cette consultation, voir
+// consultation_tache) et devis eventuellement deja lies - necessaire a la
+// page de detail (chronogramme + lien "Creer un devis").
+router.get("/consultations/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(
+      `SELECT c.*, cl.nom AS client_nom, cl.adresse AS client_adresse,
+              cl.telephone AS client_telephone, cl.email AS client_email
+       FROM consultation c JOIN client_commercial cl ON cl.id = c.client_commercial_id
+       WHERE c.id = $1 AND c.tenant_id = $2`,
+      [id, req.user.tenantId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "VENTE_CONSULTATION_NOT_FOUND") });
+    }
+    const tachesResult = await db.query(
+      `SELECT * FROM consultation_tache WHERE consultation_id = $1 ORDER BY ordre_affichage ASC`,
+      [id]
+    );
+    const devisResult = await db.query(
+      `SELECT id, numero, statut FROM devis WHERE consultation_id = $1 AND tenant_id = $2`,
+      [id, req.user.tenantId]
+    );
+    res.json({ ...result.rows[0], taches: tachesResult.rows, devis: devisResult.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_CONSULTATION_FETCH_ERROR") });
+  }
+});
+
 router.patch("/consultations/:id", async (req, res) => {
   const { id } = req.params;
-  const { objet, statut, notes } = req.body;
+  const { objet, statut, notes, date_limite_reponse } = req.body;
   try {
     const result = await db.query(
       `UPDATE consultation
-       SET objet = COALESCE($1, objet), statut = COALESCE($2, statut), notes = $3
-       WHERE id = $4 AND tenant_id = $5 RETURNING *`,
-      [objet || null, statut || null, notes || null, id, req.user.tenantId]
+       SET objet = COALESCE($1, objet), statut = COALESCE($2, statut), notes = $3,
+           date_limite_reponse = COALESCE($4, date_limite_reponse)
+       WHERE id = $5 AND tenant_id = $6 RETURNING *`,
+      [objet || null, statut || null, notes || null, date_limite_reponse || null, id, req.user.tenantId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "VENTE_CONSULTATION_NOT_FOUND") });
@@ -295,6 +330,201 @@ router.patch("/consultations/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "VENTE_CONSULTATION_UPDATE_ERROR") });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// Chronogramme d'une consultation (voir services/chronogrammeConsultationEngine.js
+// et migrations/020_chronogramme_consultation.sql) - meme principe que le
+// chronogramme d'un dossier d'AO (routes/chronogramme.js) mais retro-planning
+// PROPORTIONNEL (pas d'offsets fixes) et sans notion de "phase". Les taches
+// creees ici remontent aussi dans GET /api/chronogramme/mes-taches (voir
+// l'UNION ALL ajoutee dans routes/chronogramme.js le 07/09/2026).
+// ----------------------------------------------------------------------------
+
+// POST /api/ventes/consultations/:id/chronogramme/generer - genere le
+// retro-planning standard a partir de date_reception / date_limite_reponse.
+// Meme garde-fou anti-doublon que pour un dossier d'AO : refuse si des
+// taches existent deja pour cette consultation, sauf ?force=true (auquel cas
+// les anciennes taches sont supprimees puis remplacees).
+router.post("/consultations/:id/chronogramme/generer", async (req, res) => {
+  const { id } = req.params;
+  const force = req.query.force === "true";
+
+  try {
+    const consultationResult = await db.query(
+      `SELECT * FROM consultation WHERE id = $1 AND tenant_id = $2`,
+      [id, req.user.tenantId]
+    );
+    const consultation = consultationResult.rows[0];
+    if (!consultation) {
+      return res.status(404).json({ error: t(req, "VENTE_CONSULTATION_NOT_FOUND") });
+    }
+
+    const existantResult = await db.query(
+      `SELECT id FROM consultation_tache WHERE consultation_id = $1 LIMIT 1`,
+      [id]
+    );
+    if (existantResult.rows.length > 0 && !force) {
+      return res.status(409).json({ error: t(req, "VENTE_CHRONOGRAMME_ALREADY_EXISTS") });
+    }
+
+    let taches;
+    try {
+      taches = genererChronogrammeConsultation(consultation);
+    } catch (err) {
+      if (err.message === "DATE_LIMITE_REPONSE_REQUISE") {
+        return res.status(400).json({ error: t(req, "VENTE_CHRONOGRAMME_DATE_LIMITE_REQUISE") });
+      }
+      throw err;
+    }
+
+    if (force && existantResult.rows.length > 0) {
+      await db.query(`DELETE FROM consultation_tache WHERE consultation_id = $1`, [id]);
+    }
+
+    const inserees = [];
+    for (const tache of taches) {
+      const result = await db.query(
+        `INSERT INTO consultation_tache
+           (id, consultation_id, intitule, jalon_relatif, date_echeance, statut, ordre_affichage)
+         VALUES ($1, $2, $3, $4, $5, 'A_FAIRE', $6)
+         RETURNING *`,
+        [uuidv4(), id, tache.intitule, tache.jalon_relatif, tache.date_echeance, tache.ordre_affichage]
+      );
+      inserees.push(result.rows[0]);
+    }
+
+    res.status(201).json(inserees);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "CHRONOGRAMME_GENERATE_ERROR") });
+  }
+});
+
+// POST /api/ventes/consultations/:id/chronogramme/taches - ajout manuel
+// d'une tache au chronogramme d'une consultation.
+router.post("/consultations/:id/chronogramme/taches", async (req, res) => {
+  const { id } = req.params;
+  const {
+    intitule,
+    jalon_relatif,
+    date_echeance,
+    role_porteur_id,
+    assigne_utilisateur_id,
+    document_attendu,
+    ordre_affichage,
+  } = req.body;
+
+  if (!intitule || !intitule.trim()) {
+    return res.status(400).json({ error: t(req, "VENTE_CONSULTATION_TACHE_FIELDS_REQUIRED") });
+  }
+
+  try {
+    const consultationCheck = await db.query(
+      `SELECT id FROM consultation WHERE id = $1 AND tenant_id = $2`,
+      [id, req.user.tenantId]
+    );
+    if (consultationCheck.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "VENTE_CONSULTATION_NOT_FOUND") });
+    }
+
+    const erreurAffectation = await verifierAffectationValide(
+      req.user.tenantId,
+      role_porteur_id,
+      assigne_utilisateur_id
+    );
+    if (erreurAffectation) {
+      return res.status(400).json({ error: t(req, erreurAffectation) });
+    }
+
+    const result = await db.query(
+      `INSERT INTO consultation_tache
+         (id, consultation_id, intitule, jalon_relatif, date_echeance, role_porteur_id,
+          assigne_utilisateur_id, document_attendu, statut, ordre_affichage)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'A_FAIRE', COALESCE($9, 0))
+       RETURNING *`,
+      [
+        uuidv4(),
+        id,
+        intitule.trim(),
+        jalon_relatif || null,
+        date_echeance || null,
+        role_porteur_id || null,
+        assigne_utilisateur_id || null,
+        document_attendu || null,
+        ordre_affichage,
+      ]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "TACHE_CREATE_ERROR") });
+  }
+});
+
+// PATCH /api/ventes/consultations/chronogramme-taches/:id - mise a jour du
+// statut et/ou de l'affectation d'une tache de consultation. Route separee
+// (prefixe "chronogramme-taches") plutot que "/consultations/:id/taches/:tacheId"
+// pour rester coherente avec la forme utilisee par le chronogramme des
+// dossiers d'AO (PATCH /api/chronogramme/taches/:id, un seul id necessaire
+// cote frontend pour agir sur une tache).
+router.patch("/consultations/chronogramme-taches/:id", async (req, res) => {
+  const { id } = req.params;
+  let { statut, role_porteur_id, assigne_utilisateur_id } = req.body;
+  if (role_porteur_id === "") role_porteur_id = null;
+  if (assigne_utilisateur_id === "") assigne_utilisateur_id = null;
+  const statutsValides = ["A_FAIRE", "EN_COURS", "FAIT", "EN_RETARD"];
+
+  if (statut === undefined && role_porteur_id === undefined && assigne_utilisateur_id === undefined) {
+    return res.status(400).json({ error: t(req, "TACHE_FIELDS_REQUIRED") });
+  }
+  if (statut !== undefined && !statutsValides.includes(statut)) {
+    return res.status(400).json({ error: t(req, "STATUT_INVALID") });
+  }
+
+  try {
+    const erreurAffectation = await verifierAffectationValide(
+      req.user.tenantId,
+      role_porteur_id,
+      assigne_utilisateur_id
+    );
+    if (erreurAffectation) {
+      return res.status(400).json({ error: t(req, erreurAffectation) });
+    }
+
+    const colonnes = [];
+    const valeurs = [];
+    if (statut !== undefined) {
+      colonnes.push(`statut = $${colonnes.length + 1}`);
+      valeurs.push(statut);
+    }
+    if (role_porteur_id !== undefined) {
+      colonnes.push(`role_porteur_id = $${colonnes.length + 1}`);
+      valeurs.push(role_porteur_id);
+    }
+    if (assigne_utilisateur_id !== undefined) {
+      colonnes.push(`assigne_utilisateur_id = $${colonnes.length + 1}`);
+      valeurs.push(assigne_utilisateur_id);
+    }
+
+    const idxId = valeurs.length + 1;
+    const idxTenant = valeurs.length + 2;
+    const result = await db.query(
+      `UPDATE consultation_tache cst
+       SET ${colonnes.join(", ")}
+       FROM consultation cons
+       WHERE cst.id = $${idxId} AND cst.consultation_id = cons.id AND cons.tenant_id = $${idxTenant}
+       RETURNING cst.*`,
+      [...valeurs, id, req.user.tenantId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "TACHE_NOT_FOUND") });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "TACHE_STATUT_UPDATE_ERROR") });
   }
 });
 

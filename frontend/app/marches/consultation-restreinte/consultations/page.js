@@ -148,19 +148,24 @@ export default function ConsultationsPage() {
                     {t(`venteConsultationStatut_${c.statut}`)}
                   </span>
                 </div>
-                {c.statut === "RECUE" && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                    <Link
-                      href={`/marches/consultation-restreinte/devis/nouveau?consultation_id=${c.id}&client_commercial_id=${c.client_commercial_id}`}
-                      style={boutonSecondaireStyle}
-                    >
-                      {t("venteCreateDevisFromConsultation")}
-                    </Link>
-                    <button onClick={() => handleSansSuite(c.id)} style={boutonSecondaireStyle}>
-                      {t("venteConsultationSansSuite")}
-                    </button>
-                  </div>
-                )}
+                <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                  <Link href={`/marches/consultation-restreinte/consultations/${c.id}`} style={boutonSecondaireStyle}>
+                    {t("venteConsultationDetailsButton")}
+                  </Link>
+                  {c.statut === "RECUE" && (
+                    <>
+                      <Link
+                        href={`/marches/consultation-restreinte/devis/nouveau?consultation_id=${c.id}&client_commercial_id=${c.client_commercial_id}`}
+                        style={boutonSecondaireStyle}
+                      >
+                        {t("venteCreateDevisFromConsultation")}
+                      </Link>
+                      <button onClick={() => handleSansSuite(c.id)} style={boutonSecondaireStyle}>
+                        {t("venteConsultationSansSuite")}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}

@@ -4,35 +4,12 @@ const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { genererChronogrammeStandard } = require("../services/chronogrammeEngine");
+const { verifierAffectationValide } = require("../utils/affectationTache");
 
 const router = express.Router();
 router.use(requireAuth);
 router.use(requireModule("dossiers"));
 router.use(blockLectureSeule);
-
-/**
- * Verifie qu'un role_porteur_id / assigne_utilisateur_id fourni (l'un ou
- * l'autre, ou les deux) appartient bien au tenant courant, pour eviter
- * qu'une tache d'un dossier soit affectee a un role ou une personne d'un
- * AUTRE tenant. Retourne un code d'erreur i18n si invalide, null si ok.
- */
-async function verifierAffectationValide(tenantId, rolePorteurId, assigneUtilisateurId) {
-  if (rolePorteurId) {
-    const roleCheck = await db.query(`SELECT id FROM role WHERE id = $1 AND tenant_id = $2`, [
-      rolePorteurId,
-      tenantId,
-    ]);
-    if (roleCheck.rows.length === 0) return "TACHE_ROLE_INVALID";
-  }
-  if (assigneUtilisateurId) {
-    const userCheck = await db.query(
-      `SELECT id FROM utilisateur WHERE id = $1 AND tenant_id = $2`,
-      [assigneUtilisateurId, tenantId]
-    );
-    if (userCheck.rows.length === 0) return "TACHE_ASSIGNE_INVALID";
-  }
-  return null;
-}
 
 // GET /api/chronogramme/mes-taches - taches, sur TOUS les dossiers du
 // tenant, qui concernent l'utilisateur connecte : soit affectees a lui
@@ -58,6 +35,21 @@ router.get("/mes-taches", async (req, res) => {
          AND ct.date_echeance < CURRENT_DATE`,
       [req.user.tenantId]
     );
+    // Meme recalcul EN_RETARD, cote chronogramme des consultations (Module
+    // Ventes/Negoce, ajoute le 07/09/2026) - une tache de consultation doit
+    // apparaitre ici au meme titre qu'une tache de dossier d'AO, sinon
+    // l'affectation ne "declenche" rien de visible pour la personne
+    // concernee (demande explicite de Steeve).
+    await db.query(
+      `UPDATE consultation_tache cst
+       SET statut = 'EN_RETARD'
+       FROM consultation c
+       WHERE cst.consultation_id = c.id AND c.tenant_id = $1
+         AND cst.statut IN ('A_FAIRE', 'EN_COURS')
+         AND cst.date_echeance IS NOT NULL
+         AND cst.date_echeance < CURRENT_DATE`,
+      [req.user.tenantId]
+    );
 
     const mesRolesResult = await db.query(
       `SELECT r.id FROM role r
@@ -67,19 +59,48 @@ router.get("/mes-taches", async (req, res) => {
     );
     const mesRoleIds = mesRolesResult.rows.map((r) => r.id);
 
+    // Union des taches de chronogramme "dossier d'AO" et "consultation" :
+    // memes regles de visibilite (affecte nommement OU role porteur detenu),
+    // memes colonnes exposees au frontend (source_type + lien_id permettent
+    // de reconstruire le bon lien selon l'origine de la tache).
     const result = await db.query(
-      `SELECT ct.*, d.reference_externe, d.intitule AS dossier_intitule,
-              r.code AS role_code, r.libelle AS role_libelle
-       FROM chronogramme_tache ct
-       JOIN dossier_ao d ON d.id = ct.dossier_ao_id
-       LEFT JOIN role r ON r.id = ct.role_porteur_id
-       WHERE d.tenant_id = $1
-         AND (
-           ct.assigne_utilisateur_id = $2
-           OR (ct.assigne_utilisateur_id IS NULL AND ct.role_porteur_id = ANY($3::uuid[]))
-         )
-         AND ($4 OR ct.statut != 'FAIT')
-       ORDER BY ct.date_echeance ASC NULLS LAST`,
+      `SELECT * FROM (
+         SELECT ct.id, ct.intitule, ct.jalon_relatif, ct.date_echeance, ct.role_porteur_id,
+                ct.assigne_utilisateur_id, ct.document_attendu, ct.statut, ct.ordre_affichage,
+                ct.phase,
+                d.reference_externe AS contexte_principal, d.intitule AS contexte_secondaire,
+                r.code AS role_code, r.libelle AS role_libelle,
+                'DOSSIER_AO' AS source_type, ct.dossier_ao_id AS lien_id
+         FROM chronogramme_tache ct
+         JOIN dossier_ao d ON d.id = ct.dossier_ao_id
+         LEFT JOIN role r ON r.id = ct.role_porteur_id
+         WHERE d.tenant_id = $1
+           AND (
+             ct.assigne_utilisateur_id = $2
+             OR (ct.assigne_utilisateur_id IS NULL AND ct.role_porteur_id = ANY($3::uuid[]))
+           )
+           AND ($4 OR ct.statut != 'FAIT')
+
+         UNION ALL
+
+         SELECT cst.id, cst.intitule, cst.jalon_relatif, cst.date_echeance, cst.role_porteur_id,
+                cst.assigne_utilisateur_id, cst.document_attendu, cst.statut, cst.ordre_affichage,
+                NULL::text AS phase,
+                cl.nom AS contexte_principal, cons.objet AS contexte_secondaire,
+                r2.code AS role_code, r2.libelle AS role_libelle,
+                'CONSULTATION' AS source_type, cst.consultation_id AS lien_id
+         FROM consultation_tache cst
+         JOIN consultation cons ON cons.id = cst.consultation_id
+         JOIN client_commercial cl ON cl.id = cons.client_commercial_id
+         LEFT JOIN role r2 ON r2.id = cst.role_porteur_id
+         WHERE cons.tenant_id = $1
+           AND (
+             cst.assigne_utilisateur_id = $2
+             OR (cst.assigne_utilisateur_id IS NULL AND cst.role_porteur_id = ANY($3::uuid[]))
+           )
+           AND ($4 OR cst.statut != 'FAIT')
+       ) toutes_taches
+       ORDER BY date_echeance ASC NULLS LAST`,
       [req.user.tenantId, req.user.sub, mesRoleIds, inclureTerminees]
     );
     res.json(result.rows);

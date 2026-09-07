@@ -290,6 +290,9 @@ const MESSAGES = {
     VENTE_CONSULTATION_FETCH_ERROR: "Erreur lors de la recuperation des consultations.",
     VENTE_CONSULTATION_CREATE_ERROR: "Erreur lors de la creation de la consultation.",
     VENTE_CONSULTATION_UPDATE_ERROR: "Erreur lors de la mise a jour de la consultation.",
+    VENTE_CONSULTATION_TACHE_FIELDS_REQUIRED: "L'intitule de la tache est requis.",
+    VENTE_CHRONOGRAMME_ALREADY_EXISTS: "Un chronogramme existe deja pour cette consultation.",
+    VENTE_CHRONOGRAMME_DATE_LIMITE_REQUISE: "La date limite de reponse de la consultation est requise pour generer le chronogramme.",
 
     VENTE_DEVIS_NOT_FOUND: "Devis introuvable.",
     VENTE_DEVIS_FIELDS_REQUIRED: "Le client et au moins une ligne de produit sont requis.",
@@ -614,6 +617,9 @@ const MESSAGES = {
     VENTE_CONSULTATION_FETCH_ERROR: "Error while retrieving consultations.",
     VENTE_CONSULTATION_CREATE_ERROR: "Error while creating the consultation.",
     VENTE_CONSULTATION_UPDATE_ERROR: "Error while updating the consultation.",
+    VENTE_CONSULTATION_TACHE_FIELDS_REQUIRED: "The task title is required.",
+    VENTE_CHRONOGRAMME_ALREADY_EXISTS: "A timeline already exists for this consultation.",
+    VENTE_CHRONOGRAMME_DATE_LIMITE_REQUISE: "The consultation's response deadline is required to generate the timeline.",
 
     VENTE_DEVIS_NOT_FOUND: "Quote not found.",
     VENTE_DEVIS_FIELDS_REQUIRED: "The client and at least one product line are required.",

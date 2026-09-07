@@ -30,17 +30,33 @@ export default function MesTachesPage() {
       .finally(() => setChargement(false));
   }
 
-  async function handlePatchStatut(tacheId, statut) {
+  // Une tache de "Mes taches" peut venir d'un dossier d'AO (chronogramme
+  // Module 1) ou d'une consultation (chronogramme Module Ventes/Negoce,
+  // ajoute le 07/09/2026) - voir source_type renvoye par
+  // GET /chronogramme/mes-taches. Chaque source a sa propre route de mise a
+  // jour de statut cote backend, d'ou ce petit aiguillage.
+  async function handlePatchStatut(tache, statut) {
     try {
-      const maj = await api.patchTacheStatut(tacheId, statut);
+      const maj =
+        tache.source_type === "CONSULTATION"
+          ? await api.patchTacheConsultationStatut(tache.id, statut)
+          : await api.patchTacheStatut(tache.id, statut);
       setTaches((prev) =>
         statut === "FAIT" && !afficherTerminees
-          ? prev.filter((tache) => tache.id !== tacheId)
-          : prev.map((tache) => (tache.id === tacheId ? { ...tache, ...maj } : tache))
+          ? prev.filter((t) => t.id !== tache.id)
+          : prev.map((t) => (t.id === tache.id ? { ...t, ...maj } : t))
       );
     } catch (err) {
       setErreur(err.message);
     }
+  }
+
+  // Lien vers la fiche d'origine de la tache : le dossier d'AO, ou la
+  // consultation (fiche accessible indifferemment depuis Ventes ou Marches >
+  // Consultation restreinte - meme donnee, memes routes API - on pointe vers
+  // l'entree Ventes par defaut).
+  function lienContexte(tache) {
+    return tache.source_type === "CONSULTATION" ? `/ventes/consultations/${tache.lien_id}` : `/dossiers/${tache.lien_id}`;
   }
 
   return (
@@ -80,14 +96,18 @@ export default function MesTachesPage() {
             >
               <div>
                 <Link
-                  href={`/dossiers/${tache.dossier_ao_id}`}
+                  href={lienContexte(tache)}
                   style={{ fontSize: 10.5, color: "var(--sub)", textTransform: "uppercase" }}
                 >
-                  {t("dossierRefLabel")} · {tache.reference_externe || tache.dossier_intitule}
+                  {tache.source_type === "CONSULTATION" ? t("venteConsultationsPageTitle") : t("dossierRefLabel")} ·{" "}
+                  {tache.contexte_principal || tache.contexte_secondaire}
+                  {tache.source_type === "CONSULTATION" && tache.contexte_secondaire
+                    ? ` (${tache.contexte_secondaire})`
+                    : ""}
                 </Link>
                 <div style={{ fontWeight: 600, fontSize: 13, marginTop: 2 }}>{tache.intitule}</div>
                 <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
-                  {phaseChronogrammeLabel(tache.phase)}
+                  {tache.phase ? `${phaseChronogrammeLabel(tache.phase)} · ` : ""}
                   {tache.jalon_relatif ? ` · ${tache.jalon_relatif}` : ""}
                   {tache.role_libelle ? ` · ${tache.role_libelle}` : ""}
                 </div>
@@ -115,7 +135,7 @@ export default function MesTachesPage() {
                 {tache.statut !== "FAIT" && (
                   <button
                     onClick={() =>
-                      handlePatchStatut(tache.id, tache.statut === "A_FAIRE" ? "EN_COURS" : "FAIT")
+                      handlePatchStatut(tache, tache.statut === "A_FAIRE" ? "EN_COURS" : "FAIT")
                     }
                     style={boutonSecondaireStyle}
                   >

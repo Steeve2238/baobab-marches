@@ -439,8 +439,32 @@ export const api = {
   patchClientCommercial: (id, data) => request(`/ventes/clients/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
   getConsultations: (statut) => request(`/ventes/consultations${statut ? `?statut=${statut}` : ""}`),
+  getConsultation: (id) => request(`/ventes/consultations/${id}`),
   createConsultation: (data) => request("/ventes/consultations", { method: "POST", body: JSON.stringify(data) }),
   patchConsultation: (id, data) => request(`/ventes/consultations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  // Chronogramme d'une consultation (meme principe que le chronogramme d'un
+  // dossier d'AO ci-dessus, mais retro-planning proportionnel - voir
+  // backend/src/services/chronogrammeConsultationEngine.js)
+  genererChronogrammeConsultation: (consultationId, force) =>
+    request(`/ventes/consultations/${consultationId}/chronogramme/generer${force ? "?force=true" : ""}`, {
+      method: "POST",
+    }),
+  createTacheConsultation: (consultationId, data) =>
+    request(`/ventes/consultations/${consultationId}/chronogramme/taches`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  patchTacheConsultationStatut: (tacheId, statut) =>
+    request(`/ventes/consultations/chronogramme-taches/${tacheId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ statut }),
+    }),
+  patchTacheConsultationAffectation: (tacheId, { role_porteur_id, assigne_utilisateur_id }) =>
+    request(`/ventes/consultations/chronogramme-taches/${tacheId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ role_porteur_id, assigne_utilisateur_id }),
+    }),
 
   getDevisListe: (statut) => request(`/ventes/devis${statut ? `?statut=${statut}` : ""}`),
   getDevis: (id) => request(`/ventes/devis/${id}`),
