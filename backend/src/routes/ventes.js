@@ -1,7 +1,7 @@
 const express = require("express");
 const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
-const { requireAuth, requireRole, requireRoleOuValidateurUniversel, requireModule } = require("../middleware/auth");
+const { requireAuth, requireRoleOuValidateurUniversel, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
 const router = express.Router();
@@ -35,6 +35,24 @@ router.use((req, res, next) => {
   return requireModule("marches")(req, res, next);
 });
 
+// Bloque toute ecriture pour un role marque "lecture seule" (ADMIN jamais
+// concerne) - meme convention que les autres modules (fournisseurs.js,
+// chronogramme.js...). Ajoute le 07/09/2026 en meme temps que la
+// suppression de ROLES_CREATION/ROLES_FACTURATION ci-dessous : ce module
+// utilisait jusque-la son propre systeme de codes de role en dur, qui ne
+// reconnaissait QUE les codes exacts "COMMERCIAL"/"ADMINISTRATIF" (creation)
+// et "COMPTABLE"/"FINANCIER" (facturation) - or les roles sont librement
+// nommes par tenant (voir routes/roles.js) et rien n'indiquait qu'il fallait
+// utiliser ces codes precis. Resultat concret chez Steeve : ses roles reels
+// ("AA" Assistante administrative, "AC" Assistante comptable...) ne
+// matchaient aucun de ces codes, donc SEUL le compte ADMIN pouvait creer un
+// client/une consultation/un devis ou gerer une facture/un BL, quel que soit
+// le module coche sur le role. Corrige en retombant sur le meme systeme
+// modules + lecture-seule que le reste de la plateforme : un role avec le
+// module "Marches" coche (et qui n'est pas 100% lecture seule) peut
+// desormais creer/gerer clients, consultations, devis, factures et BL.
+router.use(blockLectureSeule);
+
 // ----------------------------------------------------------------------------
 // Module Ventes/Negoce (cadre avec Steeve le 04/09/2026, voir
 // claude/resume_reprise_projet.md) : Consultation -> Devis (valide par la
@@ -42,20 +60,21 @@ router.use((req, res, next) => {
 // et calculs (HT/TVA/TTC) toujours faits cote serveur (jamais fait confiance
 // a des totaux envoyes par le frontend).
 //
-// Repartition des roles actee avec Steeve (requireRole accepte plusieurs
-// codes ; ADMIN passe toujours, comme partout ailleurs sur la plateforme) :
-//   - COMMERCIAL / ADMINISTRATIF : enregistre les consultations, cree/edite
-//     les devis.
-//   - Validation d'un devis : tout "validateur universel" (Directeur General
-//     ou Directeur Financier - voir requireRoleOuValidateurUniversel,
-//     Phase 2 du systeme de permissions par role, 05/09/2026), plus DIRECTION
-//     par son code de role pour compatibilite si un tenant a un role
-//     DIRECTION qui n'a pas (encore) coche validateur_universel. Ce n'est
-//     PLUS reserve au seul code de role "DIRECTION" en dur : Steeve a
-//     explicitement demande que le Directeur Financier puisse valider a la
-//     place du Directeur General en cas d'absence, et inversement.
-//   - COMPTABLE / FINANCIER : genere facture puis bon de livraison, suit les
-//     paiements et les livraisons.
+// Creation/edition (clients, consultations, devis) et facturation
+// (facture/BL) : ouvertes a tout role ayant le module "Marches" et qui n'est
+// pas en lecture seule (cf. blockLectureSeule ci-dessus) - plus de
+// restriction par code de role en dur pour ces actions (voir la note
+// ci-dessus sur pourquoi ROLES_CREATION/ROLES_FACTURATION ont ete retires).
+//
+// Validation d'un devis (routes /valider et /statut) : reste plus stricte,
+// reservee a un "validateur universel" (Directeur General ou Directeur
+// Financier - voir requireRoleOuValidateurUniversel, Phase 2 du systeme de
+// permissions par role, 05/09/2026) ou au code de role DIRECTION pour
+// compatibilite. Steeve a explicitement demande que le Directeur Financier
+// puisse valider a la place du Directeur General en cas d'absence, et
+// inversement - c'est une decision d'approbation, volontairement gardee
+// distincte du simple acces au module.
+//
 // La LECTURE (GET) n'est pas restreinte par role : "consultation restreinte"
 // dans la demande de Steeve designe la 1ere etape du flux commercial (une
 // demande recue d'un client), pas un acces limite en lecture - confirme
@@ -64,7 +83,6 @@ router.use((req, res, next) => {
 
 const ROLES_CREATION = ["COMMERCIAL", "ADMINISTRATIF"];
 const ROLES_VALIDATION = ["DIRECTION"];
-const ROLES_FACTURATION = ["COMPTABLE", "FINANCIER"];
 
 // ----------------------------------------------------------------------------
 // Helpers
@@ -179,7 +197,7 @@ router.get("/clients", async (req, res) => {
   }
 });
 
-router.post("/clients", requireRole(...ROLES_CREATION, ...ROLES_FACTURATION), async (req, res) => {
+router.post("/clients", async (req, res) => {
   const { nom, adresse, telephone, email } = req.body;
   if (!nom || !nom.trim()) {
     return res.status(400).json({ error: t(req, "VENTE_CLIENT_FIELDS_REQUIRED") });
@@ -197,7 +215,7 @@ router.post("/clients", requireRole(...ROLES_CREATION, ...ROLES_FACTURATION), as
   }
 });
 
-router.patch("/clients/:id", requireRole(...ROLES_CREATION, ...ROLES_FACTURATION), async (req, res) => {
+router.patch("/clients/:id", async (req, res) => {
   const { id } = req.params;
   const { nom, adresse, telephone, email, actif } = req.body;
   try {
@@ -242,7 +260,7 @@ router.get("/consultations", async (req, res) => {
   }
 });
 
-router.post("/consultations", requireRole(...ROLES_CREATION), async (req, res) => {
+router.post("/consultations", async (req, res) => {
   const { client_commercial_id, objet, date_reception, notes } = req.body;
   if (!client_commercial_id || !objet || !objet.trim()) {
     return res.status(400).json({ error: t(req, "VENTE_CONSULTATION_FIELDS_REQUIRED") });
@@ -260,7 +278,7 @@ router.post("/consultations", requireRole(...ROLES_CREATION), async (req, res) =
   }
 });
 
-router.patch("/consultations/:id", requireRole(...ROLES_CREATION), async (req, res) => {
+router.patch("/consultations/:id", async (req, res) => {
   const { id } = req.params;
   const { objet, statut, notes } = req.body;
   try {
@@ -328,7 +346,7 @@ router.get("/devis/:id", async (req, res) => {
   }
 });
 
-router.post("/devis", requireRole(...ROLES_CREATION), async (req, res) => {
+router.post("/devis", async (req, res) => {
   const { client_commercial_id, consultation_id, objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes } = req.body;
   if (!client_commercial_id) {
     return res.status(400).json({ error: t(req, "VENTE_DEVIS_FIELDS_REQUIRED") });
@@ -400,7 +418,7 @@ router.post("/devis", requireRole(...ROLES_CREATION), async (req, res) => {
 // PATCH /devis/:id - reedition des lignes/champs, uniquement tant que le
 // devis n'est pas encore VALIDE/REFUSE/EXPIRE (au-dela, un devis est fige :
 // toute correction passe par un nouveau devis, comme sur le terrain).
-router.patch("/devis/:id", requireRole(...ROLES_CREATION), async (req, res) => {
+router.patch("/devis/:id", async (req, res) => {
   const { id } = req.params;
   const { objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes } = req.body;
 
@@ -581,7 +599,7 @@ router.get("/factures/:id", async (req, res) => {
   }
 });
 
-router.post("/devis/:id/generer-facture", requireRole(...ROLES_FACTURATION), async (req, res) => {
+router.post("/devis/:id/generer-facture", async (req, res) => {
   const { id } = req.params;
   const { reference_bc_client, date_echeance } = req.body;
 
@@ -650,7 +668,7 @@ router.post("/devis/:id/generer-facture", requireRole(...ROLES_FACTURATION), asy
   }
 });
 
-router.patch("/factures/:id", requireRole(...ROLES_FACTURATION), async (req, res) => {
+router.patch("/factures/:id", async (req, res) => {
   const { id } = req.params;
   const { reference_bc_client, date_echeance } = req.body;
   try {
@@ -669,7 +687,7 @@ router.patch("/factures/:id", requireRole(...ROLES_FACTURATION), async (req, res
   }
 });
 
-router.patch("/factures/:id/marquer-payee", requireRole(...ROLES_FACTURATION), async (req, res) => {
+router.patch("/factures/:id/marquer-payee", async (req, res) => {
   const { id } = req.params;
   const { mode_paiement } = req.body;
   try {
@@ -688,7 +706,7 @@ router.patch("/factures/:id/marquer-payee", requireRole(...ROLES_FACTURATION), a
   }
 });
 
-router.patch("/factures/:id/annuler", requireRole(...ROLES_FACTURATION), async (req, res) => {
+router.patch("/factures/:id/annuler", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
@@ -758,7 +776,7 @@ router.get("/bl/:id", async (req, res) => {
   }
 });
 
-router.post("/factures/:id/generer-bl", requireRole(...ROLES_FACTURATION), async (req, res) => {
+router.post("/factures/:id/generer-bl", async (req, res) => {
   const { id } = req.params;
 
   const client = await db.pool.connect();
@@ -816,7 +834,7 @@ router.post("/factures/:id/generer-bl", requireRole(...ROLES_FACTURATION), async
 
 // PATCH /bl/:id - edition des quantites livrees (livraison partielle),
 // uniquement tant que le BL est en brouillon.
-router.patch("/bl/:id", requireRole(...ROLES_FACTURATION), async (req, res) => {
+router.patch("/bl/:id", async (req, res) => {
   const { id } = req.params;
   const { lignes, date_bl } = req.body;
 
@@ -863,7 +881,7 @@ router.patch("/bl/:id", requireRole(...ROLES_FACTURATION), async (req, res) => {
   }
 });
 
-router.patch("/bl/:id/marquer-livre", requireRole(...ROLES_FACTURATION), async (req, res) => {
+router.patch("/bl/:id/marquer-livre", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(

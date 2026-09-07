@@ -193,9 +193,13 @@ function requireModule(moduleKey) {
  * qui doit pouvoir tout consulter mais ne jamais rien modifier). ADMIN n'est
  * jamais concerne. A poser en meme temps que requireModule, apres
  * requireAuth, sur les fichiers de routes ou la notion de lecture seule doit
- * s'appliquer telle quelle (le module Marche a son propre systeme de roles
- * plus fin ROLES_CREATION/VALIDATION/FACTURATION et n'utilise pas encore ce
- * middleware generique, voir ventes.js).
+ * s'appliquer telle quelle. Le module Marche (ventes.js) garde son propre
+ * ROLES_VALIDATION (requireRoleOuValidateurUniversel) pour les 2 routes de
+ * decision sur un devis (valider/changer son statut), mais utilise ce
+ * middleware generique pour tout le reste depuis le 07/09/2026, apres avoir
+ * retire ROLES_CREATION/ROLES_FACTURATION qui ne reconnaissaient que des
+ * codes de role fixes ("COMMERCIAL", "COMPTABLE"...) jamais garantis
+ * d'exister sur un tenant donne.
  */
 function blockLectureSeule(req, res, next) {
   if (req.method === "GET") return next();
