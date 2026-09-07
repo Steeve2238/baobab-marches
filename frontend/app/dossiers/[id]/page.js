@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
@@ -61,6 +62,17 @@ export default function DossierDetailPage() {
     duree_estimee_jours: "",
   });
   const [simulationEnCours, setSimulationEnCours] = useState(false);
+
+  // "Dossier de calcul" (prix de revient et marge, atelier autonome - voir
+  // routes/calculPrix.js) : un dossier de calcul est rattache 0 ou 1 fois a
+  // ce dossier d'AO (contrainte CHECK cote base). Charge separement du
+  // Promise.all principal ci-dessous pour ne pas bloquer l'affichage du
+  // reste de la fiche si cet appel echoue.
+  const [dossierCalcul, setDossierCalcul] = useState(null);
+  const [calculPrixChargement, setCalculPrixChargement] = useState(true);
+  const [formCalculPrixOuvert, setFormCalculPrixOuvert] = useState(false);
+  const [nomCalculPrix, setNomCalculPrix] = useState("");
+  const [creationCalculPrixEnCours, setCreationCalculPrixEnCours] = useState(false);
 
   const [formMargeOuvert, setFormMargeOuvert] = useState(false);
   const [formMarge, setFormMarge] = useState({
@@ -174,6 +186,34 @@ export default function DossierDetailPage() {
     }
     if (id) charger();
   }, [id, t]);
+
+  useEffect(() => {
+    if (!id) return;
+    api
+      .getDossiersCalcul({ dossier_ao_id: id })
+      .then((rows) => setDossierCalcul(rows[0] || null))
+      .catch(() => setDossierCalcul(null))
+      .finally(() => setCalculPrixChargement(false));
+  }, [id]);
+
+  function handleOuvrirFormCalculPrix() {
+    setNomCalculPrix(`Calcul – ${dossier?.reference_externe || dossier?.intitule || ""}`.trim());
+    setFormCalculPrixOuvert(true);
+  }
+
+  async function handleCreerDossierCalcul(e) {
+    e.preventDefault();
+    setCreationCalculPrixEnCours(true);
+    try {
+      const nouveau = await api.createDossierCalcul({ dossier_ao_id: id, nom: nomCalculPrix });
+      setDossierCalcul(nouveau);
+      setFormCalculPrixOuvert(false);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setCreationCalculPrixEnCours(false);
+    }
+  }
 
   async function handleLancerSimulation(e) {
     e.preventDefault();
@@ -1330,6 +1370,51 @@ export default function DossierDetailPage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* ---------------- DOSSIER DE CALCUL ---------------- */}
+      <section style={{ marginBottom: 30 }}>
+        <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 4 }}>{t("calcPrixSectionTitle")}</h2>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 12 }}>{t("calcPrixSectionDescription")}</p>
+        <div className="card">
+          {calculPrixChargement ? (
+            <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
+          ) : dossierCalcul ? (
+            <Link
+              href={`/calcul-prix/${dossierCalcul.id}`}
+              style={{ ...boutonPrincipalStyle, textDecoration: "none", display: "inline-block" }}
+            >
+              {t("calcPrixOpenButton")}
+            </Link>
+          ) : (
+            <>
+              <p style={{ fontSize: 13, color: "var(--sub)", marginBottom: 10 }}>{t("calcPrixNoneYet")}</p>
+              {formCalculPrixOuvert ? (
+                <form
+                  onSubmit={handleCreerDossierCalcul}
+                  style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}
+                >
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <label style={labelStyle}>{t("calcPrixNomLabel")}</label>
+                    <input
+                      required
+                      value={nomCalculPrix}
+                      onChange={(e) => setNomCalculPrix(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <button type="submit" disabled={creationCalculPrixEnCours} style={boutonPrincipalStyle}>
+                    {creationCalculPrixEnCours ? t("calcPrixCreating") : t("save")}
+                  </button>
+                </form>
+              ) : (
+                <button onClick={handleOuvrirFormCalculPrix} style={boutonPrincipalStyle}>
+                  {t("calcPrixCreateButton")}
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </section>
 
       {/* ---------------- MARGE ---------------- */}

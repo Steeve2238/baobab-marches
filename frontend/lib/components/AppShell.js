@@ -25,6 +25,13 @@ const NAV_ITEMS = [
   { href: "/parc-auto", key: "navParcAuto", moduleKey: "parc-auto" },
   { href: "/marches", key: "navMarches", moduleKey: "marches" },
   { href: "/dossiers", key: "navDossiers", moduleKey: "dossiers" },
+  // "Dossier de calcul" (prix de revient et marge) est rattache soit a un
+  // dossier d'AO soit a une consultation restreinte (jamais les deux) - donc
+  // visible des qu'on a l'un OU l'autre des deux modules correspondants,
+  // meme regle d'acces que le gate OR dans routes/calculPrix.js cote
+  // backend (moduleKeyAny, distinct de moduleKey qui exige une egalite
+  // exacte a une seule cle).
+  { href: "/calcul-prix", key: "navCalculPrix", moduleKeyAny: ["marches", "dossiers"] },
   { href: "/rh/demandes", key: "navDemandesRH" },
   { href: "/rh/fiches-temps", key: "navFichesTemps" },
   { href: "/rh/personnel", key: "navRH", moduleKey: "rh" },
@@ -99,6 +106,11 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
       // routes/ventes.js.
       if (item.moduleKey === "marches" && permissions.validateurUniversel) return true;
       return (permissions.modules || []).includes(item.moduleKey);
+    }
+    if (item.moduleKeyAny) {
+      if (!permissions) return false;
+      if (permissions.admin || permissions.tableauDeBord) return true;
+      return item.moduleKeyAny.some((m) => (permissions.modules || []).includes(m));
     }
     return true;
   });

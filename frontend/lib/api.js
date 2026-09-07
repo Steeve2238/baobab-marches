@@ -488,4 +488,47 @@ export const api = {
 
   getStatistiquesVentes: () => request(`/ventes/statistiques`),
   getSuiviVentes: () => request(`/ventes/suivi`),
+
+  // Parametres du "Dossier de calcul" (prix de revient et marge) - voir
+  // GET/PATCH /api/parametres/calcul-prix cote backend. La TVA de vente
+  // n'est PAS ici : elle reste getParametresVentes/patchParametresVentes
+  // ci-dessus (meme taux que le reste de la plateforme).
+  getParametresCalculPrix: () => request("/parametres/calcul-prix"),
+  patchParametresCalculPrix: (data) =>
+    request("/parametres/calcul-prix", { method: "PATCH", body: JSON.stringify(data) }),
+
+  // "Dossier de calcul" (prix de revient et marge, module calcul-prix) -
+  // atelier autonome rattache SOIT a un dossier d'AO SOIT a une consultation
+  // (jamais les deux). Un seul article = une ligne, plusieurs offres
+  // comparees par article (voir routes/calculPrix.js + services/
+  // calculPrixEngine.js cote backend, confirme avec Steeve le 07/09/2026 a
+  // partir de son propre tableau Excel).
+  getDossiersCalcul: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/calcul-prix/dossiers${query ? `?${query}` : ""}`);
+  },
+  getDossierCalcul: (id) => request(`/calcul-prix/dossiers/${id}`),
+  createDossierCalcul: (data) => request("/calcul-prix/dossiers", { method: "POST", body: JSON.stringify(data) }),
+  supprimerDossierCalcul: (id) => request(`/calcul-prix/dossiers/${id}`, { method: "DELETE" }),
+
+  createArticleCalcul: (dossierCalculId, data) =>
+    request(`/calcul-prix/dossiers/${dossierCalculId}/articles`, { method: "POST", body: JSON.stringify(data) }),
+  patchArticleCalcul: (id, data) =>
+    request(`/calcul-prix/articles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerArticleCalcul: (id) => request(`/calcul-prix/articles/${id}`, { method: "DELETE" }),
+
+  createOffreCalcul: (articleId, data) =>
+    request(`/calcul-prix/articles/${articleId}/offres`, { method: "POST", body: JSON.stringify(data) }),
+  patchOffreCalcul: (id, data) => request(`/calcul-prix/offres/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerOffreCalcul: (id) => request(`/calcul-prix/offres/${id}`, { method: "DELETE" }),
+
+  // Registres partenaires dupliques (memes tables fournisseur/transitaire),
+  // accessibles avec seulement le module "marches" ou "dossiers" - voir
+  // commentaire dans routes/calculPrix.js.
+  getFournisseursCalcul: () => request("/calcul-prix/fournisseurs"),
+  createFournisseurCalcul: (data) =>
+    request("/calcul-prix/fournisseurs", { method: "POST", body: JSON.stringify(data) }),
+  getTransitairesCalcul: () => request("/calcul-prix/transitaires"),
+  createTransitaireCalcul: (data) =>
+    request("/calcul-prix/transitaires", { method: "POST", body: JSON.stringify(data) }),
 };

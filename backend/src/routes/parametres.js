@@ -195,4 +195,75 @@ router.delete("/ventes/logo", requireRole("ADMIN"), async (req, res) => {
   }
 });
 
+// ----------------------------------------------------------------------------
+// Parametres du "Dossier de calcul" (prix de revient et marge) : taux de
+// douane, change, commissions bancaires... utilises par
+// services/calculPrixEngine.js. Reserve a ADMIN (comme le taux de TVA
+// Ventes ci-dessus) - la TVA appliquee au prix de vente n'est PAS dupliquee
+// ici, elle reste `tenant.taux_tva_pourcentage` (voir GET/PATCH
+// /parametres/ventes) pour rester toujours identique au reste de la
+// plateforme, comme demande par Steeve dans le prototype Excel valide.
+// ----------------------------------------------------------------------------
+
+const CLES_PARAMETRES_CALCUL_PRIX = [
+  "tauxDroitDouane",
+  "tauxRedevanceStatistique",
+  "tauxPCS",
+  "tauxPCC",
+  "tauxCOSEC",
+  "tauxTvaImport",
+  "tauxAssuranceFret",
+  "margeCibleDefaut",
+  "pariteEurXof",
+  "tauxCommissionTTHU",
+  "tauxCommissionDBS",
+  "commissionDbsMinimum",
+  "tauxTAF",
+  "forfaitSwift",
+  "forfaitTimbre",
+];
+
+// GET /api/parametres/calcul-prix
+router.get("/calcul-prix", async (req, res) => {
+  try {
+    const result = await db.query(`SELECT parametres_calcul_prix_json FROM tenant WHERE id = $1`, [
+      req.user.tenantId,
+    ]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "CALCUL_PARAMETRES_FETCH_ERROR") });
+    }
+    res.json(result.rows[0].parametres_calcul_prix_json);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "CALCUL_PARAMETRES_FETCH_ERROR") });
+  }
+});
+
+// PATCH /api/parametres/calcul-prix - mise a jour partielle (fusion JSONB) :
+// seules les cles presentes dans le corps sont modifiees, valeurs
+// numeriques >= 0 uniquement (un taux exprime en decimal, ex 0.20 pour 20%
+// - jamais en pourcentage brut, coherent avec le reste du moteur de calcul).
+router.patch("/calcul-prix", requireRole("ADMIN"), async (req, res) => {
+  const misesAJour = {};
+  for (const cle of CLES_PARAMETRES_CALCUL_PRIX) {
+    if (req.body[cle] === undefined) continue;
+    const valeur = Number(req.body[cle]);
+    if (!Number.isFinite(valeur) || valeur < 0) {
+      return res.status(400).json({ error: t(req, "CALCUL_PARAMETRES_INVALID") });
+    }
+    misesAJour[cle] = valeur;
+  }
+  try {
+    const result = await db.query(
+      `UPDATE tenant SET parametres_calcul_prix_json = parametres_calcul_prix_json || $1::jsonb
+       WHERE id = $2 RETURNING parametres_calcul_prix_json`,
+      [JSON.stringify(misesAJour), req.user.tenantId]
+    );
+    res.json(result.rows[0].parametres_calcul_prix_json);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "CALCUL_PARAMETRES_UPDATE_ERROR") });
+  }
+});
+
 module.exports = router;

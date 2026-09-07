@@ -6,6 +6,31 @@ import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
 
+// Definit, pour chaque cle de tenant.parametres_calcul_prix_json (voir
+// CLES_PARAMETRES_CALCUL_PRIX cote backend, routes/parametres.js), comment
+// l'afficher/la saisir : "pourcentage" est stocke en decimal (0.20) mais
+// saisi/affiche en pourcentage brut (20) - meme convention que le taux de
+// TVA Ventes ci-dessus - tandis que "montant" (XOF) et "nombre" (parite de
+// change) sont des valeurs brutes, pas des taux, et ne subissent aucune
+// conversion.
+const PARAM_DEFS_CALCUL_PRIX = [
+  { cle: "tauxDroitDouane", labelKey: "calcPrixTauxDroitDouaneLabel", type: "pourcentage" },
+  { cle: "tauxRedevanceStatistique", labelKey: "calcPrixTauxRedevanceStatistiqueLabel", type: "pourcentage" },
+  { cle: "tauxPCS", labelKey: "calcPrixTauxPCSLabel", type: "pourcentage" },
+  { cle: "tauxPCC", labelKey: "calcPrixTauxPCCLabel", type: "pourcentage" },
+  { cle: "tauxCOSEC", labelKey: "calcPrixTauxCOSECLabel", type: "pourcentage" },
+  { cle: "tauxTvaImport", labelKey: "calcPrixTauxTvaImportLabel", type: "pourcentage" },
+  { cle: "tauxAssuranceFret", labelKey: "calcPrixTauxAssuranceFretLabel", type: "pourcentage" },
+  { cle: "margeCibleDefaut", labelKey: "calcPrixMargeCibleDefautLabel", type: "pourcentage" },
+  { cle: "pariteEurXof", labelKey: "calcPrixPariteEurXofLabel", type: "nombre" },
+  { cle: "tauxCommissionTTHU", labelKey: "calcPrixTauxCommissionTTHULabel", type: "pourcentage" },
+  { cle: "tauxCommissionDBS", labelKey: "calcPrixTauxCommissionDBSLabel", type: "pourcentage" },
+  { cle: "commissionDbsMinimum", labelKey: "calcPrixCommissionDbsMinimumLabel", type: "montant" },
+  { cle: "tauxTAF", labelKey: "calcPrixTauxTAFLabel", type: "pourcentage" },
+  { cle: "forfaitSwift", labelKey: "calcPrixForfaitSwiftLabel", type: "montant" },
+  { cle: "forfaitTimbre", labelKey: "calcPrixForfaitTimbreLabel", type: "montant" },
+];
+
 export default function EnteteSettingsPage() {
   const { t } = useLangue();
   const [form, setForm] = useState({
@@ -36,6 +61,14 @@ export default function EnteteSettingsPage() {
   const [televersementLogo, setTeleversementLogo] = useState(false);
   const inputLogoRef = useRef(null);
 
+  // Parametres du Dossier de calcul (prix de revient et marge) - stockes en
+  // saisie brute (chaines) pour permettre un champ vide pendant la frappe,
+  // convertis en nombre uniquement a l'enregistrement (meme approche que
+  // formMarge plus bas dans la page dossier detail).
+  const [formCalculPrix, setFormCalculPrix] = useState({});
+  const [enregistrementCalculPrix, setEnregistrementCalculPrix] = useState(false);
+  const [confirmationCalculPrix, setConfirmationCalculPrix] = useState(false);
+
   useEffect(() => {
     api
       .getEntete()
@@ -61,6 +94,18 @@ export default function EnteteSettingsPage() {
       .then((data) => {
         setTauxTva(String(data.taux_tva_pourcentage));
         setLogo(data.logo_base64 ? { base64: data.logo_base64, mime: data.logo_type_mime } : null);
+      })
+      .catch(() => {});
+
+    api
+      .getParametresCalculPrix()
+      .then((data) => {
+        const valeurs = {};
+        PARAM_DEFS_CALCUL_PRIX.forEach(({ cle, type }) => {
+          const brut = Number(data[cle]) || 0;
+          valeurs[cle] = String(type === "pourcentage" ? brut * 100 : brut);
+        });
+        setFormCalculPrix(valeurs);
       })
       .catch(() => {});
   }, []);
@@ -93,6 +138,27 @@ export default function EnteteSettingsPage() {
       setErreur(err.message);
     } finally {
       setEnregistrementTva(false);
+    }
+  }
+
+  async function handleEnregistrerCalculPrix(e) {
+    e.preventDefault();
+    setEnregistrementCalculPrix(true);
+    setConfirmationCalculPrix(false);
+    setErreur("");
+    try {
+      const payload = {};
+      PARAM_DEFS_CALCUL_PRIX.forEach(({ cle, type }) => {
+        const saisi = Number(formCalculPrix[cle]);
+        payload[cle] = type === "pourcentage" ? saisi / 100 : saisi;
+      });
+      await api.patchParametresCalculPrix(payload);
+      setConfirmationCalculPrix(true);
+      setTimeout(() => setConfirmationCalculPrix(false), 2500);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setEnregistrementCalculPrix(false);
     }
   }
 
@@ -273,6 +339,43 @@ export default function EnteteSettingsPage() {
               {confirmationTva && <span style={{ fontSize: 12.5, color: "var(--vert)" }}>{t("savedConfirmation")}</span>}
             </div>
             <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 6 }}>{t("venteTauxTvaNote")}</p>
+          </form>
+        </div>
+      )}
+
+      {!chargement && (
+        <div className="card" style={{ maxWidth: 560, marginTop: 16 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 4 }}>{t("calcPrixParametresSection")}</h3>
+          <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 14 }}>{t("calcPrixParametresDescription")}</p>
+
+          <form onSubmit={handleEnregistrerCalculPrix}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {PARAM_DEFS_CALCUL_PRIX.map(({ cle, labelKey, type }) => (
+                <div key={cle}>
+                  <label style={labelStyle}>{t(labelKey)}</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <input
+                      type="number"
+                      step="any"
+                      value={formCalculPrix[cle] ?? ""}
+                      onChange={(e) => setFormCalculPrix((f) => ({ ...f, [cle]: e.target.value }))}
+                      style={inputStyle}
+                    />
+                    {type === "pourcentage" && <span style={{ fontSize: 13, flexShrink: 0 }}>%</span>}
+                    {type === "montant" && <span style={{ fontSize: 11, color: "var(--sub)", flexShrink: 0 }}>XOF</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 10 }}>{t("calcPrixParametresNote")}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
+              <button type="submit" disabled={enregistrementCalculPrix} style={boutonPrincipalStyle}>
+                {t("save")}
+              </button>
+              {confirmationCalculPrix && (
+                <span style={{ fontSize: 12.5, color: "var(--vert)" }}>{t("savedConfirmation")}</span>
+              )}
+            </div>
           </form>
         </div>
       )}

@@ -37,6 +37,14 @@ export default function ConsultationDetailPage() {
   const [formInfo, setFormInfo] = useState({ statut: "", date_limite_reponse: "", notes: "" });
   const [infoEnCours, setInfoEnCours] = useState(false);
 
+  // "Dossier de calcul" (prix de revient et marge, atelier autonome - voir
+  // routes/calculPrix.js) : rattache 0 ou 1 fois a cette consultation.
+  const [dossierCalcul, setDossierCalcul] = useState(null);
+  const [calculPrixChargement, setCalculPrixChargement] = useState(true);
+  const [formCalculPrixOuvert, setFormCalculPrixOuvert] = useState(false);
+  const [nomCalculPrix, setNomCalculPrix] = useState("");
+  const [creationCalculPrixEnCours, setCreationCalculPrixEnCours] = useState(false);
+
   const [formTacheOuvert, setFormTacheOuvert] = useState(false);
   const [formTache, setFormTache] = useState({
     intitule: "",
@@ -74,6 +82,34 @@ export default function ConsultationDetailPage() {
     }
     if (id) charger();
   }, [id, t]);
+
+  useEffect(() => {
+    if (!id) return;
+    api
+      .getDossiersCalcul({ consultation_id: id })
+      .then((rows) => setDossierCalcul(rows[0] || null))
+      .catch(() => setDossierCalcul(null))
+      .finally(() => setCalculPrixChargement(false));
+  }, [id]);
+
+  function handleOuvrirFormCalculPrix() {
+    setNomCalculPrix(`Calcul – ${consultation?.objet || ""}`.trim());
+    setFormCalculPrixOuvert(true);
+  }
+
+  async function handleCreerDossierCalcul(e) {
+    e.preventDefault();
+    setCreationCalculPrixEnCours(true);
+    try {
+      const nouveau = await api.createDossierCalcul({ consultation_id: id, nom: nomCalculPrix });
+      setDossierCalcul(nouveau);
+      setFormCalculPrixOuvert(false);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setCreationCalculPrixEnCours(false);
+    }
+  }
 
   async function handleEnregistrerInfo(e) {
     e.preventDefault();
@@ -283,6 +319,51 @@ export default function ConsultationDetailPage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* ---------------- DOSSIER DE CALCUL ---------------- */}
+      <section style={{ marginBottom: 30 }}>
+        <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 4 }}>{t("calcPrixSectionTitle")}</h2>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 12 }}>{t("calcPrixSectionDescription")}</p>
+        <div className="card">
+          {calculPrixChargement ? (
+            <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
+          ) : dossierCalcul ? (
+            <Link
+              href={`/calcul-prix/${dossierCalcul.id}`}
+              style={{ ...boutonPrincipalStyle, textDecoration: "none", display: "inline-block" }}
+            >
+              {t("calcPrixOpenButton")}
+            </Link>
+          ) : (
+            <>
+              <p style={{ fontSize: 13, color: "var(--sub)", marginBottom: 10 }}>{t("calcPrixNoneYet")}</p>
+              {formCalculPrixOuvert ? (
+                <form
+                  onSubmit={handleCreerDossierCalcul}
+                  style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}
+                >
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <label style={labelStyle}>{t("calcPrixNomLabel")}</label>
+                    <input
+                      required
+                      value={nomCalculPrix}
+                      onChange={(e) => setNomCalculPrix(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <button type="submit" disabled={creationCalculPrixEnCours} style={boutonPrincipalStyle}>
+                    {creationCalculPrixEnCours ? t("calcPrixCreating") : t("save")}
+                  </button>
+                </form>
+              ) : (
+                <button onClick={handleOuvrirFormCalculPrix} style={boutonPrincipalStyle}>
+                  {t("calcPrixCreateButton")}
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </section>
 
       {/* ---------------- CHRONOGRAMME ---------------- */}
