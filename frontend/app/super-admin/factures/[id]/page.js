@@ -92,8 +92,34 @@ export default function SuperAdminFactureDetailPage() {
   }
 
   const style = STATUT_STYLE[facture.statut] || {};
-  const libelleType =
-    facture.type_facture === "INSTALLATION" ? t("saInvoiceTypeInstallation") : t("saInvoiceTypeAbonnement");
+  const estInstallation = facture.type_facture === "INSTALLATION";
+
+  // Descriptif complet de la ligne facturee (demande de Steeve du 18/09/2026 :
+  // "pour la formule Essentiel, il faut que ce soit ecrit clairement de quoi
+  // il s'agit"). Le systeme i18n de ce projet est une simple table de
+  // correspondance sans interpolation de variables : les valeurs dynamiques
+  // (nom de la formule, plafond, periode) sont donc assemblees ici, en
+  // concatenant des cles traduites.
+  //
+  // Le plafond affiche est celui FIGE sur la facture au moment de sa
+  // generation (plafond_utilisateurs_facture, voir migration 022), jamais le
+  // plafond actuel de la formule : une facture deja emise ne doit jamais
+  // changer retroactivement si la formule evolue plus tard. Sur les factures
+  // anterieures a cette migration la colonne est NULL, ce qui retombe sur
+  // "utilisateurs illimites" (meme convention que
+  // formule_abonnement.plafond_utilisateurs).
+  const plafondFacture = facture.plafond_utilisateurs_facture;
+  const textePlafond =
+    plafondFacture === null || plafondFacture === undefined
+      ? t("saInvoiceLineUnlimitedUsers")
+      : `${t("saInvoiceLineUpTo")} ${Number(plafondFacture).toLocaleString()} ${t("saInvoiceLineUsers")}`;
+
+  const descriptionLigne = estInstallation
+    ? `${t("saInvoiceLineInstallationDescription")} — ${t("saInvoiceLineFormuleWord")} ${facture.formule_nom}`
+    : `${t("saInvoiceLineAbonnementPrefix")} — ${t("saInvoiceLineFormuleWord")} ${facture.formule_nom} (${textePlafond}) — ${t(
+        "saInvoiceLinePeriodLabel"
+      )} ${facture.periode}`;
+
   const piedDePage = [
     entete?.rccm ? `RCCM ${entete.rccm}` : null,
     entete?.ninea ? `NINEA ${entete.ninea}` : null,
@@ -169,17 +195,27 @@ export default function SuperAdminFactureDetailPage() {
           {facture.client_adresse && <div style={{ fontSize: 12, color: "var(--sub)" }}>{facture.client_adresse}</div>}
         </div>
 
+        {/* Tableau de lignes calque sur celui de la facture du module Ventes
+            (Designation / Quantite / Prix unitaire / Montant) : la facture
+            d'abonnement n'a toujours qu'UNE ligne, de quantite 1, mais elle
+            doit se lire comme une vraie facture. */}
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ fontSize: 11, textAlign: "left", borderBottom: "1px solid var(--line)" }}>
               <th style={{ padding: "6px 4px" }}>{t("venteDesignationLabel")}</th>
-              <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteMontantLabel")}</th>
+              <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteLabel")}</th>
+              <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("saInvoiceColPrixUnitaire")}</th>
+              <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("saInvoiceColMontant")}</th>
             </tr>
           </thead>
           <tbody>
             <tr style={{ borderBottom: "1px solid var(--line-soft)" }}>
-              <td style={{ padding: "6px 4px", fontSize: 12.5 }}>
-                {libelleType} — {facture.formule_nom}
+              <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{descriptionLigne}</td>
+              <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                1
+              </td>
+              <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                {Number(facture.montant_xof).toLocaleString()}
               </td>
               <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
                 {Number(facture.montant_xof).toLocaleString()}
@@ -201,6 +237,28 @@ export default function SuperAdminFactureDetailPage() {
             {facture.mode_paiement ? ` · ${facture.mode_paiement}` : ""}
           </div>
         )}
+
+        {/* Bloc signature : en bas a droite de la zone imprimable, sous le
+            corps du document et au-dessus du pied de page legal - demande de
+            Steeve du 18/09/2026. "La Direction" est toujours affiche (il
+            reste alors la place pour une signature manuscrite sur le papier),
+            l'image signature+cachet n'est rendue que si elle a reellement ete
+            televersee dans Parametres : pas de <img> sans source, qui
+            produirait une icone d'image cassee a l'impression. */}
+        <div style={{ marginTop: 32, display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ textAlign: "center", minWidth: 180 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--petrol)" }}>{t("saLaDirectionLabel")}</div>
+            {entete?.signature_cachet_base64 ? (
+              <img
+                src={`data:${entete.signature_cachet_type_mime};base64,${entete.signature_cachet_base64}`}
+                alt={t("saSignatureCachetLabel")}
+                style={{ marginTop: 6, maxWidth: 180, maxHeight: 110, objectFit: "contain" }}
+              />
+            ) : (
+              <div style={{ height: 70 }} />
+            )}
+          </div>
+        </div>
 
         {piedDePage.length > 0 && (
           <div

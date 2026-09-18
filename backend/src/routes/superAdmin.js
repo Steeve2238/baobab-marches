@@ -216,7 +216,10 @@ function televerserLogo(middlewareMulter) {
   };
 }
 
-// GET /api/super-admin/parametres/entete
+// GET /api/super-admin/parametres/entete - SELECT * volontaire : renvoie
+// aussi bien le logo que la signature/cachet (signature_cachet_base64 /
+// signature_cachet_type_mime, migration 022) sans avoir a maintenir une
+// liste de colonnes en double ici et dans le frontend.
 router.get("/parametres/entete", async (req, res) => {
   try {
     const result = await db.query(`SELECT * FROM plateforme_parametres WHERE id = true`);
@@ -281,6 +284,55 @@ router.delete("/parametres/entete/logo", async (req, res) => {
   try {
     const result = await db.query(
       `UPDATE plateforme_parametres SET logo_base64 = NULL, logo_type_mime = NULL WHERE id = true RETURNING *`
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_LOGO_UPLOAD_ERROR") });
+  }
+});
+
+// POST /api/super-admin/parametres/entete/signature-cachet - image UNIQUE
+// combinant la signature et le cachet (le tampon papier est scanne avec la
+// signature dessus, c'est l'usage reel : deux images separees obligeraient a
+// les repositionner l'une par rapport a l'autre a l'impression). Affichee en
+// bas a droite de la facture, sous la mention "La Direction" (voir
+// frontend/app/super-admin/factures/[id]/page.js) - demande de Steeve du
+// 18/09/2026. Strictement le meme mecanisme que le logo ci-dessus (multer en
+// memoire, 2 Mo, PNG/JPEG uniquement, requireSuperAdmin pose par le
+// router.use plus haut), voir migration
+// 022_facture_signature_cachet_detail_ligne.sql.
+router.post(
+  "/parametres/entete/signature-cachet",
+  televerserLogo(uploadLogoPlateforme.single("signature_cachet")),
+  async (req, res) => {
+    if (!req.file) {
+      return res.status(400).json({ error: t(req, "VENTE_LOGO_FILE_REQUIRED") });
+    }
+    if (!MIMETYPES_LOGO_ACCEPTES.includes(req.file.mimetype)) {
+      return res.status(400).json({ error: t(req, "VENTE_LOGO_TYPE_INVALID") });
+    }
+    try {
+      const base64 = req.file.buffer.toString("base64");
+      const result = await db.query(
+        `UPDATE plateforme_parametres SET signature_cachet_base64 = $1, signature_cachet_type_mime = $2
+         WHERE id = true RETURNING *`,
+        [base64, req.file.mimetype]
+      );
+      res.json(result.rows[0]);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: t(req, "VENTE_LOGO_UPLOAD_ERROR") });
+    }
+  }
+);
+
+// DELETE /api/super-admin/parametres/entete/signature-cachet
+router.delete("/parametres/entete/signature-cachet", async (req, res) => {
+  try {
+    const result = await db.query(
+      `UPDATE plateforme_parametres SET signature_cachet_base64 = NULL, signature_cachet_type_mime = NULL
+       WHERE id = true RETURNING *`
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -415,17 +467,25 @@ router.post("/clients", async (req, res) => {
     let factureInstallationId = null;
     if (formule_abonnement_id) {
       const formuleResult = await client.query(
-        `SELECT nom, frais_installation_xof FROM formule_abonnement WHERE id = $1`,
+        `SELECT nom, plafond_utilisateurs, frais_installation_xof FROM formule_abonnement WHERE id = $1`,
         [formule_abonnement_id]
       );
       const formule = formuleResult.rows[0];
       if (formule && Number(formule.frais_installation_xof) > 0) {
         const periode = new Date().toISOString().slice(0, 7);
         const factureResult = await client.query(
-          `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
-           VALUES ($1, $2, $3, $4, $5, $6, 'INSTALLATION')
+          `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture, plafond_utilisateurs_facture)
+           VALUES ($1, $2, $3, $4, $5, $6, 'INSTALLATION', $7)
            RETURNING id`,
-          [uuidv4(), tenantId, formule_abonnement_id, formule.nom, periode, formule.frais_installation_xof]
+          [
+            uuidv4(),
+            tenantId,
+            formule_abonnement_id,
+            formule.nom,
+            periode,
+            formule.frais_installation_xof,
+            formule.plafond_utilisateurs ?? null,
+          ]
         );
         factureInstallationId = factureResult.rows[0].id;
       }
@@ -598,6 +658,7 @@ router.patch("/formules/:id", async (req, res) => {
 
 const SELECT_FACTURE = `
   SELECT f.id, f.tenant_id, f.formule_abonnement_id, f.formule_nom, f.periode, f.montant_xof,
+         f.plafond_utilisateurs_facture,
          f.type_facture, f.statut, f.date_generation, f.date_paiement, f.mode_paiement, f.notes,
          te.raison_sociale AS client_raison_sociale, te.adresse AS client_adresse
   FROM facture_abonnement f
@@ -659,14 +720,18 @@ router.get("/clients/:id/factures", async (req, res) => {
 // POST /api/super-admin/clients/:id/factures/generer - genere la facture du
 // mois courant (ou du mois fourni) pour ce client, a partir de sa formule
 // ACTUELLE (nom/prix figes dans la facture au moment de la generation, voir
-// migration 014). Idempotent par construction : la contrainte unique
-// (tenant_id, periode) empeche un doublon pour le meme mois.
+// migration 014 - et depuis la migration 022, le plafond d'utilisateurs
+// aussi, pour que le descriptif de la ligne reste celui reellement vendu ce
+// mois-la meme si la formule evolue ensuite). Idempotent par construction :
+// la contrainte unique (tenant_id, periode) empeche un doublon pour le meme
+// mois.
 router.post("/clients/:id/factures/generer", async (req, res) => {
   const periode = (req.body && req.body.periode) || new Date().toISOString().slice(0, 7); // "AAAA-MM"
 
   try {
     const clientResult = await db.query(
-      `SELECT te.id, te.formule_abonnement_id, fa.nom AS formule_nom, fa.prix_mensuel_xof
+      `SELECT te.id, te.formule_abonnement_id, fa.nom AS formule_nom, fa.prix_mensuel_xof,
+              fa.plafond_utilisateurs
        FROM tenant te LEFT JOIN formule_abonnement fa ON fa.id = te.formule_abonnement_id
        WHERE te.id = $1`,
       [req.params.id]
@@ -680,10 +745,18 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
-       VALUES ($1, $2, $3, $4, $5, $6, 'ABONNEMENT')
+      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture, plafond_utilisateurs_facture)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ABONNEMENT', $7)
        RETURNING id`,
-      [uuidv4(), client.id, client.formule_abonnement_id, client.formule_nom, periode, client.prix_mensuel_xof]
+      [
+        uuidv4(),
+        client.id,
+        client.formule_abonnement_id,
+        client.formule_nom,
+        periode,
+        client.prix_mensuel_xof,
+        client.plafond_utilisateurs ?? null,
+      ]
     );
 
     const factureResult = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [result.rows[0].id]);
@@ -711,7 +784,8 @@ router.post("/clients/:id/factures/generer-installation", async (req, res) => {
 
   try {
     const clientResult = await db.query(
-      `SELECT te.id, te.formule_abonnement_id, fa.nom AS formule_nom, fa.frais_installation_xof
+      `SELECT te.id, te.formule_abonnement_id, fa.nom AS formule_nom, fa.frais_installation_xof,
+              fa.plafond_utilisateurs
        FROM tenant te LEFT JOIN formule_abonnement fa ON fa.id = te.formule_abonnement_id
        WHERE te.id = $1`,
       [req.params.id]
@@ -725,10 +799,18 @@ router.post("/clients/:id/factures/generer-installation", async (req, res) => {
     }
 
     const result = await db.query(
-      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture)
-       VALUES ($1, $2, $3, $4, $5, $6, 'INSTALLATION')
+      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture, plafond_utilisateurs_facture)
+       VALUES ($1, $2, $3, $4, $5, $6, 'INSTALLATION', $7)
        RETURNING id`,
-      [uuidv4(), client.id, client.formule_abonnement_id, client.formule_nom, periode, client.frais_installation_xof]
+      [
+        uuidv4(),
+        client.id,
+        client.formule_abonnement_id,
+        client.formule_nom,
+        periode,
+        client.frais_installation_xof,
+        client.plafond_utilisateurs ?? null,
+      ]
     );
 
     const factureResult = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [result.rows[0].id]);

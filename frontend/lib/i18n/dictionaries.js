@@ -746,6 +746,21 @@ export const DICTIONARIES = {
     saInvoiceTypeInstallation: "Installation",
     saInvoiceTypeAbonnement: "Abonnement mensuel",
     saGenerateInstallationInvoiceButton: "Générer la facture d'installation",
+    saSignatureCachetLabel: "Signature et cachet",
+    saSignatureCachetDescription:
+      "Image unique regroupant la signature et le cachet (scan du cachet signé). Affichée en bas à droite de chaque facture, sous la mention « La Direction ».",
+    saNoSignatureCachet: "Aucune signature/cachet",
+    saLaDirectionLabel: "La Direction",
+    saInvoiceColPrixUnitaire: "Prix unitaire (XOF)",
+    saInvoiceColMontant: "Montant (XOF)",
+    saInvoiceLineAbonnementPrefix: "Abonnement mensuel",
+    saInvoiceLineFormuleWord: "Formule",
+    saInvoiceLineInstallationDescription:
+      "Frais d'installation et de paramétrage — Installation de la plateforme Baobab Marchés (mise en place et configuration initiale)",
+    saInvoiceLineUpTo: "jusqu'à",
+    saInvoiceLineUsers: "utilisateurs",
+    saInvoiceLineUnlimitedUsers: "utilisateurs illimités",
+    saInvoiceLinePeriodLabel: "Période",
 
     navVentesConsultations: "Consultations",
     navVentesDevis: "Devis",
@@ -1759,6 +1774,21 @@ export const DICTIONARIES = {
     saInvoiceTypeInstallation: "Setup",
     saInvoiceTypeAbonnement: "Monthly subscription",
     saGenerateInstallationInvoiceButton: "Generate setup invoice",
+    saSignatureCachetLabel: "Signature and company stamp",
+    saSignatureCachetDescription:
+      "A single image combining the signature and the company stamp (scan of the signed stamp). Shown at the bottom right of every invoice, under the wording \"Management\".",
+    saNoSignatureCachet: "No signature or stamp",
+    saLaDirectionLabel: "Management",
+    saInvoiceColPrixUnitaire: "Unit price (XOF)",
+    saInvoiceColMontant: "Amount (XOF)",
+    saInvoiceLineAbonnementPrefix: "Monthly subscription",
+    saInvoiceLineFormuleWord: "Plan",
+    saInvoiceLineInstallationDescription:
+      "Setup and configuration fee — Installation of the Baobab Marchés platform (initial setup and configuration)",
+    saInvoiceLineUpTo: "up to",
+    saInvoiceLineUsers: "users",
+    saInvoiceLineUnlimitedUsers: "unlimited users",
+    saInvoiceLinePeriodLabel: "Period",
 
     navVentesConsultations: "Consultations",
     navVentesDevis: "Quotes",

@@ -137,6 +137,16 @@ export const superAdminApi = {
     return requestUpload("/super-admin/parametres/entete/logo", formData);
   },
   supprimerLogoEntete: () => request("/super-admin/parametres/entete/logo", { method: "DELETE" }),
+  // Signature + cachet : une seule image combinee (le cachet est scanne avec
+  // la signature dessus), affichee en bas a droite des factures sous la
+  // mention "La Direction" - meme mecanisme d'upload que le logo ci-dessus.
+  uploaderSignatureCachetEntete: (fichier) => {
+    const formData = new FormData();
+    formData.append("signature_cachet", fichier);
+    return requestUpload("/super-admin/parametres/entete/signature-cachet", formData);
+  },
+  supprimerSignatureCachetEntete: () =>
+    request("/super-admin/parametres/entete/signature-cachet", { method: "DELETE" }),
 
   getFactures: (statut) => request(`/super-admin/factures${statut ? `?statut=${statut}` : ""}`),
   getFacture: (id) => request(`/super-admin/factures/${id}`),

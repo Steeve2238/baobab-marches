@@ -27,12 +27,18 @@ export default function SuperAdminParametresPage() {
     coordonnees_bancaires: "",
   });
   const [logo, setLogo] = useState(null);
+  // Signature + cachet : une seule image combinee (le cachet papier est
+  // scanne avec la signature dessus), affichee en bas a droite des factures
+  // sous la mention "La Direction" - voir super-admin/factures/[id]/page.js.
+  const [signatureCachet, setSignatureCachet] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [enregistrement, setEnregistrement] = useState(false);
   const [confirmation, setConfirmation] = useState(false);
   const [televersementLogo, setTeleversementLogo] = useState(false);
+  const [televersementSignature, setTeleversementSignature] = useState(false);
   const [erreur, setErreur] = useState("");
   const inputLogoRef = useRef(null);
+  const inputSignatureRef = useRef(null);
 
   useEffect(() => {
     superAdminApi
@@ -49,6 +55,11 @@ export default function SuperAdminParametresPage() {
           coordonnees_bancaires: data.coordonnees_bancaires || "",
         });
         setLogo(data.logo_base64 ? { base64: data.logo_base64, mime: data.logo_type_mime } : null);
+        setSignatureCachet(
+          data.signature_cachet_base64
+            ? { base64: data.signature_cachet_base64, mime: data.signature_cachet_type_mime }
+            : null
+        );
       })
       .catch((err) => {
         if (err.status === 401) {
@@ -102,6 +113,39 @@ export default function SuperAdminParametresPage() {
       setErreur(err.message);
     } finally {
       setTeleversementLogo(false);
+    }
+  }
+
+  async function handleChoisirSignatureCachet(e) {
+    const fichier = e.target.files?.[0];
+    if (!fichier) return;
+    setTeleversementSignature(true);
+    setErreur("");
+    try {
+      const maj = await superAdminApi.uploaderSignatureCachetEntete(fichier);
+      setSignatureCachet(
+        maj.signature_cachet_base64
+          ? { base64: maj.signature_cachet_base64, mime: maj.signature_cachet_type_mime }
+          : null
+      );
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setTeleversementSignature(false);
+      if (inputSignatureRef.current) inputSignatureRef.current.value = "";
+    }
+  }
+
+  async function handleSupprimerSignatureCachet() {
+    setTeleversementSignature(true);
+    setErreur("");
+    try {
+      await superAdminApi.supprimerSignatureCachetEntete();
+      setSignatureCachet(null);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setTeleversementSignature(false);
     }
   }
 
@@ -205,6 +249,61 @@ export default function SuperAdminParametresPage() {
             onChange={(e) => setForm((f) => ({ ...f, coordonnees_bancaires: e.target.value }))}
             style={inputStyle}
           />
+
+          {/* Signature + cachet : une seule image (le cachet papier est
+              scanne avec la signature dessus, usage reel). Televersee
+              immediatement comme le logo, independamment du bouton
+              "Enregistrer" qui ne concerne que les champs texte ci-dessus. */}
+          <h3 style={{ fontSize: 12.5, color: "var(--petrol)", marginTop: 20, marginBottom: 4 }}>
+            {t("saSignatureCachetLabel")}
+          </h3>
+          <p style={{ fontSize: 11, color: "var(--sub)", marginBottom: 10 }}>{t("saSignatureCachetDescription")}</p>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {signatureCachet ? (
+              <img
+                src={`data:${signatureCachet.mime};base64,${signatureCachet.base64}`}
+                alt={t("saSignatureCachetLabel")}
+                style={{
+                  maxWidth: 140,
+                  maxHeight: 90,
+                  objectFit: "contain",
+                  border: "1px solid var(--line)",
+                  borderRadius: 8,
+                  padding: 4,
+                }}
+              />
+            ) : (
+              <span style={{ fontSize: 12, color: "var(--sub)" }}>{t("saNoSignatureCachet")}</span>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => inputSignatureRef.current?.click()}
+                disabled={televersementSignature}
+                style={boutonSecondaireStyle}
+              >
+                {televersementSignature ? t("saCreating") : t("venteUploadLogoButton")}
+              </button>
+              {signatureCachet && (
+                <button
+                  type="button"
+                  onClick={handleSupprimerSignatureCachet}
+                  disabled={televersementSignature}
+                  style={boutonSecondaireStyle}
+                >
+                  {t("venteRemoveLogoButton")}
+                </button>
+              )}
+            </div>
+            <input
+              ref={inputSignatureRef}
+              type="file"
+              accept="image/png,image/jpeg"
+              onChange={handleChoisirSignatureCachet}
+              style={{ display: "none" }}
+            />
+          </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 18 }}>
             <button type="submit" disabled={enregistrement} style={boutonPrincipalStyle}>
