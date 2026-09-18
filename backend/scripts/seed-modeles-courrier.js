@@ -6,6 +6,7 @@
  */
 require("dotenv").config();
 const { Pool } = require("pg");
+const { v4: uuidv4 } = require("uuid");
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
@@ -239,9 +240,9 @@ async function main() {
         continue;
       }
       await client.query(
-        `INSERT INTO modele_courrier (tenant_id, type_courrier, titre, corps_template, declencheur_evenement)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [tenantId, modele.type_courrier, modele.titre, modele.corps_template, modele.declencheur_evenement]
+        `INSERT INTO modele_courrier (id, tenant_id, type_courrier, titre, corps_template, declencheur_evenement)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [uuidv4(), tenantId, modele.type_courrier, modele.titre, modele.corps_template, modele.declencheur_evenement]
       );
       console.log(`    OK (${modele.type_courrier})`);
     }
