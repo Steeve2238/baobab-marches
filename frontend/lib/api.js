@@ -188,6 +188,7 @@ export const api = {
   getDossiers: () => request("/dossiers"),
   createDossier: (data) => request("/dossiers", { method: "POST", body: JSON.stringify(data) }),
   getDossier: (id) => request(`/dossiers/${id}`),
+  updateDossier: (id, data) => request(`/dossiers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   // Permissions agregees du role de l'utilisateur connecte (voir
   // middleware/auth.js cote backend) - consomme par AppShell pour construire
   // dynamiquement le menu de gauche selon le profil.

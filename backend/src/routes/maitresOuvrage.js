@@ -1,12 +1,12 @@
 const express = require("express");
 const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
-const { requireAuth, requireModule } = require("../middleware/auth");
+const { requireAuth, requireModuleAny } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireModule("marches"));
+router.use(requireModuleAny("dossiers", "marches"));
 
 // Donnee de reference (comme fournisseur) : ouverte a tout utilisateur
 // authentifie du tenant, pas de restriction de role. Les maitres d'ouvrage

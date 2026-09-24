@@ -127,6 +127,74 @@ router.post("/", async (req, res) => {
   }
 });
 
+// Statuts a partir desquels les champs descriptifs du dossier restent
+// modifiables (avant attribution du marche). Au-dela, le dossier est engage
+// (attribue, execute, cloture...) et ses informations d'origine ne doivent
+// plus bouger - seule la route de changement de statut ci-dessous reste
+// ouverte, jamais celle-ci.
+const STATUTS_MODIFIABLES = ["ANALYSE", "GO", "NO_GO", "SOUMIS"];
+
+// PATCH /api/dossiers/:id - edition des champs descriptifs (hors statut, qui
+// a sa propre route dediee ci-dessous). Signale par le premier client de la
+// plateforme (rapport PDF, 24/09/2026) : aucune route ne permettait de
+// corriger un dossier deja enregistre.
+router.patch("/:id", async (req, res) => {
+  const { id } = req.params;
+  const {
+    intitule,
+    reference_externe,
+    maitre_ouvrage_id,
+    secteur,
+    montant_estime,
+    devise,
+    date_limite_soumission,
+  } = req.body;
+
+  try {
+    const dossierActuel = await db.query(
+      `SELECT statut FROM dossier_ao WHERE id = $1 AND tenant_id = $2`,
+      [id, req.user.tenantId]
+    );
+    if (dossierActuel.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "DOSSIER_NOT_FOUND") });
+    }
+    if (!STATUTS_MODIFIABLES.includes(dossierActuel.rows[0].statut)) {
+      return res.status(409).json({ error: t(req, "DOSSIER_MODIFICATION_LOCKED") });
+    }
+
+    const result = await db.query(
+      `UPDATE dossier_ao
+       SET intitule = COALESCE($1, intitule),
+           reference_externe = COALESCE($2, reference_externe),
+           maitre_ouvrage_id = COALESCE($3, maitre_ouvrage_id),
+           secteur = COALESCE($4, secteur),
+           montant_estime = COALESCE($5, montant_estime),
+           devise = COALESCE($6, devise),
+           date_limite_soumission = COALESCE($7, date_limite_soumission)
+       WHERE id = $8 AND tenant_id = $9
+       RETURNING *`,
+      [
+        intitule || null,
+        reference_externe || null,
+        maitre_ouvrage_id || null,
+        secteur || null,
+        montant_estime || null,
+        devise || null,
+        date_limite_soumission || null,
+        id,
+        req.user.tenantId,
+      ]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "DOSSIER_NOT_FOUND") });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "DOSSIER_UPDATE_ERROR") });
+  }
+});
+
 // PATCH /api/dossiers/:id/statut - changement de statut (workflow go/no-go...)
 router.patch("/:id/statut", async (req, res) => {
   const { id } = req.params;

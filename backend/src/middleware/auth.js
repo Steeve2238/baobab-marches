@@ -188,6 +188,32 @@ function requireModule(moduleKey) {
 }
 
 /**
+ * Variante de requireModule qui accepte plusieurs modules : passe des que
+ * l'utilisateur a acces a AU MOINS UN des modules listes (ou est admin, ou a
+ * le tableau de bord general si "dossiers" fait partie de la liste - meme
+ * exception que requireModule ci-dessus). A utiliser quand une meme donnee de
+ * reference est consommee par plusieurs modules (ex. maitres d'ouvrage,
+ * references par le Module 1 "dossiers" et par le Module 7 "marches") et
+ * qu'aucun des deux ne doit a lui seul conditionner l'acces.
+ */
+function requireModuleAny(...moduleKeys) {
+  return (req, res, next) => {
+    const permissions = req.user?.permissions;
+    if (!permissions) {
+      return res.status(403).json({ error: t(req, "MODULE_FORBIDDEN") });
+    }
+    if (permissions.admin) return next();
+    const aAcces = moduleKeys.some(
+      (moduleKey) =>
+        permissions.modules.includes(moduleKey) ||
+        (moduleKey === "dossiers" && permissions.tableauDeBord)
+    );
+    if (aAcces) return next();
+    return res.status(403).json({ error: t(req, "MODULE_FORBIDDEN") });
+  };
+}
+
+/**
  * Bloque toute methode d'ecriture (tout sauf GET) pour un utilisateur dont
  * TOUS les roles sont marques "lecture seule" (cas du Directeur General,
  * qui doit pouvoir tout consulter mais ne jamais rien modifier). ADMIN n'est
@@ -259,6 +285,7 @@ module.exports = {
   requireRole,
   requireRoleOuValidateurUniversel,
   requireModule,
+  requireModuleAny,
   blockLectureSeule,
   requireSuperAdmin,
 };

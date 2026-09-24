@@ -10,6 +10,12 @@ import { DEVISES } from "../../../lib/constants/devises";
 
 const PHASES_CHRONOGRAMME = ["AVANT_SOUMISSION", "NON_ATTRIBUTION", "ATTRIBUTION_EXECUTION"];
 
+// Statuts a partir desquels les champs descriptifs du dossier restent
+// modifiables - doit rester identique a STATUTS_MODIFIABLES cote backend
+// (routes/dossiers.js), au-dela le serveur refuse de toute facon la
+// modification (409).
+const STATUTS_DOSSIER_MODIFIABLE = ["ANALYSE", "GO", "NO_GO", "SOUMIS"];
+
 const TYPE_BESOIN_CODES = ["CAUTION_SOUMISSION", "CAUTION_BONNE_EXECUTION", "AVANCE_DEMARRAGE", "LC"];
 const CONDITIONS_REGLEMENT = [
   "COMPTANT",
@@ -39,6 +45,7 @@ export default function DossierDetailPage() {
   } = useLangue();
 
   const [dossier, setDossier] = useState(null);
+  const [maitresOuvrage, setMaitresOuvrage] = useState([]);
   const [roles, setRoles] = useState([]);
   const [utilisateurs, setUtilisateurs] = useState([]);
   const [simulations, setSimulations] = useState([]);
@@ -118,6 +125,27 @@ export default function DossierDetailPage() {
   });
   const [offreEnCours, setOffreEnCours] = useState(false);
 
+  // Edition des champs descriptifs du dossier (Anomalie signalee par le
+  // client, rapport PDF du 24/09/2026) : formulaire inline, visible
+  // uniquement tant que le dossier est encore modifiable (voir
+  // STATUTS_DOSSIER_MODIFIABLE ci-dessus). Le champ statut lui-meme n'est
+  // jamais touche ici, il garde sa propre route/section dediee.
+  const [formDossierOuvert, setFormDossierOuvert] = useState(false);
+  const [formDossier, setFormDossier] = useState({
+    intitule: "",
+    reference_externe: "",
+    maitre_ouvrage_id: "",
+    secteur: "",
+    montant_estime: "",
+    devise: "XOF",
+    date_limite_soumission: "",
+  });
+  const [dossierEnCours, setDossierEnCours] = useState(false);
+
+  const [ajoutMaitreOuvrageOuvert, setAjoutMaitreOuvrageOuvert] = useState(false);
+  const [nouveauMaitreOuvrage, setNouveauMaitreOuvrage] = useState({ nom: "", categorie: "" });
+  const [maitreOuvrageEnCours, setMaitreOuvrageEnCours] = useState(false);
+
   const fichierDaoRef = useRef(null);
   const [analyseEnCours, setAnalyseEnCours] = useState(false);
 
@@ -138,6 +166,7 @@ export default function DossierDetailPage() {
       try {
         const [
           dossierData,
+          maitresOuvrageData,
           rolesData,
           utilisateursData,
           simulationsData,
@@ -152,6 +181,7 @@ export default function DossierDetailPage() {
           offresData,
         ] = await Promise.all([
           api.getDossier(id),
+          api.getMaitresOuvrage(),
           api.getRoles(),
           api.getUtilisateurs(),
           api.getSimulations(id),
@@ -166,6 +196,7 @@ export default function DossierDetailPage() {
           api.getOffresFournisseur(id),
         ]);
         setDossier(dossierData);
+        setMaitresOuvrage(maitresOuvrageData);
         setRoles(rolesData);
         setUtilisateurs(utilisateursData);
         setSimulations(simulationsData);
@@ -195,6 +226,56 @@ export default function DossierDetailPage() {
       .catch(() => setDossierCalcul(null))
       .finally(() => setCalculPrixChargement(false));
   }, [id]);
+
+  function handleOuvrirFormDossier() {
+    setFormDossier({
+      intitule: dossier.intitule || "",
+      reference_externe: dossier.reference_externe || "",
+      maitre_ouvrage_id: dossier.maitre_ouvrage_id || "",
+      secteur: dossier.secteur || "",
+      montant_estime: dossier.montant_estime ?? "",
+      devise: dossier.devise || "XOF",
+      date_limite_soumission: dossier.date_limite_soumission
+        ? dossier.date_limite_soumission.slice(0, 16)
+        : "",
+    });
+    setErreur("");
+    setFormDossierOuvert(true);
+  }
+
+  async function handleEnregistrerDossier(e) {
+    e.preventDefault();
+    setDossierEnCours(true);
+    try {
+      const maj = await api.updateDossier(id, {
+        ...formDossier,
+        maitre_ouvrage_id: formDossier.maitre_ouvrage_id || null,
+        montant_estime: formDossier.montant_estime ? Number(formDossier.montant_estime) : null,
+        date_limite_soumission: formDossier.date_limite_soumission || null,
+      });
+      setDossier((prev) => ({ ...prev, ...maj }));
+      setFormDossierOuvert(false);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setDossierEnCours(false);
+    }
+  }
+
+  async function handleCreerMaitreOuvrage() {
+    setMaitreOuvrageEnCours(true);
+    try {
+      const nouveau = await api.createMaitreOuvrage(nouveauMaitreOuvrage);
+      setMaitresOuvrage((prev) => [...prev, nouveau].sort((a, b) => a.nom.localeCompare(b.nom)));
+      setFormDossier((f) => ({ ...f, maitre_ouvrage_id: nouveau.id }));
+      setAjoutMaitreOuvrageOuvert(false);
+      setNouveauMaitreOuvrage({ nom: "", categorie: "" });
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setMaitreOuvrageEnCours(false);
+    }
+  }
 
   function handleOuvrirFormCalculPrix() {
     setNomCalculPrix(`Calcul – ${dossier?.reference_externe || dossier?.intitule || ""}`.trim());
@@ -597,18 +678,146 @@ export default function DossierDetailPage() {
     return <div style={{ padding: 28, color: "var(--brique)" }}>{erreur}</div>;
   }
 
+  const dossierModifiable = STATUTS_DOSSIER_MODIFIABLE.includes(dossier.statut);
+
   return (
     <AppShell backHref="/dashboard">
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 19, color: "var(--petrol)" }}>{dossier.intitule}</h1>
-        <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
-          {dossier.reference_externe} {dossier.maitre_ouvrage_nom ? `· ${dossier.maitre_ouvrage_nom}` : ""}
-          {" · "}
-          <span className={`chip ${statutClasse(dossier.statut)}`} style={{ marginLeft: 4 }}>
-            {statutLabel(dossier.statut)}
-          </span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 19, color: "var(--petrol)" }}>{dossier.intitule}</h1>
+          <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+            {dossier.reference_externe} {dossier.maitre_ouvrage_nom ? `· ${dossier.maitre_ouvrage_nom}` : ""}
+            {" · "}
+            <span className={`chip ${statutClasse(dossier.statut)}`} style={{ marginLeft: 4 }}>
+              {statutLabel(dossier.statut)}
+            </span>
+          </div>
         </div>
+        {dossierModifiable && !formDossierOuvert && (
+          <button type="button" onClick={handleOuvrirFormDossier} style={boutonSecondaireStyle}>
+            {t("dossierEditButton")}
+          </button>
+        )}
       </div>
+
+      {formDossierOuvert && (
+        <form onSubmit={handleEnregistrerDossier} className="card" style={{ maxWidth: 560, marginBottom: 20 }}>
+          <label style={labelStyle}>{t("intituleLabel")}</label>
+          <input
+            required
+            value={formDossier.intitule}
+            onChange={(e) => setFormDossier((f) => ({ ...f, intitule: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <label style={{ ...labelStyle, marginTop: 10 }}>{t("referenceExterneLabel")}</label>
+          <input
+            value={formDossier.reference_externe}
+            onChange={(e) => setFormDossier((f) => ({ ...f, reference_externe: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <label style={{ ...labelStyle, marginTop: 10 }}>{t("maitreOuvrageLabel")}</label>
+          <select
+            value={formDossier.maitre_ouvrage_id}
+            onChange={(e) => setFormDossier((f) => ({ ...f, maitre_ouvrage_id: e.target.value }))}
+            style={inputStyle}
+          >
+            <option value="">{t("selectMaitreOuvrage")}</option>
+            {maitresOuvrage.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.nom}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setAjoutMaitreOuvrageOuvert((v) => !v)}
+            style={{ ...boutonLienStyle, marginTop: 4 }}
+          >
+            {t("dossierQuickAddMaitreOuvrage")}
+          </button>
+          {ajoutMaitreOuvrageOuvert && (
+            <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+              <input
+                placeholder={t("dossierNewMaitreOuvrageNomLabel")}
+                value={nouveauMaitreOuvrage.nom}
+                onChange={(e) => setNouveauMaitreOuvrage((f) => ({ ...f, nom: e.target.value }))}
+                style={{ ...inputStyle, fontSize: 11.5, padding: "5px 8px" }}
+              />
+              <input
+                placeholder={t("dossierNewMaitreOuvrageCategorieLabel")}
+                value={nouveauMaitreOuvrage.categorie}
+                onChange={(e) => setNouveauMaitreOuvrage((f) => ({ ...f, categorie: e.target.value }))}
+                style={{ ...inputStyle, fontSize: 11.5, padding: "5px 8px", maxWidth: 120 }}
+              />
+              <button
+                type="button"
+                onClick={handleCreerMaitreOuvrage}
+                disabled={maitreOuvrageEnCours || !nouveauMaitreOuvrage.nom.trim()}
+                style={boutonSecondaireStyle}
+              >
+                {t("save")}
+              </button>
+            </div>
+          )}
+
+          <label style={{ ...labelStyle, marginTop: 10 }}>{t("secteurLabel")}</label>
+          <input
+            value={formDossier.secteur}
+            onChange={(e) => setFormDossier((f) => ({ ...f, secteur: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginTop: 10 }}>
+            <div>
+              <label style={labelStyle}>{t("montantEstimeLabel")}</label>
+              <input
+                type="number"
+                step="0.01"
+                value={formDossier.montant_estime}
+                onChange={(e) => setFormDossier((f) => ({ ...f, montant_estime: e.target.value }))}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("deviseLabel")}</label>
+              <select
+                value={formDossier.devise}
+                onChange={(e) => setFormDossier((f) => ({ ...f, devise: e.target.value }))}
+                style={inputStyle}
+              >
+                {DEVISES.map((d) => (
+                  <option key={d.code} value={d.code}>
+                    {d.code}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <label style={{ ...labelStyle, marginTop: 10 }}>{t("dateLimiteSoumissionLabel")}</label>
+          <input
+            type="datetime-local"
+            value={formDossier.date_limite_soumission}
+            onChange={(e) => setFormDossier((f) => ({ ...f, date_limite_soumission: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button type="submit" disabled={dossierEnCours} style={boutonPrincipalStyle}>
+              {t("save")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormDossierOuvert(false)}
+              style={boutonSecondaireStyle}
+            >
+              {t("cancel")}
+            </button>
+          </div>
+        </form>
+      )}
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
@@ -1697,4 +1906,14 @@ const boutonSecondaireStyle = {
   padding: "4px 10px",
   fontSize: 11.5,
   whiteSpace: "nowrap",
+};
+const boutonLienStyle = {
+  background: "none",
+  border: "none",
+  color: "var(--petrol)",
+  fontSize: 11,
+  fontWeight: 600,
+  padding: 0,
+  textDecoration: "underline",
+  cursor: "pointer",
 };

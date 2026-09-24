@@ -24,9 +24,31 @@ export default function NouveauDossierPage() {
     date_limite_soumission: "",
   });
 
+  // Ajout rapide d'un maitre d'ouvrage directement depuis ce formulaire
+  // (demande de Steeve, rapport client 24/09/2026) : evite de quitter la
+  // creation du dossier pour aller enregistrer le maitre d'ouvrage ailleurs.
+  const [ajoutMaitreOuvrageOuvert, setAjoutMaitreOuvrageOuvert] = useState(false);
+  const [nouveauMaitreOuvrage, setNouveauMaitreOuvrage] = useState({ nom: "", categorie: "" });
+  const [maitreOuvrageEnCours, setMaitreOuvrageEnCours] = useState(false);
+
   useEffect(() => {
     api.getMaitresOuvrage().then(setMaitresOuvrage).catch((err) => setErreur(err.message));
   }, []);
+
+  async function handleCreerMaitreOuvrage() {
+    setMaitreOuvrageEnCours(true);
+    try {
+      const nouveau = await api.createMaitreOuvrage(nouveauMaitreOuvrage);
+      setMaitresOuvrage((prev) => [...prev, nouveau].sort((a, b) => a.nom.localeCompare(b.nom)));
+      setForm((f) => ({ ...f, maitre_ouvrage_id: nouveau.id }));
+      setAjoutMaitreOuvrageOuvert(false);
+      setNouveauMaitreOuvrage({ nom: "", categorie: "" });
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setMaitreOuvrageEnCours(false);
+    }
+  }
 
   async function handleCreer(e) {
     e.preventDefault();
@@ -82,6 +104,37 @@ export default function NouveauDossierPage() {
             </option>
           ))}
         </select>
+        <button
+          type="button"
+          onClick={() => setAjoutMaitreOuvrageOuvert((v) => !v)}
+          style={{ ...boutonLienStyle, marginTop: 4 }}
+        >
+          {t("dossierQuickAddMaitreOuvrage")}
+        </button>
+        {ajoutMaitreOuvrageOuvert && (
+          <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+            <input
+              placeholder={t("dossierNewMaitreOuvrageNomLabel")}
+              value={nouveauMaitreOuvrage.nom}
+              onChange={(e) => setNouveauMaitreOuvrage((f) => ({ ...f, nom: e.target.value }))}
+              style={{ ...inputStyle, fontSize: 11.5, padding: "5px 8px" }}
+            />
+            <input
+              placeholder={t("dossierNewMaitreOuvrageCategorieLabel")}
+              value={nouveauMaitreOuvrage.categorie}
+              onChange={(e) => setNouveauMaitreOuvrage((f) => ({ ...f, categorie: e.target.value }))}
+              style={{ ...inputStyle, fontSize: 11.5, padding: "5px 8px", maxWidth: 120 }}
+            />
+            <button
+              type="button"
+              onClick={handleCreerMaitreOuvrage}
+              disabled={maitreOuvrageEnCours || !nouveauMaitreOuvrage.nom.trim()}
+              style={boutonSecondaireStyle}
+            >
+              {t("save")}
+            </button>
+          </div>
+        )}
 
         <label style={{ ...labelStyle, marginTop: 10 }}>{t("secteurLabel")}</label>
         <input
@@ -151,4 +204,24 @@ const boutonPrincipalStyle = {
   padding: "8px 16px",
   fontSize: 12.5,
   fontWeight: 600,
+};
+const boutonSecondaireStyle = {
+  background: "transparent",
+  color: "var(--petrol)",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  padding: "6px 12px",
+  fontSize: 12,
+  fontWeight: 600,
+  whiteSpace: "nowrap",
+};
+const boutonLienStyle = {
+  background: "none",
+  border: "none",
+  color: "var(--petrol)",
+  fontSize: 11,
+  fontWeight: 600,
+  padding: 0,
+  textDecoration: "underline",
+  cursor: "pointer",
 };

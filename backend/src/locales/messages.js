@@ -50,6 +50,8 @@ const MESSAGES = {
     DOSSIER_CREATE_ERROR: "Erreur lors de la creation du dossier.",
     STATUT_INVALID: "Statut invalide.",
     DOSSIER_STATUT_UPDATE_ERROR: "Erreur lors de la mise a jour du statut.",
+    DOSSIER_MODIFICATION_LOCKED: "Ce dossier ne peut plus etre modifie a ce stade.",
+    DOSSIER_UPDATE_ERROR: "Erreur lors de la mise a jour du dossier.",
 
     SIGNAUX_FETCH_ERROR: "Erreur lors de la recuperation des signaux.",
     SIGNAL_NOT_FOUND: "Signal introuvable.",
@@ -401,6 +403,8 @@ const MESSAGES = {
     DOSSIER_CREATE_ERROR: "Error while creating the file.",
     STATUT_INVALID: "Invalid status.",
     DOSSIER_STATUT_UPDATE_ERROR: "Error while updating the status.",
+    DOSSIER_MODIFICATION_LOCKED: "This file can no longer be modified at this stage.",
+    DOSSIER_UPDATE_ERROR: "Error while updating the file.",
 
     SIGNAUX_FETCH_ERROR: "Error while fetching signals.",
     SIGNAL_NOT_FOUND: "Signal not found.",

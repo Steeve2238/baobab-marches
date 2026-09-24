@@ -93,6 +93,7 @@ export const DICTIONARIES = {
     dateLimiteSoumissionHint: "Cette date déclenche le chronogramme automatique du dossier — vous pourrez la renseigner plus tard si vous ne l'avez pas encore.",
     createDossierButton: "Créer le dossier",
     backToDashboard: "← Retour au tableau de bord",
+    dossierEditButton: "Modifier",
 
     domainStatsSection: "Vue par domaine",
     domainSuppliers: "Fournisseurs",
@@ -342,6 +343,9 @@ export const DICTIONARIES = {
     maitreOuvrageNameLabel: "Nom",
     maitreOuvrageCategorieLabel: "Catégorie",
     createMaitreOuvrageButton: "Créer",
+    dossierQuickAddMaitreOuvrage: "+ Nouveau maître d'ouvrage",
+    dossierNewMaitreOuvrageNomLabel: "Nom du maître d'ouvrage",
+    dossierNewMaitreOuvrageCategorieLabel: "Catégorie",
     noMaitreOuvrage: "Aucun",
 
     historiqueSection: "Historique des offres concurrentes",
@@ -1122,6 +1126,7 @@ export const DICTIONARIES = {
     dateLimiteSoumissionHint: "This date triggers the file's automatic timeline — you can fill it in later if you don't have it yet.",
     createDossierButton: "Create file",
     backToDashboard: "← Back to dashboard",
+    dossierEditButton: "Edit",
 
     domainStatsSection: "View by domain",
     domainSuppliers: "Suppliers",
@@ -1371,6 +1376,9 @@ export const DICTIONARIES = {
     maitreOuvrageNameLabel: "Name",
     maitreOuvrageCategorieLabel: "Category",
     createMaitreOuvrageButton: "Create",
+    dossierQuickAddMaitreOuvrage: "+ New contracting authority",
+    dossierNewMaitreOuvrageNomLabel: "Contracting authority name",
+    dossierNewMaitreOuvrageCategorieLabel: "Category",
     noMaitreOuvrage: "None",
 
     historiqueSection: "Competitor bid history",
