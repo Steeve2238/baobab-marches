@@ -664,7 +664,7 @@ router.patch("/devis/:id", async (req, res) => {
       return res.status(404).json({ error: t(req, "VENTE_DEVIS_NOT_FOUND") });
     }
     const devisActuel = existant.rows[0];
-    if (!["BROUILLON", "ENVOYE"].includes(devisActuel.statut)) {
+    if (!["BROUILLON", "ENVOYE", "REFUSE"].includes(devisActuel.statut)) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_EDITABLE") });
     }
@@ -728,7 +728,7 @@ router.patch("/devis/:id/statut", requireRoleOuValidateurUniversel(...ROLES_CREA
   }
   try {
     const result = await db.query(
-      `UPDATE devis SET statut = $1 WHERE id = $2 AND tenant_id = $3 AND statut IN ('BROUILLON','ENVOYE') RETURNING *`,
+      `UPDATE devis SET statut = $1 WHERE id = $2 AND tenant_id = $3 AND statut IN ('BROUILLON','ENVOYE','REFUSE') RETURNING *`,
       [statut, id, req.user.tenantId]
     );
     if (result.rows.length === 0) {

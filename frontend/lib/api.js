@@ -428,12 +428,20 @@ export const api = {
   // Module Ventes/Negoce (Consultation -> Devis -> Facture -> Bon de livraison)
   getParametresVentes: () => request("/parametres/ventes"),
   patchParametresVentes: (data) => request("/parametres/ventes", { method: "PATCH", body: JSON.stringify(data) }),
+  getNumerotation: () => request("/parametres/numerotation"),
+  patchNumerotation: (data) => request("/parametres/numerotation", { method: "PATCH", body: JSON.stringify(data) }),
   uploaderLogoVentes: (fichier) => {
     const formData = new FormData();
     formData.append("logo", fichier);
     return requestUpload("/parametres/ventes/logo", formData);
   },
   supprimerLogoVentes: () => request("/parametres/ventes/logo", { method: "DELETE" }),
+  uploaderSignatureCachetVentes: (fichier) => {
+    const formData = new FormData();
+    formData.append("signature_cachet", fichier);
+    return requestUpload("/parametres/ventes/signature-cachet", formData);
+  },
+  supprimerSignatureCachetVentes: () => request("/parametres/ventes/signature-cachet", { method: "DELETE" }),
 
   getClientsCommerciaux: () => request("/ventes/clients"),
   createClientCommercial: (data) => request("/ventes/clients", { method: "POST", body: JSON.stringify(data) }),

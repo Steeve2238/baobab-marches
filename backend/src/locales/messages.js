@@ -327,9 +327,16 @@ const MESSAGES = {
     VENTE_PARAMETRES_UPDATE_ERROR: "Erreur lors de la mise a jour des parametres de vente.",
     VENTE_TAUX_TVA_INVALID: "Le taux de TVA doit etre un nombre entre 0 et 100.",
     VENTE_LOGO_FILE_REQUIRED: "Un fichier image est requis.",
+    VENTE_SIGNATURE_CACHET_FILE_REQUIRED: "Le fichier de signature et cachet est requis.",
     VENTE_LOGO_TYPE_INVALID: "Format d'image non pris en charge (PNG ou JPEG attendu).",
     VENTE_LOGO_TOO_LARGE: "L'image du logo est trop volumineuse (2 Mo maximum).",
     VENTE_LOGO_UPLOAD_ERROR: "Erreur lors de l'enregistrement du logo.",
+
+    NUMEROTATION_FETCH_ERROR: "Erreur lors de la recuperation de la numerotation.",
+    NUMEROTATION_FIELDS_REQUIRED: "Au moins un numero (devis ou facture/BL) doit etre fourni.",
+    NUMEROTATION_INVALID: "Le numero doit etre un entier positif ou nul.",
+    NUMEROTATION_BAISSE_INTERDITE: "Impossible de definir un numero inferieur a celui deja enregistre.",
+    NUMEROTATION_UPDATE_ERROR: "Erreur lors de la mise a jour de la numerotation.",
 
     CALCUL_DOSSIER_NOT_FOUND: "Dossier de calcul introuvable.",
     CALCUL_DOSSIER_FETCH_ERROR: "Erreur lors de la recuperation du dossier de calcul.",
@@ -680,9 +687,16 @@ const MESSAGES = {
     VENTE_PARAMETRES_UPDATE_ERROR: "Error while updating sales settings.",
     VENTE_TAUX_TVA_INVALID: "The VAT rate must be a number between 0 and 100.",
     VENTE_LOGO_FILE_REQUIRED: "An image file is required.",
+    VENTE_SIGNATURE_CACHET_FILE_REQUIRED: "The signature and stamp file is required.",
     VENTE_LOGO_TYPE_INVALID: "Unsupported image format (PNG or JPEG expected).",
     VENTE_LOGO_TOO_LARGE: "The logo image is too large (2 MB maximum).",
     VENTE_LOGO_UPLOAD_ERROR: "Error while saving the logo.",
+
+    NUMEROTATION_FETCH_ERROR: "Error while retrieving the numbering.",
+    NUMEROTATION_FIELDS_REQUIRED: "At least one number (quote or invoice/delivery note) must be provided.",
+    NUMEROTATION_INVALID: "The number must be a positive integer or zero.",
+    NUMEROTATION_BAISSE_INTERDITE: "Cannot set a number lower than the one already recorded.",
+    NUMEROTATION_UPDATE_ERROR: "Error while updating the numbering.",
 
     CALCUL_DOSSIER_NOT_FOUND: "Cost calculation file not found.",
     CALCUL_DOSSIER_FETCH_ERROR: "Error while retrieving the cost calculation file.",

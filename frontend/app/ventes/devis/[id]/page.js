@@ -8,6 +8,15 @@ import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import { estAdmin, getUtilisateurCourant } from "../../../../lib/api";
 import AppShell from "../../../../lib/components/AppShell";
 
+// Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
+// objet Date JS (qui reintroduirait une conversion de fuseau horaire cote
+// navigateur) - voir le correctif equivalent cote serveur dans db.js.
+function formaterDateAffichage(valeur) {
+  if (!valeur) return "";
+  const [annee, mois, jour] = String(valeur).slice(0, 10).split("-");
+  return `${jour}/${mois}/${annee}`;
+}
+
 const STATUT_STYLE = {
   BROUILLON: { color: "var(--sub)", background: "rgba(91,106,108,0.1)" },
   ENVOYE: { color: "var(--ocre)", background: "rgba(224,149,76,0.12)" },
@@ -32,6 +41,10 @@ export default function DevisDetailPage() {
   const [chargement, setChargement] = useState(true);
   const [action, setAction] = useState(false);
   const [referenceBc, setReferenceBc] = useState("");
+  const [formOuvert, setFormOuvert] = useState(false);
+  const [formDevis, setFormDevis] = useState(null);
+  const [lignesEdition, setLignesEdition] = useState([]);
+  const [enregistrementEdition, setEnregistrementEdition] = useState(false);
 
   function charger() {
     Promise.all([api.getDevis(params.id), api.getEntete(), api.getParametresVentes()])
@@ -50,6 +63,19 @@ export default function DevisDetailPage() {
   }
 
   useEffect(charger, [params.id]);
+
+  // Personnalise dynamiquement document.title (numero du devis + entreprise
+  // du tenant) car document.title est injecte par le navigateur dans
+  // l'en-tete/pied de page natif de l'impression - voir metadata globale
+  // dans app/layout.js (titre "Baobab Marches" par defaut, ne pas modifier).
+  useEffect(() => {
+    if (!devis || !entete) return;
+    const titrePrecedent = document.title;
+    document.title = `${entete.raison_sociale || ""} - ${devis.numero}`.trim();
+    return () => {
+      document.title = titrePrecedent;
+    };
+  }, [devis, entete]);
 
   async function handleValider() {
     setAction(true);
@@ -90,6 +116,53 @@ export default function DevisDetailPage() {
     }
   }
 
+  function handleOuvrirEdition() {
+    setFormDevis({
+      objet: devis.objet || "",
+      date_devis: (devis.date_devis || "").slice(0, 10),
+      conditions_paiement: devis.conditions_paiement || "",
+      delai_livraison: devis.delai_livraison || "",
+      validite_offre: devis.validite_offre || "",
+    });
+    setLignesEdition(devis.lignes.map((l) => ({ ...l })));
+    setFormOuvert(true);
+  }
+
+  function majLigneEdition(index, champ, valeur) {
+    setLignesEdition((prev) => prev.map((l, i) => (i === index ? { ...l, [champ]: valeur } : l)));
+  }
+
+  function ajouterLigneEdition() {
+    setLignesEdition((prev) => [...prev, { designation: "", unite: "U", quantite: 1, prix_unitaire_ht: "" }]);
+  }
+
+  function supprimerLigneEdition(index) {
+    setLignesEdition((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+  }
+
+  async function handleEnregistrerDevis(e) {
+    e.preventDefault();
+    setEnregistrementEdition(true);
+    setErreur("");
+    try {
+      const maj = await api.patchDevis(devis.id, {
+        ...formDevis,
+        lignes: lignesEdition.map((l) => ({
+          designation: l.designation,
+          unite: l.unite,
+          quantite: Number(l.quantite),
+          prix_unitaire_ht: Number(l.prix_unitaire_ht),
+        })),
+      });
+      setDevis(maj);
+      setFormOuvert(false);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setEnregistrementEdition(false);
+    }
+  }
+
   if (chargement) {
     return (
       <AppShell title={t("venteDevisDetailTitle")} backHref="/ventes/devis">
@@ -106,8 +179,8 @@ export default function DevisDetailPage() {
   }
 
   const style = STATUT_STYLE[devis.statut] || {};
-  const peutEditer = ["BROUILLON", "ENVOYE"].includes(devis.statut);
-  const peutValider = peutEditer && possedeRole(["DIRECTION"]);
+  const peutEditer = ["BROUILLON", "ENVOYE", "REFUSE"].includes(devis.statut);
+  const peutValider = ["BROUILLON", "ENVOYE"].includes(devis.statut) && possedeRole(["DIRECTION"]);
   const peutFacturer = devis.statut === "VALIDE" && !devis.facture && possedeRole(["COMPTABLE", "FINANCIER"]);
 
   return (
@@ -124,7 +197,7 @@ export default function DevisDetailPage() {
               {t("venteMarkSentButton")}
             </button>
           )}
-          {peutEditer && (
+          {peutEditer && devis.statut !== "REFUSE" && (
             <button onClick={() => handleChangerStatut("REFUSE")} disabled={action} style={boutonDangerStyle}>
               {t("venteMarkRefusedButton")}
             </button>
@@ -153,11 +226,92 @@ export default function DevisDetailPage() {
               </>
             )
           )}
+          {peutEditer && (
+            <button onClick={handleOuvrirEdition} style={boutonSecondaireStyle}>
+              {t("venteDevisEditButton")}
+            </button>
+          )}
           <button onClick={() => window.print()} style={boutonSecondaireStyle}>
             {t("print")}
           </button>
         </div>
       </div>
+
+      {formOuvert && (
+        <form onSubmit={handleEnregistrerDevis} className="no-print card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div>
+              <label style={labelStyle}>{t("venteObjetLabel")}</label>
+              <input value={formDevis.objet} onChange={(e) => setFormDevis((f) => ({ ...f, objet: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("venteDateDevisLabel")}</label>
+              <input type="date" value={formDevis.date_devis} onChange={(e) => setFormDevis((f) => ({ ...f, date_devis: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("venteValiditeOffreLabel")}</label>
+              <input value={formDevis.validite_offre} onChange={(e) => setFormDevis((f) => ({ ...f, validite_offre: e.target.value }))} style={inputStyle} placeholder={t("venteValiditeOffrePlaceholder")} />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+            <div>
+              <label style={labelStyle}>{t("venteConditionsPaiementLabel")}</label>
+              <input value={formDevis.conditions_paiement} onChange={(e) => setFormDevis((f) => ({ ...f, conditions_paiement: e.target.value }))} style={inputStyle} placeholder={t("venteConditionsPaiementPlaceholder")} />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("venteDelaiLivraisonLabel")}</label>
+              <input value={formDevis.delai_livraison} onChange={(e) => setFormDevis((f) => ({ ...f, delai_livraison: e.target.value }))} style={inputStyle} placeholder={t("venteDelaiLivraisonPlaceholder")} />
+            </div>
+          </div>
+
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginTop: 18, marginBottom: 10 }}>{t("venteLignesSection")}</h3>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
+              <thead>
+                <tr style={{ fontSize: 11, color: "var(--sub)", textAlign: "left" }}>
+                  <th style={{ padding: "4px 6px" }}>{t("venteDesignationLabel")}</th>
+                  <th style={{ padding: "4px 6px", width: 70 }}>{t("venteUniteLabel")}</th>
+                  <th style={{ padding: "4px 6px", width: 90 }}>{t("venteQuantiteLabel")}</th>
+                  <th style={{ padding: "4px 6px", width: 130 }}>{t("ventePrixUnitaireLabel")}</th>
+                  <th style={{ padding: "4px 6px", width: 130 }}>{t("venteMontantLabel")}</th>
+                  <th style={{ width: 30 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lignesEdition.map((ligne, index) => {
+                  const montant = (Number(ligne.quantite) || 0) * (Number(ligne.prix_unitaire_ht) || 0);
+                  return (
+                    <tr key={index}>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input required value={ligne.designation} onChange={(e) => majLigneEdition(index, "designation", e.target.value)} style={inputStyleCompact} />
+                      </td>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input value={ligne.unite} onChange={(e) => majLigneEdition(index, "unite", e.target.value)} style={inputStyleCompact} />
+                      </td>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input required type="number" min="0.01" step="0.01" value={ligne.quantite} onChange={(e) => majLigneEdition(index, "quantite", e.target.value)} style={inputStyleCompact} />
+                      </td>
+                      <td style={{ padding: "4px 6px" }}>
+                        <input required type="number" min="0" step="1" value={ligne.prix_unitaire_ht} onChange={(e) => majLigneEdition(index, "prix_unitaire_ht", e.target.value)} style={inputStyleCompact} />
+                      </td>
+                      <td className="mono" style={{ padding: "4px 6px", fontSize: 12.5, textAlign: "right" }}>{montant.toLocaleString()}</td>
+                      <td style={{ padding: "4px 6px" }}>
+                        <button type="button" onClick={() => supprimerLigneEdition(index)} style={boutonSupprimerStyle} title={t("removeLine")}>×</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <button type="button" onClick={ajouterLigneEdition} style={{ ...boutonSecondaireStyle, marginTop: 8 }}>{t("venteAddLineButton")}</button>
+
+          <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+            <button type="submit" disabled={enregistrementEdition} style={boutonPrincipalStyle}>{t("save")}</button>
+            <button type="button" onClick={() => setFormOuvert(false)} style={boutonSecondaireStyle}>{t("cancel")}</button>
+          </div>
+        </form>
+      )}
 
       <div className="card print-letter" style={{ padding: "28px 32px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 24, borderBottom: "2px solid var(--petrol)", paddingBottom: 16, marginBottom: 20 }}>
@@ -180,7 +334,7 @@ export default function DevisDetailPage() {
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontWeight: 700, fontSize: 13.5 }}>{devis.numero}</div>
-            <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{new Date(devis.date_devis).toLocaleDateString()}</div>
+            <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{formaterDateAffichage(devis.date_devis)}</div>
           </div>
         </div>
 
@@ -237,9 +391,16 @@ export default function DevisDetailPage() {
           </div>
         )}
 
-        <div style={{ marginTop: 40, textAlign: "right" }}>
+        <div style={{ marginTop: 110, textAlign: "right" }}>
           <div style={{ fontWeight: 700, fontSize: 12.5 }}>{entete?.signataire_nom}</div>
           <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{entete?.signataire_titre}</div>
+          {entete?.signature_cachet_base64 && (
+            <img
+              src={`data:${entete.signature_cachet_type_mime};base64,${entete.signature_cachet_base64}`}
+              alt="signature et cachet"
+              style={{ maxWidth: 150, maxHeight: 100, objectFit: "contain", marginTop: 8 }}
+            />
+          )}
         </div>
 
         {piedDePage(entete).length > 0 && (
@@ -313,4 +474,22 @@ const inputStyleCompact = {
   borderRadius: 8,
   fontSize: 12.5,
   fontFamily: "inherit",
+};
+const labelStyle = { fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 5 };
+const inputStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  fontSize: 13,
+  fontFamily: "inherit",
+};
+const boutonSupprimerStyle = {
+  background: "transparent",
+  color: "var(--brique)",
+  border: "none",
+  fontSize: 16,
+  fontWeight: 700,
+  cursor: "pointer",
+  lineHeight: 1,
 };

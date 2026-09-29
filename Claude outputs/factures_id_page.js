@@ -2,19 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { api, estAdmin, getUtilisateurCourant } from "../../../../lib/api";
+import { superAdminApi } from "../../../../lib/superAdminApi";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
-import AppShell from "../../../../lib/components/AppShell";
-
-// Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
-// objet Date JS (qui reintroduirait une conversion de fuseau horaire cote
-// navigateur) - voir le correctif equivalent cote serveur dans db.js.
-function formaterDateAffichage(valeur) {
-  if (!valeur) return "";
-  const [annee, mois, jour] = String(valeur).slice(0, 10).split("-");
-  return `${jour}/${mois}/${annee}`;
-}
+import SuperAdminShell from "../../../../lib/components/SuperAdminShell";
 
 const STATUT_STYLE = {
   IMPAYEE: { color: "var(--brique)", background: "rgba(196,74,58,0.1)" },
@@ -22,18 +12,15 @@ const STATUT_STYLE = {
   ANNULEE: { color: "var(--sub)", background: "rgba(91,106,108,0.1)" },
 };
 
-function possedeRole(codes) {
-  if (estAdmin()) return true;
-  const user = getUtilisateurCourant();
-  return Array.isArray(user?.roles) && user.roles.some((r) => codes.includes(r));
-}
-
-function numeroAffiche(numero, mois) {
-  const [annee, sequence] = numero.split("-");
-  return `${annee}-${String(mois).padStart(2, "0")}-${sequence}`;
-}
-
-export default function FactureVenteDetailPage() {
+// Detail + impression d'une facture d'abonnement Super Admin (Steeve facture
+// une entreprise cliente pour son abonnement/installation) - meme principe
+// visuel que la facture du module Ventes (voir app/ventes/factures/[id]/
+// page.js), mais l'emetteur ici est la plateforme elle-meme (voir
+// lib/superAdminApi.js getParametresEntete / plateforme_parametres cote
+// backend) et le destinataire est l'entreprise cliente (tenant), l'inverse
+// du module Ventes ou l'emetteur est le tenant et le destinataire un client
+// externe.
+export default function SuperAdminFactureDetailPage() {
   const router = useRouter();
   const params = useParams();
   const { t } = useLangue();
@@ -45,14 +32,15 @@ export default function FactureVenteDetailPage() {
   const [modePaiement, setModePaiement] = useState("");
 
   function charger() {
-    Promise.all([api.getFactureVente(params.id), api.getEntete(), api.getParametresVentes()])
-      .then(([factureData, enteteData, parametresData]) => {
+    setChargement(true);
+    Promise.all([superAdminApi.getFacture(params.id), superAdminApi.getParametresEntete()])
+      .then(([factureData, enteteData]) => {
         setFacture(factureData);
-        setEntete({ ...enteteData, ...parametresData });
+        setEntete(enteteData);
       })
       .catch((err) => {
         if (err.status === 401) {
-          router.push("/login");
+          router.push("/super-admin/login");
           return;
         }
         setErreur(err.message);
@@ -62,24 +50,11 @@ export default function FactureVenteDetailPage() {
 
   useEffect(charger, [params.id]);
 
-  // Personnalise dynamiquement document.title (numero de facture + entreprise
-  // du tenant) car document.title est injecte par le navigateur dans
-  // l'en-tete/pied de page natif de l'impression - voir metadata globale
-  // dans app/layout.js (titre "Baobab Marches" par defaut, ne pas modifier).
-  useEffect(() => {
-    if (!facture || !entete) return;
-    const titrePrecedent = document.title;
-    document.title = `${entete.raison_sociale || ""} - ${facture.numero}`.trim();
-    return () => {
-      document.title = titrePrecedent;
-    };
-  }, [facture, entete]);
-
   async function handleMarquerPayee() {
     setAction(true);
     setErreur("");
     try {
-      const maj = await api.marquerFactureVentePayee(facture.id, { mode_paiement: modePaiement });
+      const maj = await superAdminApi.marquerFacturePayee(facture.id, { mode_paiement: modePaiement });
       setFacture((prev) => ({ ...prev, ...maj }));
     } catch (err) {
       setErreur(err.message);
@@ -92,21 +67,8 @@ export default function FactureVenteDetailPage() {
     setAction(true);
     setErreur("");
     try {
-      const maj = await api.annulerFactureVente(facture.id);
+      const maj = await superAdminApi.annulerFacture(facture.id);
       setFacture((prev) => ({ ...prev, ...maj }));
-    } catch (err) {
-      setErreur(err.message);
-    } finally {
-      setAction(false);
-    }
-  }
-
-  async function handleGenererBl() {
-    setAction(true);
-    setErreur("");
-    try {
-      const bl = await api.genererBlDepuisFacture(facture.id);
-      router.push(`/ventes/bl/${bl.id}`);
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -116,33 +78,65 @@ export default function FactureVenteDetailPage() {
 
   if (chargement) {
     return (
-      <AppShell title={t("venteFactureDetailTitle")} backHref="/ventes/factures">
+      <SuperAdminShell title={t("saFacturesPageTitle")} backHref="/super-admin/factures">
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
-      </AppShell>
+      </SuperAdminShell>
     );
   }
   if (!facture) {
     return (
-      <AppShell title={t("venteFactureDetailTitle")} backHref="/ventes/factures">
+      <SuperAdminShell title={t("saFacturesPageTitle")} backHref="/super-admin/factures">
         {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p>}
-      </AppShell>
+      </SuperAdminShell>
     );
   }
 
   const style = STATUT_STYLE[facture.statut] || {};
-  const peutFacturer = possedeRole(["COMPTABLE", "FINANCIER"]);
-  const numeroComplet = numeroAffiche(facture.numero, facture.mois_emission);
+  const estInstallation = facture.type_facture === "INSTALLATION";
+
+  // Descriptif complet de la ligne facturee (demande de Steeve du 18/09/2026 :
+  // "pour la formule Essentiel, il faut que ce soit ecrit clairement de quoi
+  // il s'agit"). Le systeme i18n de ce projet est une simple table de
+  // correspondance sans interpolation de variables : les valeurs dynamiques
+  // (nom de la formule, plafond, periode) sont donc assemblees ici, en
+  // concatenant des cles traduites.
+  //
+  // Le plafond affiche est celui FIGE sur la facture au moment de sa
+  // generation (plafond_utilisateurs_facture, voir migration 022), jamais le
+  // plafond actuel de la formule : une facture deja emise ne doit jamais
+  // changer retroactivement si la formule evolue plus tard. Sur les factures
+  // anterieures a cette migration la colonne est NULL, ce qui retombe sur
+  // "utilisateurs illimites" (meme convention que
+  // formule_abonnement.plafond_utilisateurs).
+  const plafondFacture = facture.plafond_utilisateurs_facture;
+  const textePlafond =
+    plafondFacture === null || plafondFacture === undefined
+      ? t("saInvoiceLineUnlimitedUsers")
+      : `${t("saInvoiceLineUpTo")} ${Number(plafondFacture).toLocaleString()} ${t("saInvoiceLineUsers")}`;
+
+  const descriptionLigne = estInstallation
+    ? `${t("saInvoiceLineInstallationDescription")} — ${t("saInvoiceLineFormuleWord")} ${facture.formule_nom}`
+    : `${t("saInvoiceLineAbonnementPrefix")} — ${t("saInvoiceLineFormuleWord")} ${facture.formule_nom} (${textePlafond}) — ${t(
+        "saInvoiceLinePeriodLabel"
+      )} ${facture.periode}`;
+
+  const piedDePage = [
+    entete?.rccm ? `RCCM ${entete.rccm}` : null,
+    entete?.ninea ? `NINEA ${entete.ninea}` : null,
+    entete?.site_web || null,
+    entete?.coordonnees_bancaires || null,
+  ].filter(Boolean);
 
   return (
-    <AppShell title={numeroComplet} backHref="/ventes/factures">
+    <SuperAdminShell title={facture.periode} backHref="/super-admin/factures">
       {erreur && <p className="no-print" style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20, ...style }}>
-          {t(`venteFactureStatut_${facture.statut}`)}
+          {t(`saFactureStatut_${facture.statut}`)}
         </span>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {facture.statut === "IMPAYEE" && peutFacturer && (
+          {facture.statut === "IMPAYEE" && (
             <>
               <input
                 placeholder={t("saPaymentModePlaceholder")}
@@ -157,18 +151,6 @@ export default function FactureVenteDetailPage() {
                 {t("venteCancelInvoiceButton")}
               </button>
             </>
-          )}
-          {facture.bon_livraison ? (
-            <Link href={`/ventes/bl/${facture.bon_livraison.id}`} style={boutonSecondaireStyle}>
-              {t("venteViewBlButton")} ({numeroAffiche(facture.bon_livraison.numero, facture.mois_emission)})
-            </Link>
-          ) : (
-            peutFacturer &&
-            facture.statut !== "ANNULEE" && (
-              <button onClick={handleGenererBl} disabled={action} style={boutonPrincipalStyle}>
-                {t("venteGenerateBlButton")}
-              </button>
-            )
           )}
           <button onClick={() => window.print()} style={boutonSecondaireStyle}>
             {t("print")}
@@ -197,54 +179,55 @@ export default function FactureVenteDetailPage() {
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={{ fontWeight: 700, fontSize: 13.5 }}>
-              {t("venteInvoiceNumberLabel")} {numeroComplet}
-              {facture.reference_bc_client ? `/${facture.reference_bc_client}` : ""}
+              {t("venteInvoiceNumberLabel")} {facture.periode}
             </div>
-            <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{formaterDateAffichage(facture.date_facture)}</div>
+            <div style={{ fontSize: 11.5, color: "var(--sub)" }}>
+              {new Date(facture.date_generation).toLocaleDateString()}
+            </div>
           </div>
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>{t("venteBillToLabel")}</div>
-          <div style={{ fontWeight: 600, fontSize: 13.5 }}>{facture.client_nom}</div>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>
+            {t("venteBillToLabel")}
+          </div>
+          <div style={{ fontWeight: 600, fontSize: 13.5 }}>{facture.client_raison_sociale}</div>
           {facture.client_adresse && <div style={{ fontSize: 12, color: "var(--sub)" }}>{facture.client_adresse}</div>}
         </div>
 
+        {/* Tableau de lignes calque sur celui de la facture du module Ventes
+            (Designation / Quantite / Prix unitaire / Montant) : la facture
+            d'abonnement n'a toujours qu'UNE ligne, de quantite 1, mais elle
+            doit se lire comme une vraie facture. */}
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ fontSize: 11, textAlign: "left", borderBottom: "1px solid var(--line)" }}>
               <th style={{ padding: "6px 4px" }}>{t("venteDesignationLabel")}</th>
-              <th style={{ padding: "6px 4px" }}>{t("venteUniteLabel")}</th>
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteLabel")}</th>
-              <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("ventePrixUnitaireLabel")}</th>
-              <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteMontantLabel")}</th>
+              <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("saInvoiceColPrixUnitaire")}</th>
+              <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("saInvoiceColMontant")}</th>
             </tr>
           </thead>
           <tbody>
-            {facture.lignes.map((l) => (
-              <tr key={l.id} style={{ borderBottom: "1px solid var(--line-soft)" }}>
-                <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.designation}</td>
-                <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.unite}</td>
-                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.quantite).toLocaleString()}</td>
-                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.prix_unitaire_ht).toLocaleString()}</td>
-                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.montant_ht).toLocaleString()}</td>
-              </tr>
-            ))}
+            <tr style={{ borderBottom: "1px solid var(--line-soft)" }}>
+              <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{descriptionLigne}</td>
+              <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                1
+              </td>
+              <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                {Number(facture.montant_xof).toLocaleString()}
+              </td>
+              <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                {Number(facture.montant_xof).toLocaleString()}
+              </td>
+            </tr>
           </tbody>
         </table>
 
         <div style={{ marginTop: 14, marginLeft: "auto", maxWidth: 260, display: "grid", gap: 4 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
-            <span>{t("venteTotalHtLabel")}</span>
-            <span className="mono">{Number(facture.total_ht).toLocaleString()} XOF</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
-            <span>{t("venteTvaLabel")} ({Number(facture.taux_tva_pourcentage)}%)</span>
-            <span className="mono">{Number(facture.montant_tva).toLocaleString()} XOF</span>
-          </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: "var(--petrol)" }}>
             <span>{t("venteTotalTtcLabel")}</span>
-            <span className="mono">{Number(facture.total_ttc).toLocaleString()} XOF</span>
+            <span className="mono">{Number(facture.montant_xof).toLocaleString()} XOF</span>
           </div>
         </div>
 
@@ -255,19 +238,29 @@ export default function FactureVenteDetailPage() {
           </div>
         )}
 
-        <div style={{ marginTop: 110, textAlign: "right" }}>
-          <div style={{ fontWeight: 700, fontSize: 12.5 }}>{entete?.signataire_nom}</div>
-          <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{entete?.signataire_titre}</div>
-          {entete?.signature_cachet_base64 && (
-            <img
-              src={`data:${entete.signature_cachet_type_mime};base64,${entete.signature_cachet_base64}`}
-              alt="signature et cachet"
-              style={{ maxWidth: 150, maxHeight: 100, objectFit: "contain", marginTop: 8 }}
-            />
-          )}
+        {/* Bloc signature : en bas a droite de la zone imprimable, sous le
+            corps du document et au-dessus du pied de page legal - demande de
+            Steeve du 18/09/2026. "La Direction" est toujours affiche (il
+            reste alors la place pour une signature manuscrite sur le papier),
+            l'image signature+cachet n'est rendue que si elle a reellement ete
+            televersee dans Parametres : pas de <img> sans source, qui
+            produirait une icone d'image cassee a l'impression. */}
+        <div style={{ marginTop: 32, display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ textAlign: "center", minWidth: 180 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--petrol)" }}>{t("saLaDirectionLabel")}</div>
+            {entete?.signature_cachet_base64 ? (
+              <img
+                src={`data:${entete.signature_cachet_type_mime};base64,${entete.signature_cachet_base64}`}
+                alt={t("saSignatureCachetLabel")}
+                style={{ marginTop: 6, maxWidth: 180, maxHeight: 110, objectFit: "contain" }}
+              />
+            ) : (
+              <div style={{ height: 70 }} />
+            )}
+          </div>
         </div>
 
-        {piedDePage(entete).length > 0 && (
+        {piedDePage.length > 0 && (
           <div
             style={{
               marginTop: 40,
@@ -278,25 +271,12 @@ export default function FactureVenteDetailPage() {
               color: "var(--sub)",
             }}
           >
-            {piedDePage(entete).join(" · ")}
+            {piedDePage.join(" · ")}
           </div>
         )}
       </div>
-    </AppShell>
+    </SuperAdminShell>
   );
-}
-
-// Pied de page (mentions legales) des documents imprimables - RCCM, NINEA,
-// site web, coordonnees bancaires (voir migration
-// 018_facturation_entete_pied_de_page.sql) : seuls les champs renseignes par
-// l'entreprise s'affichent, rien n'est obligatoire.
-function piedDePage(entete) {
-  return [
-    entete?.rccm ? `RCCM ${entete.rccm}` : null,
-    entete?.ninea ? `NINEA ${entete.ninea}` : null,
-    entete?.site_web || null,
-    entete?.coordonnees_bancaires || null,
-  ].filter(Boolean);
 }
 
 const boutonPrincipalStyle = {

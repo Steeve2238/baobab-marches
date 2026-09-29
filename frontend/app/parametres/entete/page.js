@@ -60,6 +60,16 @@ export default function EnteteSettingsPage() {
   const [confirmationTva, setConfirmationTva] = useState(false);
   const [televersementLogo, setTeleversementLogo] = useState(false);
   const inputLogoRef = useRef(null);
+  const [signatureCachet, setSignatureCachet] = useState(null);
+  const [televersementSignatureCachet, setTeleversementSignatureCachet] = useState(false);
+  const inputSignatureCachetRef = useRef(null);
+
+  // Reprise de numerotation (Devis / Facture-BL) : permet de renseigner le
+  // dernier numero deja utilise ailleurs (Excel, etc.) pour l'annee en cours
+  // (voir GET/PATCH /api/parametres/numerotation cote backend).
+  const [numerotation, setNumerotation] = useState({ dernier_numero_devis: "0", dernier_numero_vente: "0" });
+  const [enregistrementNumerotation, setEnregistrementNumerotation] = useState(false);
+  const [confirmationNumerotation, setConfirmationNumerotation] = useState(false);
 
   // Parametres du Dossier de calcul (prix de revient et marge) - stockes en
   // saisie brute (chaines) pour permettre un champ vide pendant la frappe,
@@ -94,6 +104,11 @@ export default function EnteteSettingsPage() {
       .then((data) => {
         setTauxTva(String(data.taux_tva_pourcentage));
         setLogo(data.logo_base64 ? { base64: data.logo_base64, mime: data.logo_type_mime } : null);
+        setSignatureCachet(
+          data.signature_cachet_base64
+            ? { base64: data.signature_cachet_base64, mime: data.signature_cachet_type_mime }
+            : null
+        );
       })
       .catch(() => {});
 
@@ -107,6 +122,16 @@ export default function EnteteSettingsPage() {
         });
         setFormCalculPrix(valeurs);
       })
+      .catch(() => {});
+
+    api
+      .getNumerotation()
+      .then((data) =>
+        setNumerotation({
+          dernier_numero_devis: String(data.dernier_numero_devis),
+          dernier_numero_vente: String(data.dernier_numero_vente),
+        })
+      )
       .catch(() => {});
   }, []);
 
@@ -162,6 +187,25 @@ export default function EnteteSettingsPage() {
     }
   }
 
+  async function handleEnregistrerNumerotation(e) {
+    e.preventDefault();
+    setEnregistrementNumerotation(true);
+    setConfirmationNumerotation(false);
+    setErreur("");
+    try {
+      await api.patchNumerotation({
+        dernier_numero_devis: Number(numerotation.dernier_numero_devis),
+        dernier_numero_vente: Number(numerotation.dernier_numero_vente),
+      });
+      setConfirmationNumerotation(true);
+      setTimeout(() => setConfirmationNumerotation(false), 2500);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setEnregistrementNumerotation(false);
+    }
+  }
+
   async function handleChoisirLogo(e) {
     const fichier = e.target.files?.[0];
     if (!fichier) return;
@@ -188,6 +232,35 @@ export default function EnteteSettingsPage() {
       setErreur(err.message);
     } finally {
       setTeleversementLogo(false);
+    }
+  }
+
+  async function handleChoisirSignatureCachet(e) {
+    const fichier = e.target.files?.[0];
+    if (!fichier) return;
+    setTeleversementSignatureCachet(true);
+    setErreur("");
+    try {
+      const maj = await api.uploaderSignatureCachetVentes(fichier);
+      setSignatureCachet(maj.signature_cachet_base64 ? { base64: maj.signature_cachet_base64, mime: maj.signature_cachet_type_mime } : null);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setTeleversementSignatureCachet(false);
+      if (inputSignatureCachetRef.current) inputSignatureCachetRef.current.value = "";
+    }
+  }
+
+  async function handleSupprimerSignatureCachet() {
+    setTeleversementSignatureCachet(true);
+    setErreur("");
+    try {
+      await api.supprimerSignatureCachetVentes();
+      setSignatureCachet(null);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setTeleversementSignatureCachet(false);
     }
   }
 
@@ -320,6 +393,36 @@ export default function EnteteSettingsPage() {
             <input ref={inputLogoRef} type="file" accept="image/png,image/jpeg" onChange={handleChoisirLogo} style={{ display: "none" }} />
           </div>
 
+          <label style={labelStyle}>{t("venteSignatureCachetLabel")}</label>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+            {signatureCachet ? (
+              <img
+                src={`data:${signatureCachet.mime};base64,${signatureCachet.base64}`}
+                alt="signature et cachet"
+                style={{ maxWidth: 120, maxHeight: 80, objectFit: "contain", border: "1px solid var(--line)", borderRadius: 8, padding: 4 }}
+              />
+            ) : (
+              <span style={{ fontSize: 12, color: "var(--sub)" }}>{t("venteNoSignatureCachet")}</span>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => inputSignatureCachetRef.current?.click()}
+                disabled={televersementSignatureCachet}
+                style={boutonSecondaireStyle}
+              >
+                {televersementSignatureCachet ? t("saCreating") : t("venteUploadSignatureCachetButton")}
+              </button>
+              {signatureCachet && (
+                <button type="button" onClick={handleSupprimerSignatureCachet} disabled={televersementSignatureCachet} style={boutonSecondaireStyle}>
+                  {t("venteRemoveSignatureCachetButton")}
+                </button>
+              )}
+            </div>
+            <input ref={inputSignatureCachetRef} type="file" accept="image/png,image/jpeg" onChange={handleChoisirSignatureCachet} style={{ display: "none" }} />
+          </div>
+          <p style={{ fontSize: 11, color: "var(--sub)", marginBottom: 16 }}>{t("venteSignatureCachetNote")}</p>
+
           <form onSubmit={handleEnregistrerTva}>
             <label style={labelStyle}>{t("venteTauxTvaLabel")}</label>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -339,6 +442,49 @@ export default function EnteteSettingsPage() {
               {confirmationTva && <span style={{ fontSize: 12.5, color: "var(--vert)" }}>{t("savedConfirmation")}</span>}
             </div>
             <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 6 }}>{t("venteTauxTvaNote")}</p>
+          </form>
+        </div>
+      )}
+
+      {!chargement && (
+        <div className="card" style={{ maxWidth: 560, marginTop: 16 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 4 }}>{t("numerotationParametresSection")}</h3>
+          <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 14 }}>{t("numerotationParametresDescription")}</p>
+
+          <form onSubmit={handleEnregistrerNumerotation}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <label style={labelStyle}>{t("numerotationDevisLabel")}</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={numerotation.dernier_numero_devis}
+                  onChange={(e) => setNumerotation((f) => ({ ...f, dernier_numero_devis: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>{t("numerotationVenteLabel")}</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={numerotation.dernier_numero_vente}
+                  onChange={(e) => setNumerotation((f) => ({ ...f, dernier_numero_vente: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+            <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 10 }}>{t("numerotationNote")}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
+              <button type="submit" disabled={enregistrementNumerotation} style={boutonPrincipalStyle}>
+                {t("save")}
+              </button>
+              {confirmationNumerotation && (
+                <span style={{ fontSize: 12.5, color: "var(--vert)" }}>{t("savedConfirmation")}</span>
+              )}
+            </div>
           </form>
         </div>
       )}
