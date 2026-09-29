@@ -7,6 +7,15 @@ import { api, estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
 
+// Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
+// objet Date JS (qui reintroduirait une conversion de fuseau horaire cote
+// navigateur) - voir le correctif equivalent cote serveur dans db.js.
+function formaterDateAffichage(valeur) {
+  if (!valeur) return "";
+  const [annee, mois, jour] = String(valeur).slice(0, 10).split("-");
+  return `${jour}/${mois}/${annee}`;
+}
+
 const STATUT_STYLE = {
   IMPAYEE: { color: "var(--brique)", background: "rgba(196,74,58,0.1)" },
   PAYEE: { color: "#2E7D5B", background: "rgba(46,125,91,0.12)" },
@@ -52,6 +61,19 @@ export default function FactureVenteDetailPage() {
   }
 
   useEffect(charger, [params.id]);
+
+  // Personnalise dynamiquement document.title (numero de facture + entreprise
+  // du tenant) car document.title est injecte par le navigateur dans
+  // l'en-tete/pied de page natif de l'impression - voir metadata globale
+  // dans app/layout.js (titre "Baobab Marches" par defaut, ne pas modifier).
+  useEffect(() => {
+    if (!facture || !entete) return;
+    const titrePrecedent = document.title;
+    document.title = `${entete.raison_sociale || ""} - ${facture.numero}`.trim();
+    return () => {
+      document.title = titrePrecedent;
+    };
+  }, [facture, entete]);
 
   async function handleMarquerPayee() {
     setAction(true);
@@ -178,7 +200,7 @@ export default function FactureVenteDetailPage() {
               {t("venteInvoiceNumberLabel")} {numeroComplet}
               {facture.reference_bc_client ? `/${facture.reference_bc_client}` : ""}
             </div>
-            <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{new Date(facture.date_facture).toLocaleDateString()}</div>
+            <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{formaterDateAffichage(facture.date_facture)}</div>
           </div>
         </div>
 
@@ -233,9 +255,16 @@ export default function FactureVenteDetailPage() {
           </div>
         )}
 
-        <div style={{ marginTop: 40, textAlign: "right" }}>
+        <div style={{ marginTop: 110, textAlign: "right" }}>
           <div style={{ fontWeight: 700, fontSize: 12.5 }}>{entete?.signataire_nom}</div>
           <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{entete?.signataire_titre}</div>
+          {entete?.signature_cachet_base64 && (
+            <img
+              src={`data:${entete.signature_cachet_type_mime};base64,${entete.signature_cachet_base64}`}
+              alt="signature et cachet"
+              style={{ maxWidth: 150, maxHeight: 100, objectFit: "contain", marginTop: 8 }}
+            />
+          )}
         </div>
 
         {piedDePage(entete).length > 0 && (
