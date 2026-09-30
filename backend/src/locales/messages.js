@@ -286,6 +286,7 @@ const MESSAGES = {
     VENTE_CLIENT_FETCH_ERROR: "Erreur lors de la recuperation des clients.",
     VENTE_CLIENT_CREATE_ERROR: "Erreur lors de la creation du client.",
     VENTE_CLIENT_UPDATE_ERROR: "Erreur lors de la mise a jour du client.",
+    VENTE_CLIENT_COMPTE_FETCH_ERROR: "Erreur lors de la recuperation du compte client.",
 
     VENTE_CONSULTATION_NOT_FOUND: "Consultation introuvable.",
     VENTE_CONSULTATION_FIELDS_REQUIRED: "Le client et l'objet de la consultation sont requis.",
@@ -313,6 +314,11 @@ const MESSAGES = {
     VENTE_DEVIS_NOT_VALIDE: "Seul un devis valide peut donner lieu a une facture.",
     VENTE_DEVIS_ALREADY_INVOICED: "Une facture a deja ete generee pour ce devis.",
     VENTE_FACTURE_STATUT_INVALID: "Statut de facture invalide.",
+    VENTE_FACTURE_TYPE_INVALID: "Type de facturation invalide (integrale, acompte ou solde).",
+    VENTE_FACTURE_POURCENTAGE_REQUIS: "Le pourcentage d'acompte est requis.",
+    VENTE_FACTURE_POURCENTAGE_INVALID: "Le pourcentage d'acompte doit etre superieur a 0 et inferieur ou egal a 100.",
+    VENTE_FACTURE_DEPASSE_DEVIS: "Cette facture ferait depasser le montant total du devis (deja facture + ce montant > total du devis).",
+    VENTE_FACTURE_DEVIS_DEJA_SOLDE: "Ce devis est deja entierement facture, il n'y a plus de solde a facturer.",
 
     VENTE_BL_NOT_FOUND: "Bon de livraison introuvable.",
     VENTE_BL_FETCH_ERROR: "Erreur lors de la recuperation des bons de livraison.",
@@ -646,6 +652,7 @@ const MESSAGES = {
     VENTE_CLIENT_FETCH_ERROR: "Error while retrieving clients.",
     VENTE_CLIENT_CREATE_ERROR: "Error while creating the client.",
     VENTE_CLIENT_UPDATE_ERROR: "Error while updating the client.",
+    VENTE_CLIENT_COMPTE_FETCH_ERROR: "Error while retrieving the client account.",
 
     VENTE_CONSULTATION_NOT_FOUND: "Consultation not found.",
     VENTE_CONSULTATION_FIELDS_REQUIRED: "The client and the subject of the consultation are required.",
@@ -673,6 +680,11 @@ const MESSAGES = {
     VENTE_DEVIS_NOT_VALIDE: "Only a validated quote can lead to an invoice.",
     VENTE_DEVIS_ALREADY_INVOICED: "An invoice has already been generated for this quote.",
     VENTE_FACTURE_STATUT_INVALID: "Invalid invoice status.",
+    VENTE_FACTURE_TYPE_INVALID: "Invalid invoice type (full, deposit or balance).",
+    VENTE_FACTURE_POURCENTAGE_REQUIS: "The deposit percentage is required.",
+    VENTE_FACTURE_POURCENTAGE_INVALID: "The deposit percentage must be greater than 0 and no more than 100.",
+    VENTE_FACTURE_DEPASSE_DEVIS: "This invoice would exceed the quote's total amount (already invoiced + this amount > quote total).",
+    VENTE_FACTURE_DEVIS_DEJA_SOLDE: "This quote is already fully invoiced, there is no remaining balance to invoice.",
 
     VENTE_BL_NOT_FOUND: "Delivery note not found.",
     VENTE_BL_FETCH_ERROR: "Error while retrieving delivery notes.",

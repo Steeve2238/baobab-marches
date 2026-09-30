@@ -71,9 +71,19 @@ export default function FacturesVentePage() {
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13.5 }}>
                       {numeroAffiche(f.numero, f.mois_emission)} — {f.client_nom}
+                      {f.type_facturation !== "INTEGRALE" && (
+                        <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: "var(--petrol)" }}>
+                          {t(`venteFactureType_${f.type_facturation}`)}
+                          {f.type_facturation === "ACOMPTE" ? ` ${Number(f.pourcentage_acompte)}%` : ""}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
-                      {Number(f.total_ttc).toLocaleString()} XOF TTC
+                      {/* montant_net_a_payer (et non total_ttc, qui reste la
+                          valeur de reference du devis entier) : c'est le
+                          montant reellement du sur CETTE facture - voir
+                          migration 024. */}
+                      {Number(f.montant_net_a_payer).toLocaleString()} XOF
                       {f.reference_bc_client ? ` · ${f.reference_bc_client}` : ""}
                       {f.bl_id ? ` · BL ${t(`venteBlStatut_${f.bl_statut}`)}` : ` · ${t("venteNoBlYet")}`}
                     </div>

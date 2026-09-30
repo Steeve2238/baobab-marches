@@ -154,6 +154,24 @@ function calculerLignesEtTotaux(lignesBrutes, tauxTva) {
   return { lignes, total_ht: totalHt, montant_tva: montantTva, total_ttc: totalTtc };
 }
 
+// Calcule l'avancement de facturation d'un devis : somme des montants nets a
+// payer deja factures (hors factures ANNULEEs) et ce qu'il reste a facturer.
+// Utilise a la fois pour bloquer un depassement (generer-facture) et pour
+// l'affichage (fiche devis, compte client). "queryable" est soit le pool
+// (db.query) soit un client de transaction (meme forme d'appel .query) -
+// permet de reutiliser cette fonction dans une transaction verrouillee (FOR
+// UPDATE sur le devis) sans changer de connexion en cours de route.
+async function calculerAvancementFacturation(queryable, tenantId, devisId, totalTtcDevis) {
+  const result = await queryable.query(
+    `SELECT COALESCE(SUM(montant_net_a_payer), 0) AS total
+     FROM facture_vente WHERE devis_id = $1 AND tenant_id = $2 AND statut != 'ANNULEE'`,
+    [devisId, tenantId]
+  );
+  const dejaFacture = Math.round(Number(result.rows[0].total) * 100) / 100;
+  const resteAFacturer = Math.round((Number(totalTtcDevis) - dejaFacture) * 100) / 100;
+  return { deja_facture: dejaFacture, reste_a_facturer: resteAFacturer };
+}
+
 async function chargerLignesDevis(devisId) {
   const result = await db.query(
     `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht
@@ -235,6 +253,72 @@ router.patch("/clients/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "VENTE_CLIENT_UPDATE_ERROR") });
+  }
+});
+
+// GET /clients/:id/compte - "compte client" demande par Steeve le 30/09/2026
+// en complement de la facturation en plusieurs fois (acompte/solde) : vue
+// consolidee de ce qu'un client doit au total, tous devis confondus (total
+// facture, total deja paye, solde restant du), plus le detail devis par
+// devis (facture/reste a facturer) et facture par facture.
+router.get("/clients/:id/compte", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const clientResult = await db.query(
+      `SELECT * FROM client_commercial WHERE id = $1 AND tenant_id = $2`,
+      [id, req.user.tenantId]
+    );
+    if (clientResult.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "VENTE_CLIENT_NOT_FOUND") });
+    }
+
+    const devisResult = await db.query(
+      `SELECT d.id, d.numero, d.statut, d.date_devis, d.objet, d.total_ttc,
+              COALESCE((
+                SELECT SUM(f.montant_net_a_payer) FROM facture_vente f
+                WHERE f.devis_id = d.id AND f.statut != 'ANNULEE'
+              ), 0) AS deja_facture
+       FROM devis d
+       WHERE d.client_commercial_id = $1 AND d.tenant_id = $2
+       ORDER BY d.date_creation DESC`,
+      [id, req.user.tenantId]
+    );
+    const devis = devisResult.rows.map((d) => ({
+      ...d,
+      reste_a_facturer: Math.round((Number(d.total_ttc) - Number(d.deja_facture)) * 100) / 100,
+    }));
+
+    const facturesResult = await db.query(
+      `SELECT f.id, f.numero, f.mois_emission, f.devis_id, d.numero AS devis_numero,
+              f.type_facturation, f.pourcentage_acompte, f.montant_net_a_payer,
+              f.statut, f.date_facture, f.date_echeance
+       FROM facture_vente f
+       JOIN devis d ON d.id = f.devis_id
+       WHERE f.client_commercial_id = $1 AND f.tenant_id = $2
+       ORDER BY f.date_creation DESC`,
+      [id, req.user.tenantId]
+    );
+
+    let totalFacture = 0;
+    let totalPaye = 0;
+    for (const f of facturesResult.rows) {
+      if (f.statut === "ANNULEE") continue;
+      totalFacture += Number(f.montant_net_a_payer);
+      if (f.statut === "PAYEE") totalPaye += Number(f.montant_net_a_payer);
+    }
+    totalFacture = Math.round(totalFacture * 100) / 100;
+    totalPaye = Math.round(totalPaye * 100) / 100;
+    const soldeDu = Math.round((totalFacture - totalPaye) * 100) / 100;
+
+    res.json({
+      client: clientResult.rows[0],
+      totaux: { total_facture: totalFacture, total_paye: totalPaye, solde_du: soldeDu },
+      devis,
+      factures: facturesResult.rows,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_CLIENT_COMPTE_FETCH_ERROR") });
   }
 });
 
@@ -564,12 +648,26 @@ router.get("/devis/:id", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "VENTE_DEVIS_NOT_FOUND") });
     }
+    const devis = result.rows[0];
     const lignes = await chargerLignesDevis(id);
-    const factureResult = await db.query(
-      `SELECT id, numero FROM facture_vente WHERE devis_id = $1 AND tenant_id = $2`,
+    // Un devis peut desormais donner lieu a PLUSIEURS factures (acompte(s) +
+    // solde) - voir migration 024. "facture" (singulier) est conserve pour
+    // compatibilite avec d'anciens clients caches, mais le frontend courant
+    // utilise "factures" (tableau, le plus recent en premier) et l'avancement
+    // calcule ci-dessous.
+    const facturesResult = await db.query(
+      `SELECT id, numero, statut, type_facturation, pourcentage_acompte, montant_net_a_payer, date_facture
+       FROM facture_vente WHERE devis_id = $1 AND tenant_id = $2 ORDER BY date_creation DESC`,
       [id, req.user.tenantId]
     );
-    res.json({ ...result.rows[0], lignes, facture: factureResult.rows[0] || null });
+    const avancement = await calculerAvancementFacturation(db, req.user.tenantId, id, devis.total_ttc);
+    res.json({
+      ...devis,
+      lignes,
+      factures: facturesResult.rows,
+      facture: facturesResult.rows[facturesResult.rows.length - 1] || null,
+      ...avancement,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "VENTE_DEVIS_FETCH_ERROR") });
@@ -832,6 +930,28 @@ router.get("/factures/:id", async (req, res) => {
 router.post("/devis/:id/generer-facture", async (req, res) => {
   const { id } = req.params;
   const { reference_bc_client, date_echeance } = req.body;
+  // type_facturation : INTEGRALE (defaut, tout le devis d'un coup) | ACOMPTE
+  // (pourcentage libre choisi selon la demande du client) | SOLDE (le reste
+  // non encore facture, calcule automatiquement) - voir migration 024 et le
+  // chantier du 30/09/2026 avec Steeve ("le client peut demander une facture
+  // d'acompte de 20%, 30%, 50%... et le solde ensuite").
+  const typeFacturation = req.body.type_facturation || "INTEGRALE";
+  const pourcentageAcompteBrut = req.body.pourcentage_acompte;
+
+  if (!["INTEGRALE", "ACOMPTE", "SOLDE"].includes(typeFacturation)) {
+    return res.status(400).json({ error: t(req, "VENTE_FACTURE_TYPE_INVALID") });
+  }
+
+  let pourcentageAcompte = null;
+  if (typeFacturation === "ACOMPTE") {
+    pourcentageAcompte = Number(pourcentageAcompteBrut);
+    if (pourcentageAcompteBrut === undefined || pourcentageAcompteBrut === null || pourcentageAcompteBrut === "") {
+      return res.status(400).json({ error: t(req, "VENTE_FACTURE_POURCENTAGE_REQUIS") });
+    }
+    if (!Number.isFinite(pourcentageAcompte) || pourcentageAcompte <= 0 || pourcentageAcompte > 100) {
+      return res.status(400).json({ error: t(req, "VENTE_FACTURE_POURCENTAGE_INVALID") });
+    }
+  }
 
   const client = await db.pool.connect();
   try {
@@ -851,10 +971,31 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
       return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_VALIDE") });
     }
 
-    const dejaFacture = await client.query(`SELECT id FROM facture_vente WHERE devis_id = $1`, [id]);
-    if (dejaFacture.rows.length > 0) {
+    // Le verrou FOR UPDATE ci-dessus sur la ligne devis serialise toute
+    // generation concurrente de facture pour CE devis (une 2e requete
+    // attendra la fin de la transaction en cours avant de lire a son tour) -
+    // la somme ci-dessous est donc toujours a jour au moment du calcul.
+    const { deja_facture: dejaFacture } = await calculerAvancementFacturation(client, req.user.tenantId, id, devis.total_ttc);
+
+    let montantNetAPayer;
+    if (typeFacturation === "SOLDE") {
+      montantNetAPayer = Math.round((Number(devis.total_ttc) - dejaFacture) * 100) / 100;
+      if (montantNetAPayer <= 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: t(req, "VENTE_FACTURE_DEVIS_DEJA_SOLDE") });
+      }
+    } else if (typeFacturation === "ACOMPTE") {
+      montantNetAPayer = Math.round(Number(devis.total_ttc) * (pourcentageAcompte / 100) * 100) / 100;
+    } else {
+      montantNetAPayer = Number(devis.total_ttc);
+    }
+
+    // Garde-fou anti-depassement (decision Steeve, 30/09/2026) : le cumul des
+    // factures sur un meme devis ne peut jamais depasser son montant total -
+    // marge de 0.01 XOF pour absorber les arrondis de calcul.
+    if (typeFacturation !== "SOLDE" && dejaFacture + montantNetAPayer > Number(devis.total_ttc) + 0.01) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ error: t(req, "VENTE_DEVIS_ALREADY_INVOICED") });
+      return res.status(409).json({ error: t(req, "VENTE_FACTURE_DEPASSE_DEVIS") });
     }
 
     const lignesDevis = await chargerLignesDevis(id);
@@ -868,12 +1009,12 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
     const factureResult = await client.query(
       `INSERT INTO facture_vente (id, tenant_id, numero, mois_emission, devis_id, client_commercial_id,
                                    reference_bc_client, taux_tva_pourcentage, total_ht, montant_tva, total_ttc,
-                                   date_echeance, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+                                   date_echeance, cree_par, type_facturation, pourcentage_acompte, montant_net_a_payer)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [
         uuidv4(), req.user.tenantId, numero, mois, id, devis.client_commercial_id,
         reference_bc_client || null, devis.taux_tva_pourcentage, devis.total_ht, devis.montant_tva, devis.total_ttc,
-        date_echeance || null, req.user.sub,
+        date_echeance || null, req.user.sub, typeFacturation, pourcentageAcompte, montantNetAPayer,
       ]
     );
     const facture = factureResult.rows[0];
@@ -1146,12 +1287,20 @@ router.get("/statistiques", async (req, res) => {
     const [consultationsResult, devisResult, devisFacturesResult, facturesResult] = await Promise.all([
       db.query(`SELECT statut, COUNT(*)::int AS n FROM consultation WHERE tenant_id = $1 GROUP BY statut`, [tenantId]),
       db.query(`SELECT statut, COUNT(*)::int AS n FROM devis WHERE tenant_id = $1 GROUP BY statut`, [tenantId]),
+      // COUNT(DISTINCT d.id) et non COUNT(*) : depuis la migration 024, un
+      // devis peut avoir plusieurs factures (acompte(s) + solde) - sans le
+      // DISTINCT, un devis facture en 2 fois serait compte deux fois ici.
       db.query(
-        `SELECT COUNT(*)::int AS n FROM devis d JOIN facture_vente f ON f.devis_id = d.id WHERE d.tenant_id = $1`,
+        `SELECT COUNT(DISTINCT d.id)::int AS n FROM devis d JOIN facture_vente f ON f.devis_id = d.id WHERE d.tenant_id = $1`,
         [tenantId]
       ),
+      // montant_net_a_payer (et non total_ht/total_ttc, qui restent la copie
+      // du devis ENTIER a titre de reference sur la facture) : c'est le
+      // montant reellement facture sur CE document precis (acompte ou
+      // solde), seule base valable pour additionner un chiffre d'affaires
+      // sans compter plusieurs fois le meme devis.
       db.query(
-        `SELECT statut, COUNT(*)::int AS n, COALESCE(SUM(total_ht),0) AS total_ht, COALESCE(SUM(total_ttc),0) AS total_ttc
+        `SELECT statut, COUNT(*)::int AS n, COALESCE(SUM(montant_net_a_payer),0) AS total_net
          FROM facture_vente WHERE tenant_id = $1 GROUP BY statut`,
         [tenantId]
       ),
@@ -1174,7 +1323,10 @@ router.get("/statistiques", async (req, res) => {
     const facturesParStatut = { IMPAYEE: { n: 0, total_ttc: 0 }, PAYEE: { n: 0, total_ttc: 0 }, ANNULEE: { n: 0, total_ttc: 0 } };
     let facturesTotal = 0;
     for (const row of facturesResult.rows) {
-      facturesParStatut[row.statut] = { n: row.n, total_ttc: Number(row.total_ttc) };
+      // "total_ttc" ici designe le montant net a payer cumule pour ce statut
+      // (nom de champ conserve pour ne pas casser un ancien frontend cache),
+      // pas la somme des total_ttc des devis entiers.
+      facturesParStatut[row.statut] = { n: row.n, total_ttc: Number(row.total_net) };
       facturesTotal += row.n;
     }
     // Chiffre d'affaires "actif" = hors factures annulees (une facture
@@ -1206,6 +1358,13 @@ router.get("/statistiques", async (req, res) => {
 router.get("/suivi", async (req, res) => {
   try {
     const result = await db.query(
+      // Depuis la migration 024 (facturation en plusieurs fois), un devis
+      // peut avoir plusieurs factures : ce LEFT JOIN produit alors une ligne
+      // par (devis, facture) - toujours utile pour un tableau de suivi (on
+      // veut voir chaque acompte/solde separement), mais chaque ligne porte
+      // aussi l'avancement GLOBAL du devis (devis_deja_facture/
+      // devis_reste_a_facturer, identique sur toutes les lignes d'un meme
+      // devis) pour ne pas avoir a le recalculer cote frontend.
       `SELECT
          d.id AS devis_id, d.numero AS devis_numero, d.statut AS devis_statut,
          d.date_devis, d.objet, d.total_ht AS devis_total_ht, d.total_ttc AS devis_total_ttc,
@@ -1213,7 +1372,16 @@ router.get("/suivi", async (req, res) => {
          f.id AS facture_id, f.numero AS facture_numero, f.mois_emission AS facture_mois_emission,
          f.statut AS facture_statut, f.date_facture, f.date_echeance,
          f.total_ttc AS facture_total_ttc, f.reference_bc_client,
-         bl.id AS bl_id, bl.numero AS bl_numero, bl.statut AS bl_statut, bl.date_bl
+         f.type_facturation, f.pourcentage_acompte, f.montant_net_a_payer,
+         bl.id AS bl_id, bl.numero AS bl_numero, bl.statut AS bl_statut, bl.date_bl,
+         COALESCE((
+           SELECT SUM(f2.montant_net_a_payer) FROM facture_vente f2
+           WHERE f2.devis_id = d.id AND f2.statut != 'ANNULEE'
+         ), 0) AS devis_deja_facture,
+         d.total_ttc - COALESCE((
+           SELECT SUM(f2.montant_net_a_payer) FROM facture_vente f2
+           WHERE f2.devis_id = d.id AND f2.statut != 'ANNULEE'
+         ), 0) AS devis_reste_a_facturer
        FROM devis d
        JOIN client_commercial cl ON cl.id = d.client_commercial_id
        LEFT JOIN facture_vente f ON f.devis_id = d.id

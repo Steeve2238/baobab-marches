@@ -25,6 +25,16 @@ const STATUT_STYLE = {
   EXPIRE: { color: "var(--sub)", background: "rgba(91,106,108,0.1)" },
 };
 
+// Meme palette que la page de liste des factures (factures/page.js) - reprise
+// ici pour afficher le statut de chaque facture dans la liste "Factures de ce
+// devis" (section ajoutee avec la facturation en plusieurs fois, migration
+// 024).
+const FACTURE_STATUT_STYLE = {
+  IMPAYEE: { color: "var(--brique)", background: "rgba(196,74,58,0.1)" },
+  PAYEE: { color: "#2E7D5B", background: "rgba(46,125,91,0.12)" },
+  ANNULEE: { color: "var(--sub)", background: "rgba(91,106,108,0.1)" },
+};
+
 function possedeRole(codes) {
   if (estAdmin()) return true;
   const user = getUtilisateurCourant();
@@ -41,6 +51,13 @@ export default function DevisDetailPage() {
   const [chargement, setChargement] = useState(true);
   const [action, setAction] = useState(false);
   const [referenceBc, setReferenceBc] = useState("");
+  // Facturation en plusieurs fois (acompte/solde) - demande de Steeve du
+  // 30/09/2026 : un devis VALIDE peut desormais etre facture plusieurs fois
+  // (un ou plusieurs acomptes a pourcentage variable selon la demande du
+  // client, puis un solde), au lieu d'une seule facture integrale comme
+  // avant. Voir migration 024 et POST /devis/:id/generer-facture.
+  const [typeFacturation, setTypeFacturation] = useState("INTEGRALE");
+  const [pourcentageAcompte, setPourcentageAcompte] = useState("");
   const [permissions, setPermissions] = useState(null);
   const [formOuvert, setFormOuvert] = useState(false);
   const [formDevis, setFormDevis] = useState(null);
@@ -114,7 +131,11 @@ export default function DevisDetailPage() {
     setAction(true);
     setErreur("");
     try {
-      const facture = await api.genererFactureDepuisDevis(devis.id, { reference_bc_client: referenceBc || null });
+      const facture = await api.genererFactureDepuisDevis(devis.id, {
+        reference_bc_client: referenceBc || null,
+        type_facturation: typeFacturation,
+        pourcentage_acompte: typeFacturation === "ACOMPTE" ? Number(pourcentageAcompte) : undefined,
+      });
       router.push(`/marches/consultation-restreinte/factures/${facture.id}`);
     } catch (err) {
       setErreur(err.message);
@@ -196,7 +217,12 @@ export default function DevisDetailPage() {
   const peutValider =
     ["BROUILLON", "ENVOYE"].includes(devis.statut) &&
     (possedeRole(["DIRECTION"]) || !!permissions?.validateurUniversel);
-  const peutFacturer = devis.statut === "VALIDE" && !devis.facture && possedeRole(["COMPTABLE", "FINANCIER"]);
+  // "Reste a facturer" (calcule cote serveur, voir GET /devis/:id) plutot que
+  // "pas encore de facture" : un devis VALIDE peut desormais avoir plusieurs
+  // factures (acompte(s) + solde, migration 024) - on peut continuer a en
+  // generer tant qu'il reste un montant non facture.
+  const resteAFacturer = Number(devis.reste_a_facturer ?? devis.total_ttc);
+  const peutFacturer = devis.statut === "VALIDE" && resteAFacturer > 0.009 && possedeRole(["COMPTABLE", "FINANCIER"]);
 
   return (
     <AppShell title={devis.numero} backHref="/marches/consultation-restreinte/devis">
@@ -222,25 +248,6 @@ export default function DevisDetailPage() {
               {t("venteValidateDevisButton")}
             </button>
           )}
-          {devis.facture ? (
-            <Link href={`/marches/consultation-restreinte/factures/${devis.facture.id}`} style={boutonSecondaireStyle}>
-              {t("venteViewInvoiceButton")} ({devis.facture.numero})
-            </Link>
-          ) : (
-            peutFacturer && (
-              <>
-                <input
-                  placeholder={t("venteReferenceBcPlaceholder")}
-                  value={referenceBc}
-                  onChange={(e) => setReferenceBc(e.target.value)}
-                  style={{ ...inputStyleCompact, width: 140 }}
-                />
-                <button onClick={handleGenererFacture} disabled={action} style={boutonPrincipalStyle}>
-                  {t("venteGenerateInvoiceButton")}
-                </button>
-              </>
-            )
-          )}
           {peutEditer && (
             <button onClick={handleOuvrirEdition} style={boutonSecondaireStyle}>
               {t("venteDevisEditButton")}
@@ -251,6 +258,102 @@ export default function DevisDetailPage() {
           </button>
         </div>
       </div>
+
+      {devis.statut === "VALIDE" && (
+        <div className="no-print card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
+            <h3 style={{ fontSize: 13.5, color: "var(--petrol)", margin: 0 }}>{t("venteFacturesDevisSection")}</h3>
+            <div style={{ display: "flex", gap: 20, fontSize: 12.5 }}>
+              <div>
+                <span style={{ color: "var(--sub)" }}>{t("venteDejaFactureLabel")} : </span>
+                <span className="mono" style={{ fontWeight: 600 }}>{Number(devis.deja_facture || 0).toLocaleString()} XOF</span>
+              </div>
+              <div>
+                <span style={{ color: "var(--sub)" }}>{t("venteResteAFacturerLabel")} : </span>
+                <span className="mono" style={{ fontWeight: 600, color: resteAFacturer > 0.009 ? "var(--ocre)" : "#2E7D5B" }}>
+                  {resteAFacturer.toLocaleString()} XOF
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {devis.factures && devis.factures.length > 0 ? (
+            <div style={{ display: "grid", gap: 6, marginBottom: peutFacturer ? 16 : 0 }}>
+              {devis.factures.map((f) => (
+                <Link
+                  key={f.id}
+                  href={`/marches/consultation-restreinte/factures/${f.id}`}
+                  style={{ textDecoration: "none", color: "inherit" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 8, background: "var(--bg)" }}>
+                    <div style={{ fontSize: 12.5 }}>
+                      <span style={{ fontWeight: 600 }}>{f.numero}</span>
+                      {f.type_facturation !== "INTEGRALE" && (
+                        <span style={{ marginLeft: 8, fontSize: 11, color: "var(--sub)" }}>
+                          {t(`venteFactureType_${f.type_facturation}`)}
+                          {f.type_facturation === "ACOMPTE" ? ` ${Number(f.pourcentage_acompte)}%` : ""}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                      <span className="mono" style={{ fontSize: 12.5 }}>{Number(f.montant_net_a_payer).toLocaleString()} XOF</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, ...FACTURE_STATUT_STYLE[f.statut] }}>
+                        {t(`venteFactureStatut_${f.statut}`)}
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: peutFacturer ? 16 : 0 }}>{t("venteAucuneFactureDevis")}</p>
+          )}
+
+          {peutFacturer ? (
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+              <div>
+                <label style={labelStyle}>{t("venteTypeFacturationLabel")}</label>
+                <select value={typeFacturation} onChange={(e) => setTypeFacturation(e.target.value)} style={inputStyleCompact}>
+                  <option value="INTEGRALE">{t("venteTypeFacturationIntegrale")}</option>
+                  <option value="ACOMPTE">{t("venteTypeFacturationAcompte")}</option>
+                  <option value="SOLDE">{t("venteTypeFacturationSolde")}</option>
+                </select>
+              </div>
+              {typeFacturation === "ACOMPTE" && (
+                <div>
+                  <label style={labelStyle}>{t("ventePourcentageAcompteLabel")}</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    max="100"
+                    step="0.01"
+                    value={pourcentageAcompte}
+                    onChange={(e) => setPourcentageAcompte(e.target.value)}
+                    style={{ ...inputStyleCompact, width: 90 }}
+                  />
+                </div>
+              )}
+              <div>
+                <label style={labelStyle}>{t("venteReferenceBcPlaceholder")}</label>
+                <input
+                  value={referenceBc}
+                  onChange={(e) => setReferenceBc(e.target.value)}
+                  style={{ ...inputStyleCompact, width: 140 }}
+                />
+              </div>
+              <button
+                onClick={handleGenererFacture}
+                disabled={action || (typeFacturation === "ACOMPTE" && (!pourcentageAcompte || Number(pourcentageAcompte) <= 0 || Number(pourcentageAcompte) > 100))}
+                style={boutonPrincipalStyle}
+              >
+                {t("venteGenerateInvoiceButton")}
+              </button>
+            </div>
+          ) : (
+            resteAFacturer <= 0.009 && <p style={{ fontSize: 12.5, color: "#2E7D5B", fontWeight: 600, margin: 0 }}>{t("venteDevisEntierementFacture")}</p>
+          )}
+        </div>
+      )}
 
       {formOuvert && (
         <form onSubmit={handleEnregistrerDevis} className="no-print card" style={{ marginBottom: 16 }}>

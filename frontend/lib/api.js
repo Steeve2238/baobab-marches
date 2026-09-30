@@ -446,6 +446,10 @@ export const api = {
   getClientsCommerciaux: () => request("/ventes/clients"),
   createClientCommercial: (data) => request("/ventes/clients", { method: "POST", body: JSON.stringify(data) }),
   patchClientCommercial: (id, data) => request(`/ventes/clients/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  // "Compte client" (30/09/2026) : total facture/paye/du tous devis
+  // confondus, plus le detail devis par devis et facture par facture - voir
+  // GET /api/ventes/clients/:id/compte.
+  getCompteClient: (id) => request(`/ventes/clients/${id}/compte`),
 
   getConsultations: (statut) => request(`/ventes/consultations${statut ? `?statut=${statut}` : ""}`),
   getConsultation: (id) => request(`/ventes/consultations/${id}`),

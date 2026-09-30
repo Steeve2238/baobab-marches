@@ -138,9 +138,17 @@ export default function FactureVenteDetailPage() {
       {erreur && <p className="no-print" style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
       <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20, ...style }}>
-          {t(`venteFactureStatut_${facture.statut}`)}
-        </span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20, ...style }}>
+            {t(`venteFactureStatut_${facture.statut}`)}
+          </span>
+          {facture.type_facturation !== "INTEGRALE" && (
+            <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20, color: "var(--petrol)", background: "rgba(20,79,85,0.1)" }}>
+              {t(`venteFactureType_${facture.type_facturation}`)}
+              {facture.type_facturation === "ACOMPTE" ? ` ${Number(facture.pourcentage_acompte)}%` : ""}
+            </span>
+          )}
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {facture.statut === "IMPAYEE" && peutFacturer && (
             <>
@@ -247,6 +255,40 @@ export default function FactureVenteDetailPage() {
             <span className="mono">{Number(facture.total_ttc).toLocaleString()} XOF</span>
           </div>
         </div>
+
+        {/* Mention acompte/solde + net a payer (migration 024, demande de
+            Steeve du 30/09/2026) : le detail ci-dessus reste TOUJOURS le
+            detail complet et inchange du devis (valeur de reference du
+            marche) - c'est ce bloc, place en bas de facture, qui indique le
+            pourcentage applique et ce qui est reellement du sur CE document
+            precis, distinct du total TTC du devis entier. Absent pour une
+            facture INTEGRALE (le net a payer y est deja egal au total TTC
+            affiche ci-dessus). */}
+        {facture.type_facturation !== "INTEGRALE" && (
+          <div
+            style={{
+              marginTop: 14,
+              marginLeft: "auto",
+              maxWidth: 260,
+              display: "grid",
+              gap: 4,
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: "rgba(20,79,85,0.06)",
+              border: "1px solid var(--line)",
+            }}
+          >
+            <div style={{ fontSize: 11.5, color: "var(--sub)" }}>
+              {facture.type_facturation === "ACOMPTE"
+                ? `${t("venteAcompteMentionLabel")} ${Number(facture.pourcentage_acompte)}%`
+                : t("venteSoldeMentionLabel")}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14.5, fontWeight: 700, color: "var(--petrol)" }}>
+              <span>{t("venteNetAPayerLabel")}</span>
+              <span className="mono">{Number(facture.montant_net_a_payer).toLocaleString()} XOF</span>
+            </div>
+          </div>
+        )}
 
         {facture.statut === "PAYEE" && (
           <div className="no-print" style={{ marginTop: 14, fontSize: 11.5, color: "var(--sub)" }}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
@@ -110,6 +111,9 @@ export default function ClientsCommerciauxPage() {
                 >
                   {c.actif ? t("activeLabel") : t("inactiveLabel")}
                 </span>
+                <Link href={`/marches/consultation-restreinte/clients/${c.id}`} style={boutonSecondaireStyle}>
+                  {t("venteAccountButton")}
+                </Link>
                 <button onClick={() => handleToggleActif(c)} style={boutonSecondaireStyle}>
                   {c.actif ? t("venteDeactivateClientButton") : t("venteReactivateClientButton")}
                 </button>
@@ -149,4 +153,6 @@ const boutonSecondaireStyle = {
   fontSize: 12,
   fontWeight: 600,
   whiteSpace: "nowrap",
+  textDecoration: "none",
+  display: "inline-block",
 };
