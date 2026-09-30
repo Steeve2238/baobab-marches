@@ -743,9 +743,18 @@ router.post("/devis", async (req, res) => {
   }
 });
 
-// PATCH /devis/:id - reedition des lignes/champs, uniquement tant que le
-// devis n'est pas encore VALIDE/REFUSE/EXPIRE (au-dela, un devis est fige :
-// toute correction passe par un nouveau devis, comme sur le terrain).
+// PATCH /devis/:id - reedition des lignes/champs. Un devis EXPIRE reste
+// fige. Un devis BROUILLON/ENVOYE/REFUSE se modifie sans consequence sur son
+// statut. Un devis VALIDE (chantier du 06/10/2026 avec Steeve : "on doit
+// pouvoir corriger un devis deja entierement facture, ex avenant/ligne
+// oubliee") reste modifiable lui aussi, MAIS toute modification le refait
+// systematiquement repasser en BROUILLON (perd sa validation et son
+// eventuelle date de validation) - il doit etre revalide par la Direction
+// avant de pouvoir generer une nouvelle facture dessus (voir
+// POST /devis/:id/generer-facture, qui exige toujours statut === VALIDE).
+// Garde-fou associe : si la modification fait baisser le total en dessous de
+// ce qui a deja ete facture dessus (factures non annulees), elle est
+// refusee - jamais de "reste a facturer" negatif.
 router.patch("/devis/:id", async (req, res) => {
   const { id } = req.params;
   const { objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes } = req.body;
@@ -762,7 +771,7 @@ router.patch("/devis/:id", async (req, res) => {
       return res.status(404).json({ error: t(req, "VENTE_DEVIS_NOT_FOUND") });
     }
     const devisActuel = existant.rows[0];
-    if (!["BROUILLON", "ENVOYE", "REFUSE"].includes(devisActuel.statut)) {
+    if (!["BROUILLON", "ENVOYE", "REFUSE", "VALIDE"].includes(devisActuel.statut)) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_EDITABLE") });
     }
@@ -778,6 +787,15 @@ router.patch("/devis/:id", async (req, res) => {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: t(req, "VENTE_DEVIS_LIGNE_INVALID") });
       }
+
+      // Le verrou FOR UPDATE ci-dessus serialise toute generation concurrente
+      // de facture sur ce devis - la somme deja facturee est donc a jour.
+      const { deja_facture: dejaFacture } = await calculerAvancementFacturation(client, req.user.tenantId, id, calcul.total_ttc);
+      if (calcul.total_ttc + 0.01 < dejaFacture) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: t(req, "VENTE_DEVIS_MONTANT_INFERIEUR_FACTURE") });
+      }
+
       await client.query(`DELETE FROM devis_ligne WHERE devis_id = $1`, [id]);
       let ordre = 0;
       for (const ligne of calcul.lignes) {
@@ -790,15 +808,20 @@ router.patch("/devis/:id", async (req, res) => {
       totaux = calcul;
     }
 
+    const repasseEnBrouillon = devisActuel.statut === "VALIDE";
+
     const result = await client.query(
       `UPDATE devis
        SET objet = COALESCE($1, objet), date_devis = COALESCE($2, date_devis),
            conditions_paiement = $3, delai_livraison = $4, validite_offre = $5,
-           total_ht = $6, montant_tva = $7, total_ttc = $8
-       WHERE id = $9 AND tenant_id = $10 RETURNING *`,
+           total_ht = $6, montant_tva = $7, total_ttc = $8,
+           statut = CASE WHEN $9 THEN 'BROUILLON' ELSE statut END,
+           valide_par = CASE WHEN $9 THEN NULL ELSE valide_par END,
+           date_validation = CASE WHEN $9 THEN NULL ELSE date_validation END
+       WHERE id = $10 AND tenant_id = $11 RETURNING *`,
       [
         objet || null, date_devis || null, conditions_paiement || null, delai_livraison || null, validite_offre || null,
-        totaux.total_ht, totaux.montant_tva, totaux.total_ttc, id, req.user.tenantId,
+        totaux.total_ht, totaux.montant_tva, totaux.total_ttc, repasseEnBrouillon, id, req.user.tenantId,
       ]
     );
     await client.query("COMMIT");

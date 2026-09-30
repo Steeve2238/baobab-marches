@@ -207,7 +207,19 @@ export default function DevisDetailPage() {
   }
 
   const style = STATUT_STYLE[devis.statut] || {};
-  const peutEditer = ["BROUILLON", "ENVOYE", "REFUSE"].includes(devis.statut);
+  // Un devis Valide reste modifiable (chantier du 06/10/2026 avec Steeve :
+  // corriger un devis deja entierement facture, ex avenant/ligne oubliee) -
+  // seul un devis Expire reste fige. Voir PATCH /devis/:id : toute
+  // modification d'un devis Valide le refait systematiquement repasser en
+  // Brouillon, il doit etre revalide avant de pouvoir generer une nouvelle
+  // facture dessus.
+  const peutEditer = ["BROUILLON", "ENVOYE", "REFUSE", "VALIDE"].includes(devis.statut);
+  // Boutons "Marquer envoye"/"Marquer refuse" (PATCH /devis/:id/statut) :
+  // restes limites a leur perimetre d'origine, jamais un devis Valide - ce
+  // sont des transitions manuelles simples sans le garde-fou de
+  // PATCH /devis/:id (repassage en Brouillon + controle du deja facture),
+  // le backend les refuse d'ailleurs explicitement pour un devis Valide.
+  const peutChangerStatutSimple = ["BROUILLON", "ENVOYE", "REFUSE"].includes(devis.statut);
   // Validateur universel (Directeur General ou Directeur Financier - Phase 2
   // du systeme de permissions par role, 05/09/2026) : peut valider un devis
   // meme sans porter le code de role DIRECTION, en plus/back-up de celui-ci
@@ -233,12 +245,12 @@ export default function DevisDetailPage() {
           {t(`venteDevisStatut_${devis.statut}`)}
         </span>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {peutEditer && (
+          {peutChangerStatutSimple && (
             <button onClick={() => handleChangerStatut("ENVOYE")} disabled={action || devis.statut === "ENVOYE"} style={boutonSecondaireStyle}>
               {t("venteMarkSentButton")}
             </button>
           )}
-          {peutEditer && devis.statut !== "REFUSE" && (
+          {peutChangerStatutSimple && devis.statut !== "REFUSE" && (
             <button onClick={() => handleChangerStatut("REFUSE")} disabled={action} style={boutonDangerStyle}>
               {t("venteMarkRefusedButton")}
             </button>
@@ -357,6 +369,21 @@ export default function DevisDetailPage() {
 
       {formOuvert && (
         <form onSubmit={handleEnregistrerDevis} className="no-print card" style={{ marginBottom: 16 }}>
+          {devis.statut === "VALIDE" && (
+            <p
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--ocre)",
+                background: "rgba(224,149,76,0.12)",
+                borderRadius: 8,
+                padding: "8px 12px",
+                marginBottom: 14,
+              }}
+            >
+              {t("venteDevisEditionRepasseBrouillonAvertissement")}
+            </p>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div>
               <label style={labelStyle}>{t("venteObjetLabel")}</label>

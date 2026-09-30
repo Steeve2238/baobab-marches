@@ -303,7 +303,8 @@ const MESSAGES = {
     VENTE_DEVIS_FETCH_ERROR: "Erreur lors de la recuperation des devis.",
     VENTE_DEVIS_CREATE_ERROR: "Erreur lors de la creation du devis.",
     VENTE_DEVIS_UPDATE_ERROR: "Erreur lors de la mise a jour du devis.",
-    VENTE_DEVIS_NOT_EDITABLE: "Ce devis n'est plus modifiable (deja valide, refuse ou expire).",
+    VENTE_DEVIS_NOT_EDITABLE: "Ce devis n'est plus modifiable (expire).",
+    VENTE_DEVIS_MONTANT_INFERIEUR_FACTURE: "Le nouveau montant du devis est inferieur a ce qui a deja ete facture dessus. Corrigez le montant ou annulez d'abord la facture concernee.",
     VENTE_DEVIS_VALIDER_ERROR: "Erreur lors de la validation du devis.",
     VENTE_DEVIS_STATUT_INVALID: "Statut de devis invalide.",
 
@@ -669,7 +670,8 @@ const MESSAGES = {
     VENTE_DEVIS_FETCH_ERROR: "Error while retrieving quotes.",
     VENTE_DEVIS_CREATE_ERROR: "Error while creating the quote.",
     VENTE_DEVIS_UPDATE_ERROR: "Error while updating the quote.",
-    VENTE_DEVIS_NOT_EDITABLE: "This quote can no longer be edited (already validated, refused or expired).",
+    VENTE_DEVIS_NOT_EDITABLE: "This quote can no longer be edited (expired).",
+    VENTE_DEVIS_MONTANT_INFERIEUR_FACTURE: "The quote's new amount is lower than what has already been invoiced on it. Correct the amount or cancel the relevant invoice first.",
     VENTE_DEVIS_VALIDER_ERROR: "Error while validating the quote.",
     VENTE_DEVIS_STATUT_INVALID: "Invalid quote status.",
 

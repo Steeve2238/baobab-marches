@@ -862,6 +862,7 @@ export const DICTIONARIES = {
     venteFacturesDevisSection: "Factures de ce devis",
     venteAucuneFactureDevis: "Aucune facture générée pour ce devis.",
     venteDevisEntierementFacture: "Ce devis est entièrement facturé.",
+    venteDevisEditionRepasseBrouillonAvertissement: "Ce devis est déjà validé. Enregistrer une modification le repassera en Brouillon : il faudra le revalider avant de pouvoir générer une nouvelle facture dessus.",
 
     venteFacturesPageTitle: "Factures",
     venteNoInvoices: "Aucune facture enregistrée.",
@@ -1933,6 +1934,7 @@ export const DICTIONARIES = {
     venteFacturesDevisSection: "Invoices for this quote",
     venteAucuneFactureDevis: "No invoice generated for this quote yet.",
     venteDevisEntierementFacture: "This quote is fully invoiced.",
+    venteDevisEditionRepasseBrouillonAvertissement: "This quote is already validated. Saving a change will move it back to Draft: it will need to be re-validated before a new invoice can be generated for it.",
 
     venteFacturesPageTitle: "Invoices",
     venteNoInvoices: "No invoice registered yet.",
