@@ -483,6 +483,14 @@ export const api = {
   getDevis: (id) => request(`/ventes/devis/${id}`),
   createDevis: (data) => request("/ventes/devis", { method: "POST", body: JSON.stringify(data) }),
   patchDevis: (id, data) => request(`/ventes/devis/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  // Import des devis historiques (30/09/2026) - meme pattern que
+  // telechargerModeleFicheTemps/importerFicheTemps (module RH) ci-dessus.
+  telechargerModeleImportDevis: () => requestDownload("/ventes/devis/modele-import", "modele_import_devis_historiques.xlsx"),
+  importerDevisHistoriques: (fichier) => {
+    const formData = new FormData();
+    formData.append("fichier", fichier);
+    return requestUpload("/ventes/devis/importer", formData);
+  },
   changerStatutDevis: (id, statut) => request(`/ventes/devis/${id}/statut`, { method: "PATCH", body: JSON.stringify({ statut }) }),
   validerDevis: (id) => request(`/ventes/devis/${id}/valider`, { method: "POST" }),
   genererFactureDepuisDevis: (id, data) => request(`/ventes/devis/${id}/generer-facture`, { method: "POST", body: JSON.stringify(data || {}) }),

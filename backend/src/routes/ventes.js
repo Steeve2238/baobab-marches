@@ -1,4 +1,6 @@
 const express = require("express");
+const multer = require("multer");
+const XLSX = require("xlsx");
 const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireRoleOuValidateurUniversel, requireModule, blockLectureSeule } = require("../middleware/auth");
@@ -8,6 +10,14 @@ const { verifierAffectationValide } = require("../utils/affectationTache");
 
 const router = express.Router();
 router.use(requireAuth);
+
+// Import Excel des devis historiques (30/09/2026) - meme limite que l'import
+// de fiches de temps RH (5 Mo, largement suffisant pour quelques centaines
+// de lignes de resume).
+const uploadExcelDevis = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 // Le Directeur Financier n'a normalement PAS "marches" dans son perimetre
 // (perimetre standard = Financement uniquement, voir migration
@@ -170,6 +180,30 @@ async function calculerAvancementFacturation(queryable, tenantId, devisId, total
   const dejaFacture = Math.round(Number(result.rows[0].total) * 100) / 100;
   const resteAFacturer = Math.round((Number(totalTtcDevis) - dejaFacture) * 100) / 100;
   return { deja_facture: dejaFacture, reste_a_facturer: resteAFacturer };
+}
+
+// Mapping tolerant du statut texte libre saisi par le client dans le
+// fichier Excel d'import (30/09/2026) vers les statuts normalises de Baobab
+// - une valeur vide ou non reconnue tombe sur BROUILLON plutot que de
+// bloquer la ligne (meme philosophie que l'import de fiches de temps RH,
+// voir routes/rh.js : on ne perd jamais une ligne pour une valeur de texte
+// libre inattendue, on la signale juste dans le rapport d'import).
+const SYNONYMES_STATUT_IMPORT = {
+  VALIDE: ["VALIDE", "ACCEPTE", "GAGNE"],
+  ENVOYE: ["ENVOYE", "EN ATTENTE", "EN COURS"],
+  REFUSE: ["REFUSE", "PERDU", "REJETE"],
+  EXPIRE: ["EXPIRE", "SANS SUITE", "ANNULE"],
+};
+function retirerAccents(valeur) {
+  return valeur.normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function normaliserStatutImport(brut) {
+  const valeur = retirerAccents(String(brut || "").trim().toUpperCase());
+  if (!valeur) return { statut: "BROUILLON", reconnu: true };
+  for (const [statut, synonymes] of Object.entries(SYNONYMES_STATUT_IMPORT)) {
+    if (synonymes.includes(valeur)) return { statut, reconnu: true };
+  }
+  return { statut: "BROUILLON", reconnu: false, brut: String(brut).trim() };
 }
 
 async function chargerLignesDevis(devisId) {
@@ -633,6 +667,168 @@ router.get("/devis", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "VENTE_DEVIS_FETCH_ERROR") });
+  }
+});
+
+// GET /devis/modele-import - modele Excel vierge telechargeable pour l'import
+// de devis historiques (place AVANT /devis/:id : sinon Express matcherait
+// "modele-import" comme une valeur d'id, meme piege de routage que
+// /rh/fiches-temps/modele-import, voir routes/rh.js).
+router.get("/devis/modele-import", (req, res) => {
+  try {
+    const enTetes = ["Numero d'origine", "Client", "Date (AAAA-MM-JJ)", "Objet", "Montant total TTC", "Statut"];
+    const legende = [
+      [],
+      ["Valeurs de statut reconnues (une valeur vide ou non reconnue est importee en Brouillon) :"],
+      ["Valide, Accepte ou Gagne  ->  Valide"],
+      ["Envoye, En attente ou En cours  ->  Envoye"],
+      ["Refuse, Perdu ou Rejete  ->  Refuse"],
+      ["Expire, Sans suite ou Annule  ->  Expire"],
+      [],
+      ["Le numero d'origine est conserve tel quel (ex : 299) - ne pas utiliser le format DEV-AAAA-MM-NNNN."],
+      ["Un client dont le nom ne correspond a aucun client existant est cree automatiquement."],
+    ];
+    const feuille = XLSX.utils.aoa_to_sheet([enTetes, [], ...legende]);
+    feuille["!cols"] = [{ wch: 16 }, { wch: 28 }, { wch: 16 }, { wch: 32 }, { wch: 16 }, { wch: 14 }];
+    const classeur = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(classeur, feuille, "Devis historiques");
+    const buffer = XLSX.write(classeur, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", 'attachment; filename="modele_import_devis_historiques.xlsx"');
+    res.send(buffer);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_DEVIS_IMPORT_MODELE_ERROR") });
+  }
+});
+
+// POST /devis/importer - import tolerant des devis historiques (30/09/2026,
+// voir migration 025 pour le contexte complet). Une ligne invalide (numero
+// manquant/deja utilise, client manquant, date/montant invalides) est
+// signalee dans le rapport et sautee - jamais de blocage de tout le fichier
+// pour une seule ligne en erreur.
+router.post("/devis/importer", uploadExcelDevis.single("fichier"), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: t(req, "VENTE_DEVIS_IMPORT_FILE_REQUIRED") });
+  }
+  let classeur;
+  try {
+    classeur = XLSX.read(req.file.buffer, { type: "buffer" });
+  } catch {
+    return res.status(400).json({ error: t(req, "VENTE_DEVIS_IMPORT_FILE_TYPE_INVALID") });
+  }
+  // XLSX.read est tolerant (ex : un fichier texte brut ne leve pas toujours
+  // d'exception) - un classeur sans feuille est le signe fiable d'un fichier
+  // qui n'est pas un vrai .xlsx.
+  if (!classeur.SheetNames || classeur.SheetNames.length === 0) {
+    return res.status(400).json({ error: t(req, "VENTE_DEVIS_IMPORT_FILE_TYPE_INVALID") });
+  }
+  const feuille = classeur.Sheets[classeur.SheetNames[0]];
+  const lignesBrutes = XLSX.utils.sheet_to_json(feuille, { header: 1, defval: "" });
+
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Clients commerciaux existants (par nom normalise) - un nom qui ne
+    // correspond a aucun client existant est cree a la volee : on ne
+    // demande pas de preparer a l'avance une fiche pour chacun des 300
+    // devis, import tolerant comme pour le reste de cette route.
+    const clientsExistants = await client.query(`SELECT id, nom FROM client_commercial WHERE tenant_id = $1`, [req.user.tenantId]);
+    const clientParNom = new Map(clientsExistants.rows.map((c) => [c.nom.trim().toLowerCase(), c.id]));
+
+    const numerosExistants = new Set(
+      (await client.query(`SELECT numero FROM devis WHERE tenant_id = $1`, [req.user.tenantId])).rows.map((d) => d.numero)
+    );
+    const numerosVusDansLeFichier = new Set();
+
+    const erreurs = [];
+    const anomaliesStatut = [];
+    let nombreImportes = 0;
+    const dateImport = new Date().toISOString().slice(0, 10);
+
+    for (let i = 1; i < lignesBrutes.length; i++) {
+      const ligneExcel = i + 1; // numero de ligne tel que vu dans Excel (1 = en-tetes)
+      const [numeroBrut, clientBrut, dateBrut, objetBrut, montantBrut, statutBrut] = lignesBrutes[i];
+      const numero = String(numeroBrut || "").trim();
+      const nomClient = String(clientBrut || "").trim();
+      const dateTexte = String(dateBrut || "").trim();
+      const montant = Number(montantBrut);
+
+      if (!numero && !nomClient && !dateTexte && !montantBrut) continue; // ligne vide (ou legende) : ignoree silencieusement
+
+      if (!numero) {
+        erreurs.push({ ligne: ligneExcel, numero: null, motif: t(req, "VENTE_DEVIS_IMPORT_NUMERO_REQUIS") });
+        continue;
+      }
+      if (numerosExistants.has(numero) || numerosVusDansLeFichier.has(numero)) {
+        erreurs.push({ ligne: ligneExcel, numero, motif: t(req, "VENTE_DEVIS_IMPORT_NUMERO_DOUBLON") });
+        continue;
+      }
+      if (!nomClient) {
+        erreurs.push({ ligne: ligneExcel, numero, motif: t(req, "VENTE_DEVIS_IMPORT_CLIENT_REQUIS") });
+        continue;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateTexte)) {
+        erreurs.push({ ligne: ligneExcel, numero, motif: t(req, "VENTE_DEVIS_IMPORT_DATE_INVALID") });
+        continue;
+      }
+      if (!Number.isFinite(montant) || montant <= 0) {
+        erreurs.push({ ligne: ligneExcel, numero, motif: t(req, "VENTE_DEVIS_IMPORT_MONTANT_INVALID") });
+        continue;
+      }
+
+      numerosVusDansLeFichier.add(numero);
+
+      let clientCommercialId = clientParNom.get(nomClient.toLowerCase());
+      if (!clientCommercialId) {
+        clientCommercialId = uuidv4();
+        await client.query(`INSERT INTO client_commercial (id, tenant_id, nom, actif) VALUES ($1, $2, $3, true)`, [
+          clientCommercialId,
+          req.user.tenantId,
+          nomClient,
+        ]);
+        clientParNom.set(nomClient.toLowerCase(), clientCommercialId);
+      }
+
+      const objet = String(objetBrut || "").trim() || null;
+      const { statut, reconnu, brut } = normaliserStatutImport(statutBrut);
+      let notesImport = `Devis historique importe le ${dateImport}.`;
+      if (!reconnu) {
+        notesImport += ` Statut d'origine non reconnu ("${brut}") -> importe en Brouillon.`;
+        anomaliesStatut.push({ ligne: ligneExcel, numero, statut_origine: brut });
+      }
+
+      // Resume global uniquement (decision Steeve, 30/09/2026) : ni detail
+      // HT/TVA d'origine ni compteur de numerotation touches - le montant
+      // saisi est stocke tel quel en TTC, avec taux_tva_pourcentage=0 pour
+      // ne pas fabriquer une repartition HT/TVA que l'on ne connait pas.
+      // Une seule ligne devis_ligne recapitulative est creee pour garder
+      // l'invariant "un devis a au moins une ligne" utilise partout
+      // ailleurs (edition, impression).
+      const devisId = uuidv4();
+      await client.query(
+        `INSERT INTO devis (id, tenant_id, numero, client_commercial_id, objet, date_devis, statut,
+                             taux_tva_pourcentage, total_ht, montant_tva, total_ttc, cree_par, importe, notes_import)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,0,$8,0,$8,$9,true,$10)`,
+        [devisId, req.user.tenantId, numero, clientCommercialId, objet, dateTexte, statut, montant, req.user.sub, notesImport]
+      );
+      await client.query(
+        `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
+         VALUES ($1,$2,0,$3,'FORFAIT',1,$4,$4)`,
+        [uuidv4(), devisId, objet || t(req, "VENTE_DEVIS_IMPORT_LIGNE_DESIGNATION_DEFAUT"), montant]
+      );
+      nombreImportes++;
+    }
+
+    await client.query("COMMIT");
+    res.json({ nombre_importes: nombreImportes, nombre_erreurs: erreurs.length, erreurs, anomalies_statut: anomaliesStatut });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_DEVIS_IMPORT_ERROR") });
+  } finally {
+    client.release();
   }
 });
 

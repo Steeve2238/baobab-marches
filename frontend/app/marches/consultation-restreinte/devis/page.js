@@ -52,9 +52,14 @@ export default function DevisListePage() {
             </button>
           ))}
         </div>
-        <Link href="/marches/consultation-restreinte/devis/nouveau" style={boutonPrincipalStyle}>
-          {t("venteNewDevisButton")}
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href="/marches/consultation-restreinte/devis/importer" style={boutonSecondaireStyle}>
+            {t("venteImportDevisListeButton")}
+          </Link>
+          <Link href="/marches/consultation-restreinte/devis/nouveau" style={boutonPrincipalStyle}>
+            {t("venteNewDevisButton")}
+          </Link>
+        </div>
       </div>
 
       {chargement ? (
@@ -69,7 +74,14 @@ export default function DevisListePage() {
               <Link key={d.id} href={`/marches/consultation-restreinte/devis/${d.id}`} style={{ textDecoration: "none", color: "inherit" }}>
                 <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>{d.numero} — {d.client_nom}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+                      {d.numero} — {d.client_nom}
+                      {d.importe && (
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, color: "var(--sub)", background: "rgba(91,106,108,0.1)" }}>
+                          {t("venteDevisHistoriqueBadge")}
+                        </span>
+                      )}
+                    </div>
                     <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
                       {d.objet || "—"} · {Number(d.total_ttc).toLocaleString()} XOF TTC
                     </div>
@@ -104,4 +116,16 @@ const boutonPrincipalStyle = {
   fontWeight: 600,
   textDecoration: "none",
   display: "inline-block",
+};
+const boutonSecondaireStyle = {
+  background: "transparent",
+  color: "var(--petrol)",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  padding: "7px 14px",
+  fontSize: 12.5,
+  fontWeight: 600,
+  textDecoration: "none",
+  display: "inline-block",
+  whiteSpace: "nowrap",
 };
