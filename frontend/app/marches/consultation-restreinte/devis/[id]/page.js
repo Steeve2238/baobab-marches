@@ -51,6 +51,9 @@ export default function DevisDetailPage() {
   const [chargement, setChargement] = useState(true);
   const [action, setAction] = useState(false);
   const [referenceBc, setReferenceBc] = useState("");
+  // Numero manuel (ADMIN, a la generation de la facture uniquement) - chantier
+  // du 01/10/2026, demande ecrite du client.
+  const [numeroFactureManuel, setNumeroFactureManuel] = useState("");
   // Facturation en plusieurs fois (acompte/solde) - demande de Steeve du
   // 30/09/2026 : un devis VALIDE peut desormais etre facture plusieurs fois
   // (un ou plusieurs acomptes a pourcentage variable selon la demande du
@@ -135,6 +138,7 @@ export default function DevisDetailPage() {
         reference_bc_client: referenceBc || null,
         type_facturation: typeFacturation,
         pourcentage_acompte: typeFacturation === "ACOMPTE" ? Number(pourcentageAcompte) : undefined,
+        numero: numeroFactureManuel.trim() || undefined,
       });
       router.push(`/marches/consultation-restreinte/factures/${facture.id}`);
     } catch (err) {
@@ -151,6 +155,7 @@ export default function DevisDetailPage() {
       conditions_paiement: devis.conditions_paiement || "",
       delai_livraison: devis.delai_livraison || "",
       validite_offre: devis.validite_offre || "",
+      pourcentage_remise: devis.pourcentage_remise || "0",
     });
     setLignesEdition(devis.lignes.map((l) => ({ ...l })));
     setFormOuvert(true);
@@ -360,6 +365,17 @@ export default function DevisDetailPage() {
                   style={{ ...inputStyleCompact, width: 140 }}
                 />
               </div>
+              {estAdmin() && (
+                <div>
+                  <label style={labelStyle}>{t("venteNumeroPersonnaliseLabel")}</label>
+                  <input
+                    value={numeroFactureManuel}
+                    onChange={(e) => setNumeroFactureManuel(e.target.value)}
+                    style={{ ...inputStyleCompact, width: 170 }}
+                    placeholder={t("venteNumeroPersonnalisePlaceholder")}
+                  />
+                </div>
+              )}
               <button
                 onClick={handleGenererFacture}
                 disabled={action || (typeFacturation === "ACOMPTE" && (!pourcentageAcompte || Number(pourcentageAcompte) <= 0 || Number(pourcentageAcompte) > 100))}
@@ -458,6 +474,21 @@ export default function DevisDetailPage() {
           </div>
           <button type="button" onClick={ajouterLigneEdition} style={{ ...boutonSecondaireStyle, marginTop: 8 }}>{t("venteAddLineButton")}</button>
 
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+            <div style={{ maxWidth: 200 }}>
+              <label style={labelStyle}>{t("venteRemisePourcentageLabel")}</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={formDevis.pourcentage_remise}
+                onChange={(e) => setFormDevis((f) => ({ ...f, pourcentage_remise: e.target.value }))}
+                style={inputStyleCompact}
+              />
+            </div>
+          </div>
+
           <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
             <button type="submit" disabled={enregistrementEdition} style={boutonPrincipalStyle}>{t("save")}</button>
             <button type="button" onClick={() => setFormOuvert(false)} style={boutonSecondaireStyle}>{t("cancel")}</button>
@@ -525,6 +556,18 @@ export default function DevisDetailPage() {
             <span>{t("venteTotalHtLabel")}</span>
             <span className="mono">{Number(devis.total_ht).toLocaleString()} XOF</span>
           </div>
+          {Number(devis.pourcentage_remise) > 0 && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--brique)" }}>
+                <span>{t("venteRemiseLabel")} ({Number(devis.pourcentage_remise)}%)</span>
+                <span className="mono">-{Number(devis.montant_remise).toLocaleString()} XOF</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                <span>{t("venteTotalHtNetLabel")}</span>
+                <span className="mono">{(Number(devis.total_ht) - Number(devis.montant_remise)).toLocaleString()} XOF</span>
+              </div>
+            </>
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
             <span>{t("venteTvaLabel")} ({Number(devis.taux_tva_pourcentage)}%)</span>
             <span className="mono">{Number(devis.montant_tva).toLocaleString()} XOF</span>

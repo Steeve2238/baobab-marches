@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { api } from "../../../../../lib/api";
+import { api, estAdmin } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
 
@@ -27,6 +27,13 @@ function NouveauDevisFormulaire() {
     conditions_paiement: "",
     delai_livraison: "",
     validite_offre: "",
+    // Remise en pourcentage (chantier du 01/10/2026, demande ecrite du
+    // client) : appliquee sur le HT avant TVA, voir calcul ci-dessous.
+    pourcentage_remise: "",
+    // Numero personnalise (meme chantier) : reserve a l'ADMIN, voir
+    // affichage conditionne par estAdmin() plus bas. Laisse vide = numero
+    // automatique habituel (comportement inchange).
+    numero: "",
   });
   const [lignes, setLignes] = useState([{ ...LIGNE_VIDE }]);
 
@@ -57,8 +64,11 @@ function NouveauDevisFormulaire() {
     return { ...l, montant_ht: quantite * prixUnitaire };
   });
   const totalHt = lignesCalculees.reduce((acc, l) => acc + l.montant_ht, 0);
-  const montantTva = totalHt * (tauxTva / 100);
-  const totalTtc = totalHt + montantTva;
+  const pourcentageRemise = Number(form.pourcentage_remise) || 0;
+  const montantRemise = totalHt * (pourcentageRemise / 100);
+  const totalHtNet = totalHt - montantRemise;
+  const montantTva = totalHtNet * (tauxTva / 100);
+  const totalTtc = totalHtNet + montantTva;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -68,6 +78,8 @@ function NouveauDevisFormulaire() {
       const nouveau = await api.createDevis({
         ...form,
         consultation_id: form.consultation_id || null,
+        pourcentage_remise: form.pourcentage_remise || 0,
+        numero: form.numero.trim() || undefined,
         lignes: lignes.map((l) => ({
           designation: l.designation,
           unite: l.unite,
@@ -139,6 +151,19 @@ function NouveauDevisFormulaire() {
           </div>
         </div>
 
+        {estAdmin() && (
+          <div style={{ marginTop: 12 }}>
+            <label style={labelStyle}>{t("venteNumeroPersonnaliseLabel")}</label>
+            <input
+              value={form.numero}
+              onChange={(e) => setForm((f) => ({ ...f, numero: e.target.value }))}
+              style={{ ...inputStyle, maxWidth: 240 }}
+              placeholder={t("venteNumeroPersonnalisePlaceholder")}
+            />
+            <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4, marginBottom: 0 }}>{t("venteNumeroPersonnaliseAide")}</p>
+          </div>
+        )}
+
         <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginTop: 22, marginBottom: 10 }}>{t("venteLignesSection")}</h3>
 
         <div style={{ overflowX: "auto" }}>
@@ -207,11 +232,39 @@ function NouveauDevisFormulaire() {
           {t("venteAddLineButton")}
         </button>
 
-        <div style={{ marginTop: 18, marginLeft: "auto", maxWidth: 280, display: "grid", gap: 4 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+          <div style={{ maxWidth: 200 }}>
+            <label style={labelStyle}>{t("venteRemisePourcentageLabel")}</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={form.pourcentage_remise}
+              onChange={(e) => setForm((f) => ({ ...f, pourcentage_remise: e.target.value }))}
+              style={inputStyleCompact}
+              placeholder="0"
+            />
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10, marginLeft: "auto", maxWidth: 280, display: "grid", gap: 4 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
             <span>{t("venteTotalHtLabel")}</span>
             <span className="mono">{totalHt.toLocaleString()} XOF</span>
           </div>
+          {pourcentageRemise > 0 && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--brique)" }}>
+                <span>{t("venteRemiseLabel")} ({pourcentageRemise}%)</span>
+                <span className="mono">-{montantRemise.toLocaleString()} XOF</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                <span>{t("venteTotalHtNetLabel")}</span>
+                <span className="mono">{totalHtNet.toLocaleString()} XOF</span>
+              </div>
+            </>
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
             <span>{t("venteTvaLabel")} ({tauxTva}%)</span>
             <span className="mono">{montantTva.toLocaleString()} XOF</span>

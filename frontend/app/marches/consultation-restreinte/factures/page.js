@@ -17,6 +17,10 @@ const FILTRES = ["IMPAYEE", "PAYEE", "ANNULEE", "TOUTES"];
 // Affiche le numero avec le mois inclus (ex "2026-08-096"), comme sur les
 // documents imprimes - stocke sans le mois en base (voir routes/ventes.js).
 function numeroAffiche(numero, mois) {
+  // Numero manuel (ADMIN, chantier du 01/10/2026) : peut ne pas suivre le
+  // format "AAAA-NNN" genere automatiquement - dans ce cas on l'affiche tel
+  // quel, sans tenter d'y inserer le mois.
+  if (!/^\d{4}-\d+$/.test(numero)) return numero;
   const [annee, sequence] = numero.split("-");
   return `${annee}-${String(mois).padStart(2, "0")}-${sequence}`;
 }

@@ -300,6 +300,8 @@ const MESSAGES = {
     VENTE_DEVIS_NOT_FOUND: "Devis introuvable.",
     VENTE_DEVIS_FIELDS_REQUIRED: "Le client et au moins une ligne de produit sont requis.",
     VENTE_DEVIS_LIGNE_INVALID: "Chaque ligne doit avoir une designation, une quantite et un prix unitaire valides.",
+    VENTE_DEVIS_REMISE_INVALID: "Le pourcentage de remise doit etre compris entre 0 et 100.",
+    VENTE_DEVIS_NUMERO_DEJA_UTILISE: "Ce numero de devis est deja utilise.",
     VENTE_DEVIS_FETCH_ERROR: "Erreur lors de la recuperation des devis.",
     VENTE_DEVIS_CREATE_ERROR: "Erreur lors de la creation du devis.",
     VENTE_DEVIS_UPDATE_ERROR: "Erreur lors de la mise a jour du devis.",
@@ -328,6 +330,7 @@ const MESSAGES = {
     VENTE_FACTURE_TYPE_INVALID: "Type de facturation invalide (integrale, acompte ou solde).",
     VENTE_FACTURE_POURCENTAGE_REQUIS: "Le pourcentage d'acompte est requis.",
     VENTE_FACTURE_POURCENTAGE_INVALID: "Le pourcentage d'acompte doit etre superieur a 0 et inferieur ou egal a 100.",
+    VENTE_FACTURE_NUMERO_DEJA_UTILISE: "Ce numero de facture est deja utilise.",
     VENTE_FACTURE_DEPASSE_DEVIS: "Cette facture ferait depasser le montant total du devis (deja facture + ce montant > total du devis).",
     VENTE_FACTURE_DEVIS_DEJA_SOLDE: "Ce devis est deja entierement facture, il n'y a plus de solde a facturer.",
 
@@ -677,6 +680,8 @@ const MESSAGES = {
     VENTE_DEVIS_NOT_FOUND: "Quote not found.",
     VENTE_DEVIS_FIELDS_REQUIRED: "The client and at least one product line are required.",
     VENTE_DEVIS_LIGNE_INVALID: "Each line must have a valid designation, quantity and unit price.",
+    VENTE_DEVIS_REMISE_INVALID: "The discount percentage must be between 0 and 100.",
+    VENTE_DEVIS_NUMERO_DEJA_UTILISE: "This quote number is already in use.",
     VENTE_DEVIS_FETCH_ERROR: "Error while retrieving quotes.",
     VENTE_DEVIS_CREATE_ERROR: "Error while creating the quote.",
     VENTE_DEVIS_UPDATE_ERROR: "Error while updating the quote.",
@@ -705,6 +710,7 @@ const MESSAGES = {
     VENTE_FACTURE_TYPE_INVALID: "Invalid invoice type (full, deposit or balance).",
     VENTE_FACTURE_POURCENTAGE_REQUIS: "The deposit percentage is required.",
     VENTE_FACTURE_POURCENTAGE_INVALID: "The deposit percentage must be greater than 0 and no more than 100.",
+    VENTE_FACTURE_NUMERO_DEJA_UTILISE: "This invoice number is already in use.",
     VENTE_FACTURE_DEPASSE_DEVIS: "This invoice would exceed the quote's total amount (already invoiced + this amount > quote total).",
     VENTE_FACTURE_DEVIS_DEJA_SOLDE: "This quote is already fully invoiced, there is no remaining balance to invoice.",
 

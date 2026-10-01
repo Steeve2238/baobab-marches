@@ -136,7 +136,15 @@ function formaterNumeroVente(annee, sequence) {
 // Valide une liste de lignes {designation, unite, quantite, prix_unitaire_ht}
 // et renvoie les lignes enrichies de leur montant_ht calcule, plus les
 // totaux (jamais calcules cote client).
-function calculerLignesEtTotaux(lignesBrutes, tauxTva) {
+//
+// Remise en pourcentage (chantier du 01/10/2026, demande ecrite du client) :
+// decision de Steeve, se calcule sur le HT, AVANT la TVA. total_ht reste la
+// somme BRUTE des lignes (inchange, c'est ce que signifie ce champ partout
+// ailleurs dans le systeme) ; montant_remise = total_ht * pourcentage/100 ;
+// la TVA et le total TTC sont ensuite calcules sur le HT NET de remise. Si
+// aucun pourcentage n'est fourni (devis sans remise, cas normal), le calcul
+// est strictement identique a avant.
+function calculerLignesEtTotaux(lignesBrutes, tauxTva, pourcentageRemiseBrut) {
   if (!Array.isArray(lignesBrutes) || lignesBrutes.length === 0) {
     return { erreur: "VIDE" };
   }
@@ -159,9 +167,26 @@ function calculerLignesEtTotaux(lignesBrutes, tauxTva) {
     totalHt += montantHt;
   }
   totalHt = Math.round(totalHt * 100) / 100;
-  const montantTva = Math.round(totalHt * (Number(tauxTva) / 100) * 100) / 100;
-  const totalTtc = Math.round((totalHt + montantTva) * 100) / 100;
-  return { lignes, total_ht: totalHt, montant_tva: montantTva, total_ttc: totalTtc };
+
+  const pourcentageRemise = pourcentageRemiseBrut === undefined || pourcentageRemiseBrut === null || pourcentageRemiseBrut === ""
+    ? 0
+    : Number(pourcentageRemiseBrut);
+  if (!Number.isFinite(pourcentageRemise) || pourcentageRemise < 0 || pourcentageRemise > 100) {
+    return { erreur: "REMISE_INVALIDE" };
+  }
+
+  const montantRemise = Math.round(totalHt * (pourcentageRemise / 100) * 100) / 100;
+  const totalHtNet = Math.round((totalHt - montantRemise) * 100) / 100;
+  const montantTva = Math.round(totalHtNet * (Number(tauxTva) / 100) * 100) / 100;
+  const totalTtc = Math.round((totalHtNet + montantTva) * 100) / 100;
+  return {
+    lignes,
+    total_ht: totalHt,
+    pourcentage_remise: pourcentageRemise,
+    montant_remise: montantRemise,
+    montant_tva: montantTva,
+    total_ttc: totalTtc,
+  };
 }
 
 // Calcule l'avancement de facturation d'un devis : somme des montants nets a
@@ -871,9 +896,18 @@ router.get("/devis/:id", async (req, res) => {
 });
 
 router.post("/devis", async (req, res) => {
-  const { client_commercial_id, consultation_id, objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes } = req.body;
+  const { client_commercial_id, consultation_id, objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes, pourcentage_remise } = req.body;
+  // Numero manuel (chantier du 01/10/2026, demande ecrite du client) : reserve
+  // a l'ADMIN, et uniquement a la creation (jamais modifiable ensuite, voir
+  // PATCH /devis/:id qui ne l'accepte pas). Verification du role faite ici
+  // explicitement (pas de middleware de role sur cette route, comme pour le
+  // reste de la creation - voir note en tete de fichier).
+  const numeroManuelBrut = typeof req.body.numero === "string" ? req.body.numero.trim() : "";
   if (!client_commercial_id) {
     return res.status(400).json({ error: t(req, "VENTE_DEVIS_FIELDS_REQUIRED") });
+  }
+  if (numeroManuelBrut && !req.user?.roles?.includes("ADMIN")) {
+    return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
   }
   const client = await db.pool.connect();
   try {
@@ -882,7 +916,7 @@ router.post("/devis", async (req, res) => {
     const tenantResult = await client.query(`SELECT taux_tva_pourcentage FROM tenant WHERE id = $1`, [req.user.tenantId]);
     const tauxTva = tenantResult.rows[0].taux_tva_pourcentage;
 
-    const calcul = calculerLignesEtTotaux(lignes, tauxTva);
+    const calcul = calculerLignesEtTotaux(lignes, tauxTva, pourcentage_remise);
     if (calcul.erreur === "VIDE") {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: t(req, "VENTE_DEVIS_FIELDS_REQUIRED") });
@@ -891,23 +925,40 @@ router.post("/devis", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: t(req, "VENTE_DEVIS_LIGNE_INVALID") });
     }
+    if (calcul.erreur === "REMISE_INVALIDE") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, "VENTE_DEVIS_REMISE_INVALID") });
+    }
 
-    const maintenant = new Date();
-    const annee = maintenant.getFullYear();
-    const mois = maintenant.getMonth() + 1;
-    const sequence = await tirerProchainNumero(client, req.user.tenantId, "DEVIS", annee);
-    const numero = formaterNumeroDevis(annee, mois, sequence);
+    let numero;
+    if (numeroManuelBrut) {
+      const doublon = await client.query(
+        `SELECT 1 FROM devis WHERE tenant_id = $1 AND numero = $2`,
+        [req.user.tenantId, numeroManuelBrut]
+      );
+      if (doublon.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: t(req, "VENTE_DEVIS_NUMERO_DEJA_UTILISE") });
+      }
+      numero = numeroManuelBrut;
+    } else {
+      const maintenant = new Date();
+      const annee = maintenant.getFullYear();
+      const mois = maintenant.getMonth() + 1;
+      const sequence = await tirerProchainNumero(client, req.user.tenantId, "DEVIS", annee);
+      numero = formaterNumeroDevis(annee, mois, sequence);
+    }
 
     const devisResult = await client.query(
       `INSERT INTO devis (id, tenant_id, numero, consultation_id, client_commercial_id, objet, date_devis,
                            conditions_paiement, delai_livraison, validite_offre, taux_tva_pourcentage,
-                           total_ht, montant_tva, total_ttc, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,$13,$14,$15)
+                           total_ht, pourcentage_remise, montant_remise, montant_tva, total_ttc, cree_par)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING *`,
       [
         uuidv4(), req.user.tenantId, numero, consultation_id || null, client_commercial_id, objet || null, date_devis || null,
         conditions_paiement || null, delai_livraison || null, validite_offre || null, tauxTva,
-        calcul.total_ht, calcul.montant_tva, calcul.total_ttc, req.user.sub,
+        calcul.total_ht, calcul.pourcentage_remise, calcul.montant_remise, calcul.montant_tva, calcul.total_ttc, req.user.sub,
       ]
     );
     const devis = devisResult.rows[0];
@@ -953,7 +1004,10 @@ router.post("/devis", async (req, res) => {
 // refusee - jamais de "reste a facturer" negatif.
 router.patch("/devis/:id", async (req, res) => {
   const { id } = req.params;
-  const { objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes } = req.body;
+  const { objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes, pourcentage_remise } = req.body;
+  // NB : le numero n'est volontairement jamais accepte ici - un numero
+  // manuel (ADMIN) ne peut etre choisi qu'a la creation (POST /devis), voir
+  // decision de Steeve du 01/10/2026.
 
   const client = await db.pool.connect();
   try {
@@ -972,9 +1026,22 @@ router.patch("/devis/:id", async (req, res) => {
       return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_EDITABLE") });
     }
 
-    let totaux = { total_ht: devisActuel.total_ht, montant_tva: devisActuel.montant_tva, total_ttc: devisActuel.total_ttc };
-    if (lignes) {
-      const calcul = calculerLignesEtTotaux(lignes, devisActuel.taux_tva_pourcentage);
+    let totaux = {
+      total_ht: devisActuel.total_ht,
+      pourcentage_remise: devisActuel.pourcentage_remise,
+      montant_remise: devisActuel.montant_remise,
+      montant_tva: devisActuel.montant_tva,
+      total_ttc: devisActuel.total_ttc,
+    };
+    // La remise peut etre modifiee meme sans retoucher les lignes (ex :
+    // negociation apres coup sur un devis deja chiffre) - on recalcule alors
+    // les totaux a partir des lignes existantes.
+    if (lignes || pourcentage_remise !== undefined) {
+      const lignesPourCalcul = lignes || (await chargerLignesDevis(id)).map((l) => ({
+        designation: l.designation, unite: l.unite, quantite: l.quantite, prix_unitaire_ht: l.prix_unitaire_ht,
+      }));
+      const remisePourCalcul = pourcentage_remise !== undefined ? pourcentage_remise : devisActuel.pourcentage_remise;
+      const calcul = calculerLignesEtTotaux(lignesPourCalcul, devisActuel.taux_tva_pourcentage, remisePourCalcul);
       if (calcul.erreur === "VIDE") {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: t(req, "VENTE_DEVIS_FIELDS_REQUIRED") });
@@ -982,6 +1049,10 @@ router.patch("/devis/:id", async (req, res) => {
       if (calcul.erreur === "LIGNE_INVALIDE") {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: t(req, "VENTE_DEVIS_LIGNE_INVALID") });
+      }
+      if (calcul.erreur === "REMISE_INVALIDE") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: t(req, "VENTE_DEVIS_REMISE_INVALID") });
       }
 
       // Le verrou FOR UPDATE ci-dessus serialise toute generation concurrente
@@ -992,14 +1063,16 @@ router.patch("/devis/:id", async (req, res) => {
         return res.status(409).json({ error: t(req, "VENTE_DEVIS_MONTANT_INFERIEUR_FACTURE") });
       }
 
-      await client.query(`DELETE FROM devis_ligne WHERE devis_id = $1`, [id]);
-      let ordre = 0;
-      for (const ligne of calcul.lignes) {
-        await client.query(
-          `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [uuidv4(), id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
-        );
+      if (lignes) {
+        await client.query(`DELETE FROM devis_ligne WHERE devis_id = $1`, [id]);
+        let ordre = 0;
+        for (const ligne of calcul.lignes) {
+          await client.query(
+            `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+            [uuidv4(), id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
+          );
+        }
       }
       totaux = calcul;
     }
@@ -1010,14 +1083,15 @@ router.patch("/devis/:id", async (req, res) => {
       `UPDATE devis
        SET objet = COALESCE($1, objet), date_devis = COALESCE($2, date_devis),
            conditions_paiement = $3, delai_livraison = $4, validite_offre = $5,
-           total_ht = $6, montant_tva = $7, total_ttc = $8,
-           statut = CASE WHEN $9 THEN 'BROUILLON' ELSE statut END,
-           valide_par = CASE WHEN $9 THEN NULL ELSE valide_par END,
-           date_validation = CASE WHEN $9 THEN NULL ELSE date_validation END
-       WHERE id = $10 AND tenant_id = $11 RETURNING *`,
+           total_ht = $6, pourcentage_remise = $7, montant_remise = $8, montant_tva = $9, total_ttc = $10,
+           statut = CASE WHEN $11 THEN 'BROUILLON' ELSE statut END,
+           valide_par = CASE WHEN $11 THEN NULL ELSE valide_par END,
+           date_validation = CASE WHEN $11 THEN NULL ELSE date_validation END
+       WHERE id = $12 AND tenant_id = $13 RETURNING *`,
       [
         objet || null, date_devis || null, conditions_paiement || null, delai_livraison || null, validite_offre || null,
-        totaux.total_ht, totaux.montant_tva, totaux.total_ttc, repasseEnBrouillon, id, req.user.tenantId,
+        totaux.total_ht, totaux.pourcentage_remise, totaux.montant_remise, totaux.montant_tva, totaux.total_ttc,
+        repasseEnBrouillon, id, req.user.tenantId,
       ]
     );
     await client.query("COMMIT");
@@ -1156,9 +1230,15 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
   // d'acompte de 20%, 30%, 50%... et le solde ensuite").
   const typeFacturation = req.body.type_facturation || "INTEGRALE";
   const pourcentageAcompteBrut = req.body.pourcentage_acompte;
+  // Numero manuel (chantier du 01/10/2026) : meme principe que pour le devis
+  // - reserve a l'ADMIN, uniquement au moment de cette creation.
+  const numeroManuelBrut = typeof req.body.numero === "string" ? req.body.numero.trim() : "";
 
   if (!["INTEGRALE", "ACOMPTE", "SOLDE"].includes(typeFacturation)) {
     return res.status(400).json({ error: t(req, "VENTE_FACTURE_TYPE_INVALID") });
+  }
+  if (numeroManuelBrut && !req.user?.roles?.includes("ADMIN")) {
+    return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
   }
 
   let pourcentageAcompte = null;
@@ -1219,21 +1299,36 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
 
     const lignesDevis = await chargerLignesDevis(id);
 
-    const maintenant = new Date();
-    const annee = maintenant.getFullYear();
-    const mois = maintenant.getMonth() + 1;
-    const sequence = await tirerProchainNumero(client, req.user.tenantId, "VENTE", annee);
-    const numero = formaterNumeroVente(annee, sequence);
+    let numero;
+    if (numeroManuelBrut) {
+      const doublon = await client.query(
+        `SELECT 1 FROM facture_vente WHERE tenant_id = $1 AND numero = $2`,
+        [req.user.tenantId, numeroManuelBrut]
+      );
+      if (doublon.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: t(req, "VENTE_FACTURE_NUMERO_DEJA_UTILISE") });
+      }
+      numero = numeroManuelBrut;
+    } else {
+      const maintenant = new Date();
+      const annee = maintenant.getFullYear();
+      const sequence = await tirerProchainNumero(client, req.user.tenantId, "VENTE", annee);
+      numero = formaterNumeroVente(annee, sequence);
+    }
+    const mois = new Date().getMonth() + 1;
 
     const factureResult = await client.query(
       `INSERT INTO facture_vente (id, tenant_id, numero, mois_emission, devis_id, client_commercial_id,
-                                   reference_bc_client, taux_tva_pourcentage, total_ht, montant_tva, total_ttc,
-                                   date_echeance, cree_par, type_facturation, pourcentage_acompte, montant_net_a_payer)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+                                   reference_bc_client, taux_tva_pourcentage, total_ht, pourcentage_remise, montant_remise,
+                                   montant_tva, total_ttc, date_echeance, cree_par, type_facturation, pourcentage_acompte,
+                                   montant_net_a_payer)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [
         uuidv4(), req.user.tenantId, numero, mois, id, devis.client_commercial_id,
-        reference_bc_client || null, devis.taux_tva_pourcentage, devis.total_ht, devis.montant_tva, devis.total_ttc,
-        date_echeance || null, req.user.sub, typeFacturation, pourcentageAcompte, montantNetAPayer,
+        reference_bc_client || null, devis.taux_tva_pourcentage, devis.total_ht, devis.pourcentage_remise, devis.montant_remise,
+        devis.montant_tva, devis.total_ttc, date_echeance || null, req.user.sub, typeFacturation, pourcentageAcompte,
+        montantNetAPayer,
       ]
     );
     const facture = factureResult.rows[0];

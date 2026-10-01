@@ -29,6 +29,10 @@ function possedeRole(codes) {
 }
 
 function numeroAffiche(numero, mois) {
+  // Numero manuel (ADMIN, chantier du 01/10/2026) : peut ne pas suivre le
+  // format "AAAA-NNN" genere automatiquement - dans ce cas on l'affiche tel
+  // quel, sans tenter d'y inserer le mois.
+  if (!/^\d{4}-\d+$/.test(numero)) return numero;
   const [annee, sequence] = numero.split("-");
   return `${annee}-${String(mois).padStart(2, "0")}-${sequence}`;
 }
@@ -246,6 +250,18 @@ export default function FactureVenteDetailPage() {
             <span>{t("venteTotalHtLabel")}</span>
             <span className="mono">{Number(facture.total_ht).toLocaleString()} XOF</span>
           </div>
+          {Number(facture.pourcentage_remise) > 0 && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--brique)" }}>
+                <span>{t("venteRemiseLabel")} ({Number(facture.pourcentage_remise)}%)</span>
+                <span className="mono">-{Number(facture.montant_remise).toLocaleString()} XOF</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
+                <span>{t("venteTotalHtNetLabel")}</span>
+                <span className="mono">{(Number(facture.total_ht) - Number(facture.montant_remise)).toLocaleString()} XOF</span>
+              </div>
+            </>
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
             <span>{t("venteTvaLabel")} ({Number(facture.taux_tva_pourcentage)}%)</span>
             <span className="mono">{Number(facture.montant_tva).toLocaleString()} XOF</span>
