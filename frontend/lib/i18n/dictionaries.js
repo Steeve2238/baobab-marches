@@ -783,6 +783,11 @@ export const DICTIONARIES = {
     venteDeactivateClientButton: "Désactiver",
     venteReactivateClientButton: "Réactiver",
     venteAccountButton: "Compte",
+    // Bouton "stylo" pour corriger les coordonnées d'un client existant
+    // (chantier du 02/10/2026, demande de Steeve : nom mal saisi, aucun moyen
+    // de le corriger jusque-la) - PATCH /clients/:id existait deja cote
+    // backend (nom/adresse/telephone/email), il manquait juste ce bouton.
+    venteEditClientButton: "Modifier",
     backToClients: "Retour aux clients",
 
     venteCompteClientPageTitle: "Compte client",
@@ -1878,6 +1883,7 @@ export const DICTIONARIES = {
     venteDeactivateClientButton: "Deactivate",
     venteReactivateClientButton: "Reactivate",
     venteAccountButton: "Account",
+    venteEditClientButton: "Edit",
     backToClients: "Back to clients",
 
     venteCompteClientPageTitle: "Client account",

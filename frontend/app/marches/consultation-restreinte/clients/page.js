@@ -16,6 +16,16 @@ export default function ClientsCommerciauxPage() {
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
   const [form, setForm] = useState({ nom: "", adresse: "", telephone: "", email: "" });
+  // Edition des coordonnees d'un client existant (chantier du 02/10/2026,
+  // demande de Steeve : "pas le stylo qui nous permet de modifier... un
+  // client dont le nom aurait ete mal saisi"). PATCH /clients/:id acceptait
+  // deja nom/adresse/telephone/email cote backend - il manquait juste ce
+  // bouton. Ouvert a tout utilisateur ayant acces a cette page (meme
+  // perimetre que la creation d'un client ci-dessus), pas de restriction
+  // DG/Directeur Financier ici - Steeve n'en a pas demande pour ce champ.
+  const [clientEnEdition, setClientEnEdition] = useState(null);
+  const [formEdition, setFormEdition] = useState(null);
+  const [enregistrementEdition, setEnregistrementEdition] = useState(false);
 
   function charger() {
     api
@@ -45,6 +55,33 @@ export default function ClientsCommerciauxPage() {
       setClients((prev) => prev.map((c) => (c.id === client.id ? maj : c)));
     } catch (err) {
       setErreur(err.message);
+    }
+  }
+
+  function handleOuvrirEdition(client) {
+    setClientEnEdition(client.id);
+    setFormEdition({
+      nom: client.nom || "",
+      adresse: client.adresse || "",
+      telephone: client.telephone || "",
+      email: client.email || "",
+    });
+    setErreur("");
+  }
+
+  async function handleEnregistrerEdition(e) {
+    e.preventDefault();
+    setEnregistrementEdition(true);
+    setErreur("");
+    try {
+      const maj = await api.patchClientCommercial(clientEnEdition, formEdition);
+      setClients((prev) => prev.map((c) => (c.id === clientEnEdition ? maj : c)).sort((a, b) => a.nom.localeCompare(b.nom)));
+      setClientEnEdition(null);
+      setFormEdition(null);
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setEnregistrementEdition(false);
     }
   }
 
@@ -90,36 +127,93 @@ export default function ClientsCommerciauxPage() {
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("venteNoClients")}</p>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
-          {clients.map((c) => (
-            <div key={c.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.nom}</div>
-                <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
-                  {[c.adresse, c.telephone, c.email].filter(Boolean).join(" · ") || "—"}
+          {clients.map((c) =>
+            clientEnEdition === c.id ? (
+              <form key={c.id} onSubmit={handleEnregistrerEdition} className="card" style={{ display: "grid", gap: 10 }}>
+                <div>
+                  <label style={labelStyle}>{t("venteClientNomLabel")}</label>
+                  <input
+                    required
+                    value={formEdition.nom}
+                    onChange={(e) => setFormEdition((f) => ({ ...f, nom: e.target.value }))}
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>{t("adresseLabel")}</label>
+                  <input
+                    value={formEdition.adresse}
+                    onChange={(e) => setFormEdition((f) => ({ ...f, adresse: e.target.value }))}
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>{t("telephoneLabel")}</label>
+                  <input
+                    value={formEdition.telephone}
+                    onChange={(e) => setFormEdition((f) => ({ ...f, telephone: e.target.value }))}
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>{t("emailLabel2")}</label>
+                  <input
+                    type="email"
+                    value={formEdition.email}
+                    onChange={(e) => setFormEdition((f) => ({ ...f, email: e.target.value }))}
+                    style={inputStyle}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="submit" disabled={enregistrementEdition} style={boutonPrincipalStyle}>
+                    {t("save")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClientEnEdition(null);
+                      setFormEdition(null);
+                    }}
+                    style={boutonSecondaireStyle}
+                  >
+                    {t("cancel")}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div key={c.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.nom}</div>
+                  <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
+                    {[c.adresse, c.telephone, c.email].filter(Boolean).join(" · ") || "—"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span
+                    style={{
+                      fontSize: 10.5,
+                      fontWeight: 700,
+                      padding: "3px 8px",
+                      borderRadius: 20,
+                      color: c.actif ? "#2E7D5B" : "var(--sub)",
+                      background: c.actif ? "rgba(46,125,91,0.12)" : "rgba(91,106,108,0.1)",
+                    }}
+                  >
+                    {c.actif ? t("activeLabel") : t("inactiveLabel")}
+                  </span>
+                  <Link href={`/marches/consultation-restreinte/clients/${c.id}`} style={boutonSecondaireStyle}>
+                    {t("venteAccountButton")}
+                  </Link>
+                  <button onClick={() => handleOuvrirEdition(c)} style={boutonSecondaireStyle} title={t("venteEditClientButton")}>
+                    ✎
+                  </button>
+                  <button onClick={() => handleToggleActif(c)} style={boutonSecondaireStyle}>
+                    {c.actif ? t("venteDeactivateClientButton") : t("venteReactivateClientButton")}
+                  </button>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <span
-                  style={{
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    padding: "3px 8px",
-                    borderRadius: 20,
-                    color: c.actif ? "#2E7D5B" : "var(--sub)",
-                    background: c.actif ? "rgba(46,125,91,0.12)" : "rgba(91,106,108,0.1)",
-                  }}
-                >
-                  {c.actif ? t("activeLabel") : t("inactiveLabel")}
-                </span>
-                <Link href={`/marches/consultation-restreinte/clients/${c.id}`} style={boutonSecondaireStyle}>
-                  {t("venteAccountButton")}
-                </Link>
-                <button onClick={() => handleToggleActif(c)} style={boutonSecondaireStyle}>
-                  {c.actif ? t("venteDeactivateClientButton") : t("venteReactivateClientButton")}
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          )}
         </div>
       )}
     </AppShell>
