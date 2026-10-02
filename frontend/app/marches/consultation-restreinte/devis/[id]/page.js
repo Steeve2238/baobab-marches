@@ -66,6 +66,11 @@ export default function DevisDetailPage() {
   const [formDevis, setFormDevis] = useState(null);
   const [lignesEdition, setLignesEdition] = useState([]);
   const [enregistrementEdition, setEnregistrementEdition] = useState(false);
+  // Liste des clients, pour le selecteur de changement de client dans le
+  // formulaire d'edition (chantier du 02/10/2026) - charge une seule fois,
+  // meme si l'utilisateur courant n'a pas le droit de modifier le client (le
+  // champ s'affiche alors juste en lecture seule).
+  const [clients, setClients] = useState([]);
 
   function charger() {
     Promise.all([
@@ -73,11 +78,13 @@ export default function DevisDetailPage() {
       api.getEntete(),
       api.getParametresVentes(),
       api.getPermissions().catch(() => null),
+      api.getClientsCommerciaux().catch(() => []),
     ])
-      .then(([devisData, enteteData, parametresData, permissionsData]) => {
+      .then(([devisData, enteteData, parametresData, permissionsData, clientsData]) => {
         setDevis(devisData);
         setEntete({ ...enteteData, ...parametresData });
         setPermissions(permissionsData);
+        setClients(clientsData);
       })
       .catch((err) => {
         if (err.status === 401) {
@@ -156,6 +163,7 @@ export default function DevisDetailPage() {
       delai_livraison: devis.delai_livraison || "",
       validite_offre: devis.validite_offre || "",
       pourcentage_remise: devis.pourcentage_remise || "0",
+      client_commercial_id: devis.client_commercial_id,
     });
     setLignesEdition(devis.lignes.map((l) => ({ ...l })));
     setFormOuvert(true);
@@ -178,8 +186,18 @@ export default function DevisDetailPage() {
     setEnregistrementEdition(true);
     setErreur("");
     try {
-      const maj = await api.patchDevis(devis.id, {
-        ...formDevis,
+      // Le client se corrige via sa propre route PATCH /devis/:id/client
+      // (chantier du 02/10/2026) - separee de l'edition generale ci-dessous
+      // pour pouvoir rester accessible au DG/Directeur Financier meme sans
+      // le module "marches" (voir le commentaire dans ventes.js). On ne
+      // l'appelle que si le champ est modifiable ET effectivement change,
+      // pour ne jamais l'envoyer depuis un compte qui n'y a pas droit.
+      if (peutModifierClient && formDevis.client_commercial_id !== devis.client_commercial_id) {
+        await api.changerClientDevis(devis.id, formDevis.client_commercial_id);
+      }
+      const { client_commercial_id, ...champsGeneraux } = formDevis;
+      await api.patchDevis(devis.id, {
+        ...champsGeneraux,
         lignes: lignesEdition.map((l) => ({
           designation: l.designation,
           unite: l.unite,
@@ -187,12 +205,31 @@ export default function DevisDetailPage() {
           prix_unitaire_ht: Number(l.prix_unitaire_ht),
         })),
       });
-      setDevis(maj);
       setFormOuvert(false);
+      setChargement(true);
+      charger();
     } catch (err) {
       setErreur(err.message);
     } finally {
       setEnregistrementEdition(false);
+    }
+  }
+
+  // Suppression definitive (chantier du 02/10/2026, demande de Steeve :
+  // pouvoir nettoyer les devis inutiles ou en erreur) - reservee au DG/
+  // Directeur Financier (voir peutSupprimer plus bas), confirmation
+  // obligatoire car irreversible, meme convention que userDeleteConfirm/
+  // roleDeleteConfirm ailleurs dans l'application.
+  async function handleSupprimerDevis() {
+    if (typeof window !== "undefined" && !window.confirm(t("venteDevisDeleteConfirm"))) return;
+    setAction(true);
+    setErreur("");
+    try {
+      await api.supprimerDevis(devis.id);
+      router.push("/marches/consultation-restreinte/devis");
+    } catch (err) {
+      setErreur(err.message);
+      setAction(false);
     }
   }
 
@@ -240,6 +277,17 @@ export default function DevisDetailPage() {
   // generer tant qu'il reste un montant non facture.
   const resteAFacturer = Number(devis.reste_a_facturer ?? devis.total_ttc);
   const peutFacturer = devis.statut === "VALIDE" && resteAFacturer > 0.009 && possedeRole(["COMPTABLE", "FINANCIER"]);
+  // Changement de client et suppression du devis (chantier du 02/10/2026,
+  // demande de Steeve) : reserves au DG/Directeur Financier (meme
+  // "validateur universel" que la validation d'un devis) ou ADMIN - une
+  // correction plus sensible que l'edition courante, jamais ouverte au
+  // meme perimetre que la creation/edition de lignes.
+  const peutModifierClient = possedeRole(["DIRECTION"]) || !!permissions?.validateurUniversel;
+  // Supprimer n'est propose que si aucune facture n'a encore ete generee sur
+  // ce devis (le backend le refuserait de toute facon - voir
+  // VENTE_DEVIS_SUPPRESSION_FACTURE_EXISTANTE) : inutile de laisser cliquer
+  // sur un bouton qui echouera a coup sur.
+  const peutSupprimer = peutModifierClient && (!devis.factures || devis.factures.length === 0);
 
   return (
     <AppShell title={devis.numero} backHref="/marches/consultation-restreinte/devis">
@@ -275,6 +323,11 @@ export default function DevisDetailPage() {
           {peutEditer && (
             <button onClick={handleOuvrirEdition} style={boutonSecondaireStyle}>
               {t("venteDevisEditButton")}
+            </button>
+          )}
+          {peutSupprimer && (
+            <button onClick={handleSupprimerDevis} disabled={action} style={boutonDangerStyle}>
+              {t("venteDevisDeleteButton")}
             </button>
           )}
           <button onClick={() => window.print()} style={boutonSecondaireStyle}>
@@ -407,6 +460,23 @@ export default function DevisDetailPage() {
               {t("venteDevisEditionRepasseBrouillonAvertissement")}
             </p>
           )}
+          <div style={{ marginBottom: 12 }}>
+            <label style={labelStyle}>{t("venteClientLabel")}</label>
+            {peutModifierClient ? (
+              <select
+                value={formDevis.client_commercial_id}
+                onChange={(e) => setFormDevis((f) => ({ ...f, client_commercial_id: e.target.value }))}
+                style={{ ...inputStyle, maxWidth: 320 }}
+              >
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.nom}</option>
+                ))}
+              </select>
+            ) : (
+              <input value={devis.client_nom} disabled style={{ ...inputStyle, maxWidth: 320, color: "var(--sub)" }} />
+            )}
+            <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4, marginBottom: 0 }}>{t("venteModifierClientAide")}</p>
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div>
               <label style={labelStyle}>{t("venteObjetLabel")}</label>

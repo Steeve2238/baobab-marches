@@ -2,10 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { api } from "../../../../lib/api";
+import { api, estAdmin, getUtilisateurCourant } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
 import ConsultationRestreinteSousNav from "../../../../lib/components/ConsultationRestreinteSousNav";
+
+// Meme helper que la fiche devis (devis/[id]/page.js) - duplique ici faute
+// d'un module de permissions partage pour ces deux pages.
+function possedeRole(codes) {
+  if (estAdmin()) return true;
+  const user = getUtilisateurCourant();
+  return Array.isArray(user?.roles) && user.roles.some((r) => codes.includes(r));
+}
 
 const STATUT_STYLE = {
   BROUILLON: { color: "var(--sub)", background: "rgba(91,106,108,0.1)" },
@@ -22,6 +30,8 @@ export default function DevisListePage() {
   const [filtre, setFiltre] = useState("TOUTES");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
+  const [permissions, setPermissions] = useState(null);
+  const [suppressionEnCours, setSuppressionEnCours] = useState(null);
 
   useEffect(() => {
     setChargement(true);
@@ -31,6 +41,32 @@ export default function DevisListePage() {
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false));
   }, [filtre]);
+
+  useEffect(() => {
+    api.getPermissions().then(setPermissions).catch(() => {});
+  }, []);
+
+  // Changement de client et suppression (chantier du 02/10/2026, demande de
+  // Steeve : "pouvoir supprimer les devis inutiles... quand c'est trop
+  // encombre") - reserve au DG/Directeur Financier ou ADMIN, meme principe
+  // que sur la fiche devis (devis/[id]/page.js).
+  const peutSupprimer = possedeRole(["DIRECTION"]) || !!permissions?.validateurUniversel;
+
+  async function handleSupprimer(e, devis) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof window !== "undefined" && !window.confirm(t("venteDevisDeleteConfirm"))) return;
+    setSuppressionEnCours(devis.id);
+    setErreur("");
+    try {
+      await api.supprimerDevis(devis.id);
+      setDevisListe((prev) => prev.filter((d) => d.id !== devis.id));
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setSuppressionEnCours(null);
+    }
+  }
 
   return (
     <AppShell title={t("venteDevisPageTitle")} subNav={<ConsultationRestreinteSousNav />}>
@@ -71,26 +107,34 @@ export default function DevisListePage() {
           {devisListe.map((d) => {
             const style = STATUT_STYLE[d.statut] || {};
             return (
-              <Link key={d.id} href={`/marches/consultation-restreinte/devis/${d.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 13.5 }}>
-                      {d.numero} — {d.client_nom}
-                      {d.importe && (
-                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, color: "var(--sub)", background: "rgba(91,106,108,0.1)" }}>
-                          {t("venteDevisHistoriqueBadge")}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
-                      {d.objet || "—"} · {Number(d.total_ttc).toLocaleString()} XOF TTC
-                    </div>
+              <div key={d.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <Link href={`/marches/consultation-restreinte/devis/${d.id}`} style={{ textDecoration: "none", color: "inherit", flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+                    {d.numero} — {d.client_nom}
+                    {d.importe && (
+                      <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 20, color: "var(--sub)", background: "rgba(91,106,108,0.1)" }}>
+                        {t("venteDevisHistoriqueBadge")}
+                      </span>
+                    )}
                   </div>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap", ...style }}>
-                    {t(`venteDevisStatut_${d.statut}`)}
-                  </span>
-                </div>
-              </Link>
+                  <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
+                    {d.objet || "—"} · {Number(d.total_ttc).toLocaleString()} XOF TTC
+                  </div>
+                </Link>
+                <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap", ...style }}>
+                  {t(`venteDevisStatut_${d.statut}`)}
+                </span>
+                {peutSupprimer && !d.a_facture && (
+                  <button
+                    onClick={(e) => handleSupprimer(e, d)}
+                    disabled={suppressionEnCours === d.id}
+                    title={t("venteDevisDeleteButton")}
+                    style={boutonSupprimerStyle}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -128,4 +172,16 @@ const boutonSecondaireStyle = {
   textDecoration: "none",
   display: "inline-block",
   whiteSpace: "nowrap",
+};
+// Bouton de suppression par devis (chantier du 02/10/2026) - meme style que
+// le "×" de suppression de ligne sur la fiche devis (devis/[id]/page.js).
+const boutonSupprimerStyle = {
+  background: "transparent",
+  color: "var(--brique)",
+  border: "none",
+  fontSize: 18,
+  fontWeight: 700,
+  cursor: "pointer",
+  lineHeight: 1,
+  padding: "0 4px",
 };

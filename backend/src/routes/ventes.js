@@ -31,17 +31,24 @@ const uploadExcelDevis = multer({
 //     sans "marches" dans ses modules - il doit pouvoir consulter un devis
 //     (et son contexte : client, consultation liee...) avant de decider,
 //     comme le ferait n'importe quel approbateur.
-//   - ECRITURE : seules les 2 routes de DECISION sur un devis (valider /
-//     changer son statut, ce qui couvre le refus) sont autorisees sans
-//     "marches" - la creation de devis/consultations et la facturation
-//     restent hors de son perimetre standard, inchangees.
+//   - ECRITURE : seules les routes de DECISION sur un devis sont autorisees
+//     sans "marches" - valider/changer son statut (ce qui couvre le refus),
+//     et depuis le 02/10/2026 (demande de Steeve, meme logique : "uniquement
+//     le DG ou le directeur financier") corriger son client ou le supprimer
+//     (routes dediees PATCH /devis/:id/client et DELETE /devis/:id,
+//     justement separees de l'edition generale PATCH /devis/:id pour pouvoir
+//     les lister ici sans ouvrir celle-ci - creation de devis/consultations,
+//     edition des lignes/remise et facturation restent hors de son perimetre
+//     standard, inchangees.
 router.use((req, res, next) => {
   const estValidateurUniversel = !!req.user?.permissions?.validateurUniversel;
   if (estValidateurUniversel) {
     if (req.method === "GET") return next();
     const estRouteDecisionDevis =
       (req.method === "POST" && /^\/devis\/[^/]+\/valider$/.test(req.path)) ||
-      (req.method === "PATCH" && /^\/devis\/[^/]+\/statut$/.test(req.path));
+      (req.method === "PATCH" && /^\/devis\/[^/]+\/statut$/.test(req.path)) ||
+      (req.method === "PATCH" && /^\/devis\/[^/]+\/client$/.test(req.path)) ||
+      (req.method === "DELETE" && /^\/devis\/[^/]+$/.test(req.path));
     if (estRouteDecisionDevis) return next();
   }
   return requireModule("marches")(req, res, next);
@@ -678,12 +685,19 @@ router.patch("/consultations/chronogramme-taches/:id", async (req, res) => {
 router.get("/devis", async (req, res) => {
   const { statut } = req.query;
   try {
+    // a_facture (chantier du 02/10/2026, bouton Supprimer sur cette liste) :
+    // indique si au moins une facture existe deja sur ce devis, pour que le
+    // frontend puisse griser/masquer le bouton plutot que de laisser
+    // cliquer sur une suppression qui echouera a coup sur (voir DELETE
+    // /devis/:id, qui refuse dans ce cas).
     const result = await db.query(
       statut
-        ? `SELECT d.*, cl.nom AS client_nom
+        ? `SELECT d.*, cl.nom AS client_nom,
+                  EXISTS(SELECT 1 FROM facture_vente fv WHERE fv.devis_id = d.id) AS a_facture
            FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
            WHERE d.tenant_id = $1 AND d.statut = $2 ORDER BY d.date_creation DESC`
-        : `SELECT d.*, cl.nom AS client_nom
+        : `SELECT d.*, cl.nom AS client_nom,
+                  EXISTS(SELECT 1 FROM facture_vente fv WHERE fv.devis_id = d.id) AS a_facture
            FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
            WHERE d.tenant_id = $1 ORDER BY d.date_creation DESC`,
       statut ? [req.user.tenantId, statut] : [req.user.tenantId]
@@ -1007,7 +1021,11 @@ router.patch("/devis/:id", async (req, res) => {
   const { objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes, pourcentage_remise } = req.body;
   // NB : le numero n'est volontairement jamais accepte ici - un numero
   // manuel (ADMIN) ne peut etre choisi qu'a la creation (POST /devis), voir
-  // decision de Steeve du 01/10/2026.
+  // decision de Steeve du 01/10/2026. Le client non plus (chantier du
+  // 02/10/2026) : voir la route dediee PATCH /devis/:id/client ci-dessous,
+  // volontairement separee de celle-ci pour rester accessible au DG/
+  // Directeur Financier meme quand "marches" n'est pas dans son perimetre
+  // (voir le router.use plus haut dans ce fichier).
 
   const client = await db.pool.connect();
   try {
@@ -1079,7 +1097,7 @@ router.patch("/devis/:id", async (req, res) => {
 
     const repasseEnBrouillon = devisActuel.statut === "VALIDE";
 
-    const result = await client.query(
+    await client.query(
       `UPDATE devis
        SET objet = COALESCE($1, objet), date_devis = COALESCE($2, date_devis),
            conditions_paiement = $3, delai_livraison = $4, validite_offre = $5,
@@ -1087,20 +1105,184 @@ router.patch("/devis/:id", async (req, res) => {
            statut = CASE WHEN $11 THEN 'BROUILLON' ELSE statut END,
            valide_par = CASE WHEN $11 THEN NULL ELSE valide_par END,
            date_validation = CASE WHEN $11 THEN NULL ELSE date_validation END
-       WHERE id = $12 AND tenant_id = $13 RETURNING *`,
+       WHERE id = $12 AND tenant_id = $13`,
       [
         objet || null, date_devis || null, conditions_paiement || null, delai_livraison || null, validite_offre || null,
         totaux.total_ht, totaux.pourcentage_remise, totaux.montant_remise, totaux.montant_tva, totaux.total_ttc,
         repasseEnBrouillon, id, req.user.tenantId,
       ]
     );
+    // Relit avec la jointure client (comme GET /devis/:id) plutot que de
+    // renvoyer le simple RETURNING * de l'UPDATE : le meme bug existait deja
+    // avant le chantier du 02/10/2026 (RETURNING * ne contient jamais les
+    // colonnes jointes client_nom/client_adresse), decouvert et corrige a
+    // cette occasion - sans cette relecture, l'ecran se retrouvait avec un
+    // nom de client vide apres n'importe quelle edition tant que la page
+    // n'etait pas rechargee.
+    const devisAvecClient = await client.query(
+      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse
+       FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
+       WHERE d.id = $1`,
+      [id]
+    );
     await client.query("COMMIT");
     const nouvellesLignes = await chargerLignesDevis(id);
-    res.json({ ...result.rows[0], lignes: nouvellesLignes });
+    res.json({ ...devisAvecClient.rows[0], lignes: nouvellesLignes });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: t(req, "VENTE_DEVIS_UPDATE_ERROR") });
+  } finally {
+    client.release();
+  }
+});
+
+// PATCH /devis/:id/client - correction du client sur un devis deja cree
+// (chantier du 02/10/2026, demande de Steeve : "ils se sont trompes de
+// client... il faudrait le rendre accessible [...] uniquement [au] DG ou
+// [au] directeur financier"). Route dediee et volontairement separee de
+// l'edition generale ci-dessus (plutot qu'un champ de plus dans son body) :
+// c'est ce qui permet de la lister dans les exceptions du router.use plus
+// haut dans ce fichier, pour qu'un validateur universel sans "marches" dans
+// son perimetre (typiquement le Directeur Financier, voir le commentaire a
+// ce sujet plus haut) puisse tout de meme corriger un client - une
+// correction plus sensible qu'un simple ajustement de lignes/remise, jamais
+// ouverte au meme perimetre que la creation/edition courante.
+router.patch("/devis/:id/client", async (req, res) => {
+  const { id } = req.params;
+  const { client_commercial_id } = req.body;
+  const estValidateurUniversel = req.user.roles.includes("ADMIN") || !!req.user.permissions?.validateurUniversel;
+  if (!estValidateurUniversel) {
+    return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
+  }
+  if (!client_commercial_id) {
+    return res.status(400).json({ error: t(req, "VENTE_DEVIS_FIELDS_REQUIRED") });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const existant = await client.query(
+      `SELECT * FROM devis WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+      [id, req.user.tenantId]
+    );
+    if (existant.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: t(req, "VENTE_DEVIS_NOT_FOUND") });
+    }
+    const devisActuel = existant.rows[0];
+    if (!["BROUILLON", "ENVOYE", "REFUSE", "VALIDE"].includes(devisActuel.statut)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_EDITABLE") });
+    }
+
+    const clientResult = await client.query(
+      `SELECT 1 FROM client_commercial WHERE id = $1 AND tenant_id = $2`,
+      [client_commercial_id, req.user.tenantId]
+    );
+    if (clientResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, "VENTE_CLIENT_NOT_FOUND") });
+    }
+
+    // Comme pour toute autre edition d'un devis Valide (PATCH /devis/:id
+    // ci-dessus) : corriger le client change la substance du document, il
+    // doit donc etre revalide avant de pouvoir generer une nouvelle facture
+    // dessus.
+    const repasseEnBrouillon = devisActuel.statut === "VALIDE";
+    await client.query(
+      `UPDATE devis
+       SET client_commercial_id = $1,
+           statut = CASE WHEN $2 THEN 'BROUILLON' ELSE statut END,
+           valide_par = CASE WHEN $2 THEN NULL ELSE valide_par END,
+           date_validation = CASE WHEN $2 THEN NULL ELSE date_validation END
+       WHERE id = $3 AND tenant_id = $4`,
+      [client_commercial_id, repasseEnBrouillon, id, req.user.tenantId]
+    );
+    const devisAvecClient = await client.query(
+      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse
+       FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
+       WHERE d.id = $1`,
+      [id]
+    );
+    await client.query("COMMIT");
+    const lignes = await chargerLignesDevis(id);
+    res.json({ ...devisAvecClient.rows[0], lignes });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_DEVIS_UPDATE_ERROR") });
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /devis/:id - suppression definitive (chantier du 02/10/2026, demande
+// de Steeve : "pouvoir supprimer les devis inutiles ou les devis ou il y a
+// des erreurs, des brouillons... quand c'est trop encombre"). Reservee au
+// DG/Directeur Financier (validateur universel) ou ADMIN - meme niveau
+// d'autorite que le changement de client ci-dessus, une suppression etant
+// irreversible. Bloquee des qu'une facture existe deja sur ce devis (quel
+// que soit son statut, y compris ANNULEE) : on ne supprime jamais une piece
+// qui a une trace comptable en aval, seulement en amont de toute
+// facturation - meme principe de prudence que le garde-fou anti-depassement
+// de generer-facture.
+router.delete("/devis/:id", async (req, res) => {
+  const { id } = req.params;
+  const estValidateurUniversel = req.user.roles.includes("ADMIN") || !!req.user.permissions?.validateurUniversel;
+  if (!estValidateurUniversel) {
+    return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const existant = await client.query(
+      `SELECT * FROM devis WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+      [id, req.user.tenantId]
+    );
+    if (existant.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: t(req, "VENTE_DEVIS_NOT_FOUND") });
+    }
+    const devis = existant.rows[0];
+
+    const facturesResult = await client.query(
+      `SELECT 1 FROM facture_vente WHERE devis_id = $1 AND tenant_id = $2 LIMIT 1`,
+      [id, req.user.tenantId]
+    );
+    if (facturesResult.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_DEVIS_SUPPRESSION_FACTURE_EXISTANTE") });
+    }
+
+    // devis_ligne est en ON DELETE CASCADE (migration 016) - pas de
+    // suppression manuelle des lignes necessaire.
+    await client.query(`DELETE FROM devis WHERE id = $1 AND tenant_id = $2`, [id, req.user.tenantId]);
+
+    // Si ce devis etait le dernier rattache a sa consultation, on remet la
+    // consultation a RECUE - symetrique du passage a DEVIS_EN_COURS fait a
+    // la creation d'un devis (POST /devis) - plutot que de la laisser
+    // bloquee sur "devis en cours" sans plus aucun devis dessus.
+    if (devis.consultation_id) {
+      const autresDevis = await client.query(
+        `SELECT 1 FROM devis WHERE consultation_id = $1 AND tenant_id = $2 LIMIT 1`,
+        [devis.consultation_id, req.user.tenantId]
+      );
+      if (autresDevis.rows.length === 0) {
+        await client.query(
+          `UPDATE consultation SET statut = 'RECUE' WHERE id = $1 AND tenant_id = $2 AND statut = 'DEVIS_EN_COURS'`,
+          [devis.consultation_id, req.user.tenantId]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+    res.status(204).end();
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_DEVIS_DELETE_ERROR") });
   } finally {
     client.release();
   }

@@ -483,6 +483,15 @@ export const api = {
   getDevis: (id) => request(`/ventes/devis/${id}`),
   createDevis: (data) => request("/ventes/devis", { method: "POST", body: JSON.stringify(data) }),
   patchDevis: (id, data) => request(`/ventes/devis/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  // Correction du client sur un devis deja cree (chantier du 02/10/2026) -
+  // route dediee et separee de patchDevis ci-dessus (reservee au DG/
+  // Directeur Financier ou ADMIN, voir PATCH /devis/:id/client).
+  changerClientDevis: (id, clientCommercialId) =>
+    request(`/ventes/devis/${id}/client`, { method: "PATCH", body: JSON.stringify({ client_commercial_id: clientCommercialId }) }),
+  // Suppression definitive (chantier du 02/10/2026) - reservee au DG/
+  // Directeur Financier ou ADMIN, bloquee des qu'une facture existe deja sur
+  // ce devis (voir DELETE /devis/:id).
+  supprimerDevis: (id) => request(`/ventes/devis/${id}`, { method: "DELETE" }),
   // Import des devis historiques (30/09/2026) - meme pattern que
   // telechargerModeleFicheTemps/importerFicheTemps (module RH) ci-dessus.
   telechargerModeleImportDevis: () => requestDownload("/ventes/devis/modele-import", "modele_import_devis_historiques.xlsx"),
