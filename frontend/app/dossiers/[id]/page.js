@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import CourrierSection from "../../../lib/components/CourrierSection";
 import { DEVISES } from "../../../lib/constants/devises";
 
 const PHASES_CHRONOGRAMME = ["AVANT_SOUMISSION", "NON_ATTRIBUTION", "ATTRIBUTION_EXECUTION"];
@@ -34,7 +35,6 @@ export default function DossierDetailPage() {
     statutLabel,
     typeBesoinLabel,
     penaliteStatutLabel,
-    typeCourrierLabel,
     typeFaciliteLabel,
     conditionReglementLabel,
     clauseTypeLabel,
@@ -53,9 +53,6 @@ export default function DossierDetailPage() {
   const [suivisLogistiques, setSuivisLogistiques] = useState([]);
   const [incoterms, setIncoterms] = useState([]);
   const [transitaires, setTransitaires] = useState([]);
-  const [modelesCourrier, setModelesCourrier] = useState([]);
-  const [suggestionsCourrier, setSuggestionsCourrier] = useState([]);
-  const [entete, setEntete] = useState(null);
   const [fournisseurs, setFournisseurs] = useState([]);
   const [offres, setOffres] = useState([]);
   const [chargement, setChargement] = useState(true);
@@ -104,13 +101,6 @@ export default function DossierDetailPage() {
     montant_ttc: "",
   });
   const [suiviEnCours, setSuiviEnCours] = useState(false);
-
-  const [modeleSelectionne, setModeleSelectionne] = useState("");
-  const [courrierGenere, setCourrierGenere] = useState(null);
-  const [generationEnCours, setGenerationEnCours] = useState(false);
-  const [copieConfirmee, setCopieConfirmee] = useState(false);
-  const [variablesDetectees, setVariablesDetectees] = useState([]);
-  const [variablesPersonnalisees, setVariablesPersonnalisees] = useState({});
 
   const [formOffreOuvert, setFormOffreOuvert] = useState(false);
   const [formOffre, setFormOffre] = useState({
@@ -174,9 +164,6 @@ export default function DossierDetailPage() {
           suivisData,
           incotermsData,
           transitairesData,
-          modelesData,
-          suggestionsData,
-          enteteData,
           fournisseursData,
           offresData,
         ] = await Promise.all([
@@ -189,9 +176,6 @@ export default function DossierDetailPage() {
           api.getSuivisLogistiques(id),
           api.getIncoterms(),
           api.getTransitaires(),
-          api.getModelesCourrier(),
-          api.getSuggestionsCourrier(id),
-          api.getEntete(),
           api.getFournisseurs(),
           api.getOffresFournisseur(id),
         ]);
@@ -204,9 +188,6 @@ export default function DossierDetailPage() {
         setSuivisLogistiques(suivisData);
         setIncoterms(incotermsData);
         setTransitaires(transitairesData);
-        setModelesCourrier(modelesData);
-        setSuggestionsCourrier(suggestionsData);
-        setEntete(enteteData);
         setFournisseurs(fournisseursData);
         setOffres(offresData);
       } catch (err) {
@@ -386,26 +367,9 @@ export default function DossierDetailPage() {
   /**
    * Extrait les noms de variables {{xxx}} d'un modele, en excluant celles
    * deja couvertes automatiquement par le contexte dossier ({{dossier.*}}
-   * et {{date_jour}}).
-   */
-  function extraireVariablesPersonnalisees(modele) {
-    const texte = `${modele.titre} ${modele.corps_template}`;
-    const trouvees = new Set();
-    const regex = /\{\{\s*([\w.]+)\s*\}\}/g;
-    let m;
-    while ((m = regex.exec(texte)) !== null) {
-      const cle = m[1];
-      if (!cle.startsWith("dossier.") && cle !== "date_jour") {
-        trouvees.add(cle);
-      }
-    }
-    return [...trouvees];
-  }
-
-  /**
-   * Pre-remplit les variables deductibles de la simulation de financement
-   * retenue sur ce dossier (montant, duree, type de facilite), pour eviter
-   * toute ressaisie d'une information deja connue du systeme.
+   * et {{date_jour}}) - utilisee par CourrierSection (lib/components), plus
+   * directement ici : conservee sur cette fiche car elle depend de
+   * `simulations`, propre au module Financement du dossier AO.
    */
   function deduireValeursConnues() {
     const simulationAvecOptionRetenue = simulations.find((s) => s.option_retenue_id);
@@ -420,48 +384,6 @@ export default function DossierDetailPage() {
       duree_jours: simulationAvecOptionRetenue.duree_estimee_jours ?? "",
       type_facilite: optionRetenue ? typeFaciliteLabel(optionRetenue.type_facilite) : "",
     };
-  }
-
-  function handleSelectionModele(modeleId) {
-    setModeleSelectionne(modeleId);
-    setCourrierGenere(null);
-    const modele = modelesCourrier.find((m) => m.id === modeleId);
-    if (!modele) {
-      setVariablesDetectees([]);
-      setVariablesPersonnalisees({});
-      return;
-    }
-    const detectees = extraireVariablesPersonnalisees(modele);
-    const connues = deduireValeursConnues();
-    setVariablesDetectees(detectees);
-    setVariablesPersonnalisees(
-      Object.fromEntries(detectees.map((cle) => [cle, connues[cle] !== undefined ? connues[cle] : ""]))
-    );
-  }
-
-  async function handleGenererCourrier() {
-    if (!modeleSelectionne) return;
-    setGenerationEnCours(true);
-    setCopieConfirmee(false);
-    try {
-      const resultat = await api.genererCourrier(id, {
-        modele_id: modeleSelectionne,
-        variables: variablesPersonnalisees,
-      });
-      setCourrierGenere(resultat);
-    } catch (err) {
-      setErreur(err.message);
-    } finally {
-      setGenerationEnCours(false);
-    }
-  }
-
-  function handleCopierCourrier() {
-    if (!courrierGenere) return;
-    navigator.clipboard.writeText(`${courrierGenere.titre}\n\n${courrierGenere.corps}`).then(() => {
-      setCopieConfirmee(true);
-      setTimeout(() => setCopieConfirmee(false), 2000);
-    });
   }
 
   async function handleAjouterOffre(e) {
@@ -1730,146 +1652,12 @@ export default function DossierDetailPage() {
       </section>
 
       {/* ---------------- COURRIERS ---------------- */}
-      <section>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("lettersSection")}</h2>
-        </div>
-
-        {suggestionsCourrier.length > 0 && (
-          <div style={{ marginBottom: 14 }}>
-            <h3 style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 8, fontWeight: 600 }}>
-              {t("suggestedLetters")}
-            </h3>
-            <div style={{ display: "grid", gap: 6 }}>
-              {suggestionsCourrier.map((s) => (
-                <div
-                  key={s.id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    background: "var(--ocre-bg, #FFF3E0)",
-                    fontSize: 12.5,
-                  }}
-                >
-                  <div>
-                    <span style={{ fontWeight: 600 }}>{s.titre}</span>
-                    <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 2 }}>{s.raison}</div>
-                  </div>
-                  <button onClick={() => handleSelectionModele(s.id)} style={boutonSecondaireStyle}>
-                    {t("useSuggestion")}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="card" style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>{t("selectTemplate")}</label>
-          <div style={{ display: "flex", gap: 10 }}>
-            <select
-              value={modeleSelectionne}
-              onChange={(e) => handleSelectionModele(e.target.value)}
-              style={{ ...inputStyle, flex: 1 }}
-            >
-              <option value="">—</option>
-              {modelesCourrier.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.titre} ({typeCourrierLabel(m.type_courrier)})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {variablesDetectees.length > 0 && (
-            <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {variablesDetectees.map((cle) => (
-                <div key={cle}>
-                  <label style={labelStyle}>{`{{${cle}}}`}</label>
-                  <input
-                    value={variablesPersonnalisees[cle] ?? ""}
-                    onChange={(e) =>
-                      setVariablesPersonnalisees((prev) => ({ ...prev, [cle]: e.target.value }))
-                    }
-                    style={inputStyle}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
-
-          <button
-            onClick={handleGenererCourrier}
-            disabled={!modeleSelectionne || generationEnCours}
-            style={{ ...boutonPrincipalStyle, marginTop: 14 }}
-          >
-            {t("generateLetter")}
-          </button>
-        </div>
-
-        {courrierGenere && (
-          <div>
-            <div className="no-print" style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10, gap: 10 }}>
-              <button onClick={handleCopierCourrier} style={boutonSecondaireStyle}>
-                {copieConfirmee ? t("copied") : t("copyText")}
-              </button>
-              <button onClick={() => window.print()} style={boutonPrincipalStyle}>
-                {t("print")}
-              </button>
-            </div>
-
-            {courrierGenere.variables_manquantes.length > 0 && (
-              <p className="no-print" style={{ fontSize: 11.5, color: "var(--brique)", marginBottom: 8 }}>
-                {t("missingVariables")} : {courrierGenere.variables_manquantes.join(", ")}
-              </p>
-            )}
-
-            <div className="card print-letter" style={{ padding: "28px 32px" }}>
-              {/* En-tete structure */}
-              <div style={{ borderBottom: "2px solid var(--petrol)", paddingBottom: 14, marginBottom: 24 }}>
-                <div style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 15, color: "var(--petrol)" }}>
-                  {entete?.raison_sociale || "—"}
-                </div>
-                <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 3, lineHeight: 1.5 }}>
-                  {entete?.adresse && <div>{entete.adresse}</div>}
-                  <div>
-                    {entete?.telephone ? `Tél : ${entete.telephone}` : ""}
-                    {entete?.telephone && entete?.email ? "  ·  " : ""}
-                    {entete?.email ? `${entete.email}` : ""}
-                  </div>
-                </div>
-              </div>
-
-              {/* Titre du courrier */}
-              <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 18 }}>{courrierGenere.titre}</div>
-
-              {/* Corps */}
-              <pre
-                style={{
-                  whiteSpace: "pre-wrap",
-                  fontFamily: "inherit",
-                  fontSize: 12.8,
-                  lineHeight: 1.7,
-                  margin: 0,
-                }}
-              >
-                {courrierGenere.corps}
-              </pre>
-
-              {/* Signature */}
-              <div style={{ marginTop: 48, textAlign: "right" }}>
-                <div style={{ fontSize: 12.5 }}>{entete?.signataire_titre || ""}</div>
-                <div style={{ fontWeight: 700, fontSize: 13, marginTop: 40 }}>
-                  {entete?.signataire_nom || ""}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
+      <CourrierSection
+        dossierType="AO"
+        dossierId={id}
+        valeursConnues={deduireValeursConnues()}
+        afficherSuggestions
+      />
     </AppShell>
   );
 }

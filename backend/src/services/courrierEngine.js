@@ -50,4 +50,45 @@ function construireContexte(dossier, variablesComplementaires = {}) {
   };
 }
 
-module.exports = { rendreTemplate, construireContexte };
+/**
+ * Equivalent de construireContexte ci-dessus, mais pour un dossier de
+ * Consultation restreinte (chantier du 02/10/2026, demande de Steeve : "le
+ * client veut avoir la possibilite de faire les courriers comme avec les
+ * appels d'offres"). Reutilise expres les MEMES cles {{dossier.xxx}} que
+ * construireContexte pour qu'un modele de courrier existant (ecrit pour un
+ * dossier AO) fonctionne sans modification sur une consultation restreinte -
+ * seule la provenance des valeurs change :
+ *   - reference      : le numero du devis le plus recent lie a cette
+ *                       consultation (une consultation elle-meme n'a pas de
+ *                       numero propre) - absent si aucun devis n'existe
+ *                       encore, signale comme toute variable manquante.
+ *   - intitule        : l'objet de la consultation.
+ *   - montant_estime  : le total TTC du devis le plus recent, si disponible.
+ *   - maitre_ouvrage   : reutilise pour porter le nom du CLIENT (l'equivalent
+ *                       du maitre d'ouvrage cote appel d'offres - le tiers a
+ *                       qui le courrier s'adresse).
+ *   - date_limite_soumission : n'existe pas pour une consultation restreinte,
+ *                       volontairement laissee absente plutot que de la
+ *                       detourner d'un sens different.
+ * Ajoute en plus {{dossier.date_reception}}, propre a la consultation
+ * restreinte (date a laquelle la demande du client a ete recue).
+ */
+function construireContexteConsultation(consultation, devisPlusRecent, variablesComplementaires = {}) {
+  return {
+    dossier: {
+      reference: devisPlusRecent ? devisPlusRecent.numero : undefined,
+      intitule: consultation.objet,
+      montant_estime: devisPlusRecent ? devisPlusRecent.total_ttc : undefined,
+      devise: "XOF",
+      maitre_ouvrage: consultation.client_nom,
+      statut: consultation.statut,
+      date_reception: consultation.date_reception
+        ? new Date(consultation.date_reception).toLocaleDateString("fr-FR")
+        : undefined,
+    },
+    date_jour: new Date().toLocaleDateString("fr-FR"),
+    ...variablesComplementaires,
+  };
+}
+
+module.exports = { rendreTemplate, construireContexte, construireContexteConsultation };

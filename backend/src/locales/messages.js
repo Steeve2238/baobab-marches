@@ -161,6 +161,9 @@ const MESSAGES = {
     MODELE_ID_REQUIRED: "modele_id est requis.",
     GENERATION_ERROR: "Erreur lors de la generation du courrier.",
     SUGGESTIONS_FETCH_ERROR: "Erreur lors de la recuperation des suggestions.",
+    COURRIER_DOSSIER_TYPE_INVALID: "Le type de dossier doit etre AO ou CONSULTATION.",
+    HISTORIQUE_COURRIER_FETCH_ERROR: "Erreur lors de la recuperation de l'historique des courriers.",
+    COURRIER_GENERE_NOT_FOUND: "Courrier introuvable.",
 
     ENTETE_NOT_FOUND: "Structure introuvable.",
     ENTETE_FETCH_ERROR: "Erreur lors de la recuperation de l'entete.",
@@ -543,6 +546,9 @@ const MESSAGES = {
     MODELE_ID_REQUIRED: "modele_id is required.",
     GENERATION_ERROR: "Error while generating the letter.",
     SUGGESTIONS_FETCH_ERROR: "Error while fetching suggestions.",
+    COURRIER_DOSSIER_TYPE_INVALID: "dossier_type must be AO or CONSULTATION.",
+    HISTORIQUE_COURRIER_FETCH_ERROR: "Error while fetching the letter history.",
+    COURRIER_GENERE_NOT_FOUND: "Letter not found.",
 
     ENTETE_NOT_FOUND: "Organization not found.",
     ENTETE_FETCH_ERROR: "Error while fetching the letterhead info.",

@@ -186,6 +186,11 @@ export const api = {
       body: JSON.stringify({ jeton, nouveau_mot_de_passe }),
     }),
   getDossiers: () => request("/dossiers"),
+  // Liste fusionnee Dossiers AO + Consultations restreintes, une seule
+  // chronologie (chantier du 02/10/2026, demande de Steeve : "l'interface
+  // dossier doit aussi bien faire apparaitre les marches restreint que les
+  // appels d'offres"). Chaque ligne porte type_dossier: "AO" | "CONSULTATION".
+  getDossiersUnifies: () => request("/dossiers/unifies"),
   createDossier: (data) => request("/dossiers", { method: "POST", body: JSON.stringify(data) }),
   getDossier: (id) => request(`/dossiers/${id}`),
   updateDossier: (id, data) => request(`/dossiers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -302,6 +307,24 @@ export const api = {
   genererCourrier: (dossierId, data) =>
     request(`/courriers/dossiers/${dossierId}/generer`, { method: "POST", body: JSON.stringify(data) }),
   getSuggestionsCourrier: (dossierId) => request(`/courriers/dossiers/${dossierId}/suggestions`),
+
+  // Generation unifiee + historique numerote (chantier du 02/10/2026, demande
+  // de Steeve : courriers disponibles aussi bien pour les dossiers AO que
+  // pour les consultations restreintes, avec une seule chronologie de
+  // numeros) - remplace genererCourrier/getSuggestionsCourrier ci-dessus pour
+  // tout nouvel usage (conservees inchangees pour compatibilite).
+  genererCourrierUnifie: (data) => request("/courriers/generer", { method: "POST", body: JSON.stringify(data) }),
+  getHistoriqueCourriers: ({ dossierType, dossierId } = {}) => {
+    const params = new URLSearchParams();
+    if (dossierType && dossierId) {
+      params.set("dossier_type", dossierType);
+      params.set("dossier_id", dossierId);
+    }
+    const requete = params.toString();
+    return request(`/courriers/historique${requete ? `?${requete}` : ""}`);
+  },
+  marquerCourrierEnvoye: (id) =>
+    request(`/courriers/generes/${id}/statut`, { method: "PATCH", body: JSON.stringify({ statut: "ENVOYE" }) }),
 
   // Parametres - entete de structure
   getEntete: () => request("/parametres/entete"),

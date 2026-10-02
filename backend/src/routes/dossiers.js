@@ -1,11 +1,72 @@
 const express = require("express");
 const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
-const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
+const { requireAuth, requireModule, requireModuleAny, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 
 const router = express.Router();
 router.use(requireAuth);
+
+// GET /api/dossiers/unifies - liste fusionnee Dossiers AO + Consultations
+// restreintes (chantier du 02/10/2026, demande de Steeve : "l'interface
+// dossier doit aussi bien faire apparaitre les marches restreint que les
+// appels d'offres"). Positionnee AVANT le requireModule("dossiers") ci-dessous
+// (qui s'applique a partir d'ici a toutes les routes suivantes de ce fichier),
+// avec sa propre garde requireModuleAny("dossiers", "marches") : un
+// utilisateur qui n'a que l'un des deux modules dans son perimetre doit quand
+// meme pouvoir ouvrir cet ecran fusionne - il verra alors seulement les
+// entrees du type auquel il a acces (filtre applique ci-dessous, independant
+// de la garde de route qui elle ne fait qu'autoriser l'acces a l'ecran).
+router.get("/unifies", requireModuleAny("dossiers", "marches"), async (req, res) => {
+  const permissions = req.user.permissions;
+  const accesAo = permissions.admin || permissions.modules.includes("dossiers") || permissions.tableauDeBord;
+  const accesConsultation = permissions.admin || permissions.modules.includes("marches");
+
+  try {
+    const requetes = [];
+
+    if (accesAo) {
+      requetes.push(
+        db.query(
+          `SELECT d.id, 'AO' AS type_dossier, d.reference_externe, d.intitule,
+                  d.montant_estime, d.devise, d.statut, d.date_limite_soumission,
+                  mo.nom AS tiers_nom, d.date_limite_soumission AS date_tri
+           FROM dossier_ao d
+           LEFT JOIN maitre_ouvrage mo ON mo.id = d.maitre_ouvrage_id
+           WHERE d.tenant_id = $1`,
+          [req.user.tenantId]
+        )
+      );
+    }
+    if (accesConsultation) {
+      requetes.push(
+        db.query(
+          `SELECT c.id, 'CONSULTATION' AS type_dossier, NULL AS reference_externe, c.objet AS intitule,
+                  NULL::numeric AS montant_estime, 'XOF' AS devise, c.statut, c.date_limite_reponse AS date_limite_soumission,
+                  cl.nom AS tiers_nom, COALESCE(c.date_limite_reponse, c.date_reception) AS date_tri
+           FROM consultation c
+           LEFT JOIN client_commercial cl ON cl.id = c.client_commercial_id
+           WHERE c.tenant_id = $1`,
+          [req.user.tenantId]
+        )
+      );
+    }
+
+    const resultats = await Promise.all(requetes);
+    const lignes = resultats.flatMap((r) => r.rows);
+    lignes.sort((a, b) => {
+      if (!a.date_tri) return 1;
+      if (!b.date_tri) return -1;
+      return new Date(a.date_tri) - new Date(b.date_tri);
+    });
+
+    res.json(lignes);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "DOSSIERS_FETCH_ERROR") });
+  }
+});
+
 router.use(requireModule("dossiers"));
 router.use(blockLectureSeule);
 

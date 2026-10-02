@@ -30,6 +30,17 @@ const GROUPES_STATUT = {
 // portefeuille des dossiers a un role SANS lui donner le tableau de bord
 // executif complet (voir requireModule("dossiers") cote backend, qui accepte
 // soit "dossiers" explicitement dans le perimetre, soit tableauDeBord=true).
+//
+// Depuis le chantier du 02/10/2026 (demande de Steeve : "l'interface dossier
+// doit aussi bien faire apparaitre les marches restreint que les appels
+// d'offres"), consomme GET /api/dossiers/unifies plutot que GET /api/dossiers :
+// chaque ligne porte type_dossier ("AO" ou "CONSULTATION"), le backend
+// filtrant deja selon le perimetre de l'utilisateur (voir routes/dossiers.js).
+// Les 5 tuiles statistiques (StatCard) gardent EXPRES leur sens d'origine -
+// uniquement les dossiers AO, memes 4 categories qu'avant ce chantier - une
+// consultation restreinte n'a pas les memes statuts (RECUE, DEVIS_EN_COURS...)
+// et les meler aux tuiles OUVERT/EN_COURS/TERMINE/REJETE n'aurait pas de sens.
+// La liste en dessous, elle, montre bien la chronologie fusionnee.
 export default function DossiersPage() {
   const router = useRouter();
   const { t, statutLabel, dict } = useLangue();
@@ -43,7 +54,7 @@ export default function DossiersPage() {
     async function charger() {
       try {
         const [dossiersData, permissionsData] = await Promise.all([
-          api.getDossiers(),
+          api.getDossiersUnifies(),
           api.getPermissions().catch(() => null),
         ]);
         setDossiers(dossiersData);
@@ -65,13 +76,15 @@ export default function DossiersPage() {
     charger();
   }, [router, t]);
 
+  const dossiersAo = dossiers.filter((d) => d.type_dossier === "AO");
+
   const statsGroupes = { OUVERT: 0, EN_COURS: 0, TERMINE: 0, REJETE: 0 };
-  for (const d of dossiers) {
+  for (const d of dossiersAo) {
     const groupe = GROUPES_STATUT[d.statut];
     if (groupe) statsGroupes[groupe] += 1;
   }
   const dossiersAffiches = filtreGroupe
-    ? dossiers.filter((d) => GROUPES_STATUT[d.statut] === filtreGroupe)
+    ? dossiersAo.filter((d) => GROUPES_STATUT[d.statut] === filtreGroupe)
     : dossiers;
 
   function handleClicStat(groupe) {
@@ -96,7 +109,7 @@ export default function DossiersPage() {
             }}
           >
             <StatCard
-              valeur={dossiers.length}
+              valeur={dossiersAo.length}
               libelle={t("statTotalFiles")}
               actif={filtreGroupe === null}
               onClick={() => setFiltreGroupe(null)}
@@ -162,27 +175,48 @@ export default function DossiersPage() {
                 gap: 10,
               }}
             >
-              {dossiersAffiches.map((d) => (
-                <Link key={d.id} href={`/dossiers/${d.id}`} className="card" style={fileCardStyle}>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{d.intitule}</div>
-                  <div className="mono" style={{ fontSize: 10.5, color: "var(--sub)", marginTop: 2 }}>
-                    {d.reference_externe} {d.maitre_ouvrage_nom ? `· ${d.maitre_ouvrage_nom}` : ""}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
-                    <span className={`chip ${statutClasse(d.statut)}`}>{statutLabel(d.statut)}</span>
-                    <span className="mono" style={{ fontSize: 12 }}>
-                      {d.montant_estime
-                        ? `${Number(d.montant_estime).toLocaleString(dict.dateLocale)} ${d.devise}`
+              {dossiersAffiches.map((d) => {
+                const estAo = d.type_dossier === "AO";
+                const href = estAo
+                  ? `/dossiers/${d.id}`
+                  : `/marches/consultation-restreinte/consultations/${d.id}`;
+                const libelleStatut = estAo ? statutLabel(d.statut) : t(`venteConsultationStatut_${d.statut}`);
+                return (
+                  <Link key={d.id} href={href} className="card" style={fileCardStyle}>
+                    <div
+                      style={{
+                        display: "inline-block",
+                        fontSize: 9.5,
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: 4,
+                        marginBottom: 6,
+                        color: estAo ? "var(--petrol)" : "var(--ocre)",
+                        background: estAo ? "rgba(11,61,64,0.08)" : "rgba(224,149,76,0.12)",
+                      }}
+                    >
+                      {t(estAo ? "dossierTypeAO" : "dossierTypeCONSULTATION")}
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{d.intitule}</div>
+                    <div className="mono" style={{ fontSize: 10.5, color: "var(--sub)", marginTop: 2 }}>
+                      {d.reference_externe} {d.tiers_nom ? `· ${d.tiers_nom}` : ""}
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                      <span className={`chip ${statutClasse(d.statut)}`}>{libelleStatut}</span>
+                      <span className="mono" style={{ fontSize: 12 }}>
+                        {d.montant_estime
+                          ? `${Number(d.montant_estime).toLocaleString(dict.dateLocale)} ${d.devise}`
+                          : "—"}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 6 }}>
+                      {d.date_limite_soumission
+                        ? new Date(d.date_limite_soumission).toLocaleDateString(dict.dateLocale)
                         : "—"}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 6 }}>
-                    {d.date_limite_soumission
-                      ? new Date(d.date_limite_soumission).toLocaleDateString(dict.dateLocale)
-                      : "—"}
-                  </div>
-                </Link>
-              ))}
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </>
@@ -240,8 +274,11 @@ const boutonNouveauDossierStyle = {
   whiteSpace: "nowrap",
 };
 
+// Couvre a la fois les statuts d'un dossier AO et ceux d'une consultation
+// restreinte (CONVERTIE/SANS_SUITE) - les deux jeux de codes ne se recoupent
+// jamais, donc aucune ambiguite a les traiter dans une seule fonction.
 function statutClasse(statut) {
-  if (["ATTRIBUE", "EN_EXECUTION", "RECEPTION", "CLOTURE"].includes(statut)) return "ok";
-  if (["NON_ATTRIBUE", "NO_GO"].includes(statut)) return "risk";
+  if (["ATTRIBUE", "EN_EXECUTION", "RECEPTION", "CLOTURE", "CONVERTIE"].includes(statut)) return "ok";
+  if (["NON_ATTRIBUE", "NO_GO", "SANS_SUITE"].includes(statut)) return "risk";
   return "warn";
 }

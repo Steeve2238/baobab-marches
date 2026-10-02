@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
+import CourrierSection from "../../../../../lib/components/CourrierSection";
 
 const STATUT_STYLE = {
   RECUE: { color: "var(--ocre)", background: "rgba(224,149,76,0.12)" },
@@ -548,6 +549,9 @@ export default function ConsultationDetailPage() {
           </div>
         )}
       </section>
+
+      {/* ---------------- COURRIERS ---------------- */}
+      <CourrierSection dossierType="CONSULTATION" dossierId={id} />
     </AppShell>
   );
 }
