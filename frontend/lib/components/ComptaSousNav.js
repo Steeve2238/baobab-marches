@@ -14,6 +14,7 @@ const ONGLETS = [
   { href: "/comptabilite/balance", key: "comptaNavBalance" },
   { href: "/comptabilite/plan", key: "comptaNavPlan" },
   { href: "/comptabilite/tiers", key: "comptaNavTiers" },
+  { href: "/comptabilite/importer", key: "comptaNavImporter" },
   { href: "/comptabilite/parametres", key: "comptaNavParametres" },
 ];
 

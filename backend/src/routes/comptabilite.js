@@ -6,6 +6,8 @@ const compta = require("../services/comptaService");
 const rapports = require("../services/comptaRapports");
 const exportsCompta = require("../services/comptaExports");
 const ventesCompta = require("../services/comptaVentes");
+const importCompta = require("../services/comptaImport");
+const multer = require("multer");
 
 const { ComptaError, avecTransaction } = compta;
 
@@ -598,6 +600,99 @@ router.get(
     const entreprise = await raisonSociale(req);
     const buffer = format === "pdf" ? await exportsCompta.balancePdf(data, entreprise) : exportsCompta.balanceXlsx(data, entreprise);
     envoyerFichier(res, buffer, nomFichier("balance", data, format), format);
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Import Sage (grand livre, balance) - niveau validation
+// ----------------------------------------------------------------------------
+
+const uploadImport = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 3 } }).fields([
+  { name: "fichier", maxCount: 1 },
+  { name: "tiers_clients", maxCount: 1 },
+  { name: "tiers_fournisseurs", maxCount: 1 },
+]);
+
+function recevoirImport(req, res, next) {
+  uploadImport(req, res, (err) => {
+    if (err) return res.status(400).json({ error: t(req, "COMPTA_IMPORT_FICHIER_INVALIDE") });
+    next();
+  });
+}
+
+const OPTIONS_IMPORT = ["creer_comptes", "creer_journaux", "creer_exercices", "statut", "colonnes", "date_ecriture", "journal_code", "libelle"];
+const optionsImport = (req) => Object.fromEntries(OPTIONS_IMPORT.filter((k) => req.body?.[k] !== undefined).map((k) => [k, req.body[k]]));
+const fichierImport = (req, nom) => req.files?.[nom]?.[0]?.buffer || null;
+
+router.get(
+  "/import/modele/:type",
+  exigerValidation,
+  gerer(async (req, res) => {
+    const grandLivre = req.params.type === "grand-livre";
+    const buffer = grandLivre ? importCompta.modeleGrandLivre() : importCompta.modeleBalance();
+    envoyerFichier(res, buffer, grandLivre ? "modele_import_grand_livre.xlsx" : "modele_import_balance.xlsx", "xlsx");
+  })
+);
+
+router.get(
+  "/import/lots",
+  exigerValidation,
+  gerer(async (req, res) => {
+    res.json(await importCompta.listerLots(db, tenant(req)));
+  })
+);
+
+router.post(
+  "/import/:type/apercu",
+  exigerValidation,
+  blockLectureSeule,
+  recevoirImport,
+  gerer(async (req, res) => {
+    const buffer = fichierImport(req, "fichier");
+    if (!buffer) return res.status(400).json({ error: t(req, "COMPTA_IMPORT_FICHIER_REQUIS") });
+    const params = { buffer, nomFichier: req.files.fichier[0].originalname, options: optionsImport(req) };
+    let r;
+    if (req.params.type === "grand-livre") r = await importCompta.apercuGrandLivre(tenant(req), userId(req), params);
+    else if (req.params.type === "balance")
+      r = await importCompta.apercuBalance(tenant(req), userId(req), {
+        ...params,
+        tiersClients: fichierImport(req, "tiers_clients"),
+        tiersFournisseurs: fichierImport(req, "tiers_fournisseurs"),
+      });
+    else return res.status(404).json({ error: t(req, "COMPTA_IMPORT_FICHIER_INVALIDE") });
+    res.json(r.rapport);
+  })
+);
+
+router.post(
+  "/import/:type",
+  exigerValidation,
+  blockLectureSeule,
+  recevoirImport,
+  gerer(async (req, res) => {
+    const buffer = fichierImport(req, "fichier");
+    if (!buffer) return res.status(400).json({ error: t(req, "COMPTA_IMPORT_FICHIER_REQUIS") });
+    const params = { buffer, nomFichier: req.files.fichier[0].originalname, options: optionsImport(req) };
+    let r;
+    if (req.params.type === "grand-livre") r = await importCompta.executerGrandLivre(tenant(req), userId(req), params);
+    else if (req.params.type === "balance")
+      r = await importCompta.executerBalance(tenant(req), userId(req), {
+        ...params,
+        tiersClients: fichierImport(req, "tiers_clients"),
+        tiersFournisseurs: fichierImport(req, "tiers_fournisseurs"),
+      });
+    else return res.status(404).json({ error: t(req, "COMPTA_IMPORT_FICHIER_INVALIDE") });
+    // Rapport avec erreurs (ok = false) : rien n'a ete importe
+    res.status(r.rapport.ok ? 201 : 200).json(r.rapport);
+  })
+);
+
+router.post(
+  "/import/lots/:id/annuler",
+  exigerValidation,
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => importCompta.annulerLot(client, tenant(req), userId(req), req.params.id)));
   })
 );
 

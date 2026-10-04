@@ -981,6 +981,8 @@ module.exports = {
   creerBrouillon,
   insererLignes,
   completerNumero,
+  creerTiers,
+  tirerNumeroEcriture,
   modifierBrouillon,
   supprimerBrouillon,
   validerEcriture,

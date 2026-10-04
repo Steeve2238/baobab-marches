@@ -623,6 +623,12 @@ export const api = {
   comptaValiderInstance: (ids) => request("/comptabilite/instance/valider", { method: "POST", body: JSON.stringify(ids ? { ids } : {}) }),
   comptaRattrapage: (depuis) => request("/comptabilite/instance/rattrapage", { method: "POST", body: JSON.stringify(depuis ? { depuis } : {}) }),
   comptaChangerCompte: (ligneId, data) => request(`/comptabilite/lignes/${ligneId}/compte`, { method: "PATCH", body: JSON.stringify(data) }),
+  // --- Comptabilite : import Sage (grand livre, balance) ---
+  comptaImportModele: (type) => requestDownload(`/comptabilite/import/modele/${type}`, `modele_import_${type}.xlsx`),
+  comptaImportApercu: (type, formData) => requestUpload(`/comptabilite/import/${type}/apercu`, formData),
+  comptaImporter: (type, formData) => requestUpload(`/comptabilite/import/${type}`, formData),
+  comptaImportLots: () => request("/comptabilite/import/lots"),
+  comptaImportAnnuler: (id) => request(`/comptabilite/import/lots/${id}/annuler`, { method: "POST" }),
   comptaRegles: () => request("/comptabilite/regles-compte-vente"),
   comptaSupprimerRegle: (id) => request(`/comptabilite/regles-compte-vente/${id}`, { method: "DELETE" }),
 };

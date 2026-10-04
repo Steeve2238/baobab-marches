@@ -94,6 +94,7 @@ export default function ComptabiliteAccueilPage() {
             <Raccourci href="/comptabilite/grand-livre" titre={t("comptaNavGrandLivre")} texte={t("comptaRaccourciGlTexte")} />
             <Raccourci href="/comptabilite/balance" titre={t("comptaNavBalance")} texte={t("comptaRaccourciBalanceTexte")} />
             <Raccourci href="/comptabilite/plan" titre={t("comptaNavPlan")} texte={t("comptaRaccourciPlanTexte")} />
+            <Raccourci href="/comptabilite/importer" titre={t("comptaRaccourciImport")} texte={t("comptaRaccourciImportTexte")} />
           </div>
           {exercices.length > 0 && (
             <div className="card" style={{ marginTop: 18 }}>
