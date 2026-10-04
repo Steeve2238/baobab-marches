@@ -6,6 +6,8 @@ const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireRoleOuValidateurUniversel, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { genererChronogrammeConsultation } = require("../services/chronogrammeConsultationEngine");
+const { assurerTiersPourClientSilencieux } = require("../services/comptaService");
+const comptaVentes = require("../services/comptaVentes");
 const { verifierAffectationValide } = require("../utils/affectationTache");
 
 const router = express.Router();
@@ -294,6 +296,8 @@ router.post("/clients", async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
       [uuidv4(), req.user.tenantId, nom.trim(), adresse || null, telephone || null, email || null]
     );
+    // Compte tiers comptable (CAxxx) : cree automatiquement, sans jamais faire echouer la creation du client.
+    await assurerTiersPourClientSilencieux(req.user.tenantId, result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -315,6 +319,8 @@ router.patch("/clients/:id", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "VENTE_CLIENT_NOT_FOUND") });
     }
+    // Repercute le nouveau nom sur le compte tiers (le code du tiers, lui, ne change jamais).
+    await assurerTiersPourClientSilencieux(req.user.tenantId, result.rows[0]);
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -1525,6 +1531,8 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
     }
 
     await client.query("COMMIT");
+    // Ecriture comptable en instance (chantier E, phase 2) : jamais bloquante pour la facturation.
+    await comptaVentes.apresGenerationFacture(req.user.tenantId, req.user.sub, facture.id);
     res.status(201).json({ ...facture, lignes: lignesDevis });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -1547,6 +1555,7 @@ router.patch("/factures/:id", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "VENTE_FACTURE_NOT_FOUND") });
     }
+    await comptaVentes.apresModificationFacture(req.user.tenantId, id);
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -1566,6 +1575,7 @@ router.patch("/factures/:id/marquer-payee", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(409).json({ error: t(req, "VENTE_FACTURE_STATUT_INVALID") });
     }
+    await comptaVentes.apresPaiementFacture(req.user.tenantId, req.user.sub, id);
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -1584,6 +1594,7 @@ router.patch("/factures/:id/annuler", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(409).json({ error: t(req, "VENTE_FACTURE_STATUT_INVALID") });
     }
+    await comptaVentes.apresAnnulationFacture(req.user.tenantId, req.user.sub, id);
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);

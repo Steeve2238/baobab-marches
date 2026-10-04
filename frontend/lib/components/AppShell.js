@@ -32,6 +32,8 @@ const NAV_ITEMS = [
   // backend (moduleKeyAny, distinct de moduleKey qui exige une egalite
   // exacte a une seule cle).
   { href: "/calcul-prix", key: "navCalculPrix", moduleKeyAny: ["marches", "dossiers"] },
+  // Comptabilite : cle stricte (ni tableau de bord ni validateur universel seul) - voir routes/comptabilite.js.
+  { href: "/comptabilite", key: "navComptabilite", moduleKeyStrictAny: ["comptabilite", "comptabilite-validation"] },
   { href: "/rh/demandes", key: "navDemandesRH" },
   { href: "/rh/fiches-temps", key: "navFichesTemps" },
   { href: "/rh/personnel", key: "navRH", moduleKey: "rh" },
@@ -106,6 +108,11 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
       // routes/ventes.js.
       if (item.moduleKey === "marches" && permissions.validateurUniversel) return true;
       return (permissions.modules || []).includes(item.moduleKey);
+    }
+    if (item.moduleKeyStrictAny) {
+      if (!permissions) return false;
+      if (permissions.admin) return true;
+      return item.moduleKeyStrictAny.some((m) => (permissions.modules || []).includes(m));
     }
     if (item.moduleKeyAny) {
       if (!permissions) return false;

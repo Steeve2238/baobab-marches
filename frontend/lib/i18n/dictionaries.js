@@ -3,6 +3,8 @@
  * Le contenu métier saisi par les utilisateurs (intitulés de dossiers,
  * clauses, notes...) n'est jamais traduit ici — uniquement l'interface.
  */
+import { COMPTA_FR, COMPTA_EN } from "./comptaDictionary";
+
 export const DICTIONARIES = {
   fr: {
     tagline: "Pilotage des marchés publics & privés",
@@ -2216,6 +2218,10 @@ export const DICTIONARIES = {
     dateLocale: "en-US",
   },
 };
+
+// Textes du module Comptabilite (fichier separe pour ne pas alourdir ce dictionnaire)
+Object.assign(DICTIONARIES.fr, COMPTA_FR);
+Object.assign(DICTIONARIES.en, COMPTA_EN);
 
 // Libellés des statuts de dossier (valeurs stockées en base, non traduites)
 export const STATUT_LABELS = {

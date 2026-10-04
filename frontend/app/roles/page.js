@@ -28,6 +28,12 @@ const MODULES_DISPONIBLES = [
   // ete gatees par module et le restent, ouvertes a tout employe connecte
   // (voir AppShell.js et backend/src/routes/rh.js).
   { key: "rh", labelKey: "navRH" },
+  // Comptabilite (chantier E, 04/10/2026) : "comptabilite" = consultation, saisie
+  // de brouillons, creation de comptes ; "comptabilite-validation" = validation et
+  // extourne des ecritures, modification du plan comptable, parametres, exercices
+  // (comptable senior / Directeur Financier). Voir routes/comptabilite.js.
+  { key: "comptabilite", labelKey: "navComptabilite" },
+  { key: "comptabilite-validation", labelKey: "navComptabiliteValidation" },
 ];
 
 const FORM_VIDE = {

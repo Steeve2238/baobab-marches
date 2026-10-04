@@ -3,6 +3,7 @@ const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
 const { requireAuth, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
+const { assurerTiersPourFournisseurSilencieux } = require("../services/comptaService");
 const { calculerOffre } = require("../services/calculPrixEngine");
 
 const router = express.Router();
@@ -68,6 +69,7 @@ router.post("/fournisseurs", async (req, res) => {
       `INSERT INTO fournisseur (id, tenant_id, nom, pays) VALUES ($1, $2, $3, $4) RETURNING id, nom, pays`,
       [uuidv4(), req.user.tenantId, nom.trim(), pays || null]
     );
+    await assurerTiersPourFournisseurSilencieux(req.user.tenantId, result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
