@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api, estAdmin } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
+import { MENTIONS_PRIX_SUGGEREES, analyserSaisiePrix, montantLigneSaisie, totauxPrevisualises } from "../../../../../lib/prixLigne";
 
 const LIGNE_VIDE = { designation: "", unite: "U", quantite: 1, prix_unitaire_ht: "" };
 
@@ -58,17 +59,12 @@ function NouveauDevisFormulaire() {
   // les montants effectivement enregistres sont toujours recalcules par le
   // serveur a partir des memes lignes (jamais fait confiance a un total
   // envoye par le frontend).
-  const lignesCalculees = lignes.map((l) => {
-    const quantite = Number(l.quantite) || 0;
-    const prixUnitaire = Number(l.prix_unitaire_ht) || 0;
-    return { ...l, montant_ht: quantite * prixUnitaire };
-  });
-  const totalHt = lignesCalculees.reduce((acc, l) => acc + l.montant_ht, 0);
+  // Lignes non chiffrees (NC...) : montant null, exclues du total (04/10/2026).
+  const lignesCalculees = lignes.map((l) => ({ ...l, montant_ht: montantLigneSaisie(l) }));
   const pourcentageRemise = Number(form.pourcentage_remise) || 0;
-  const montantRemise = totalHt * (pourcentageRemise / 100);
-  const totalHtNet = totalHt - montantRemise;
-  const montantTva = totalHtNet * (tauxTva / 100);
-  const totalTtc = totalHtNet + montantTva;
+  const { totalHt, montantRemise, htNet: totalHtNet, tva: montantTva, totalTtc, nbNonChiffrees } =
+    totauxPrevisualises(lignes, tauxTva, pourcentageRemise);
+  const totalPartiel = nbNonChiffrees > 0;
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -84,7 +80,8 @@ function NouveauDevisFormulaire() {
           designation: l.designation,
           unite: l.unite,
           quantite: Number(l.quantite),
-          prix_unitaire_ht: Number(l.prix_unitaire_ht),
+          // Nombre OU mention texte (NC...) : le serveur tranche et recalcule.
+          prix_unitaire_ht: String(l.prix_unitaire_ht ?? "").trim(),
         })),
       });
       router.push(`/marches/consultation-restreinte/devis/${nouveau.id}`);
@@ -205,17 +202,24 @@ function NouveauDevisFormulaire() {
                   </td>
                   <td style={{ padding: "4px 6px" }}>
                     <input
-                      required
-                      type="number"
-                      min="0"
-                      step="1"
+                      type="text"
+                      inputMode="decimal"
+                      list="mentions-prix"
+                      maxLength={80}
                       value={ligne.prix_unitaire_ht}
                       onChange={(e) => majLigne(index, "prix_unitaire_ht", e.target.value)}
                       style={inputStyleCompact}
+                      placeholder={t("venteMentionNcPlaceholder")}
                     />
                   </td>
                   <td className="mono" style={{ padding: "4px 6px", fontSize: 12.5, textAlign: "right" }}>
-                    {ligne.montant_ht.toLocaleString()}
+                    {ligne.montant_ht === null ? (
+                      <span style={{ fontStyle: "italic", color: "var(--brique)" }}>
+                        {analyserSaisiePrix(ligne.prix_unitaire_ht).mention || "NC"}
+                      </span>
+                    ) : (
+                      ligne.montant_ht.toLocaleString()
+                    )}
                   </td>
                   <td style={{ padding: "4px 6px" }}>
                     <button type="button" onClick={() => supprimerLigne(index)} style={boutonSupprimerStyle} title={t("removeLine")}>
@@ -228,9 +232,16 @@ function NouveauDevisFormulaire() {
           </table>
         </div>
 
+        <datalist id="mentions-prix">
+          {MENTIONS_PRIX_SUGGEREES.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+
         <button type="button" onClick={ajouterLigne} style={{ ...boutonSecondaireStyle, marginTop: 8 }}>
           {t("venteAddLineButton")}
         </button>
+        <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 6, marginBottom: 0 }}>{t("venteMentionNcAide")}</p>
 
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
           <div style={{ maxWidth: 200 }}>
@@ -250,7 +261,7 @@ function NouveauDevisFormulaire() {
 
         <div style={{ marginTop: 10, marginLeft: "auto", maxWidth: 280, display: "grid", gap: 4 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
-            <span>{t("venteTotalHtLabel")}</span>
+            <span>{totalPartiel ? t("venteTotalHtPartielLabel") : t("venteTotalHtLabel")}</span>
             <span className="mono">{totalHt.toLocaleString()} XOF</span>
           </div>
           {pourcentageRemise > 0 && (
@@ -270,10 +281,15 @@ function NouveauDevisFormulaire() {
             <span className="mono">{montantTva.toLocaleString()} XOF</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: "var(--petrol)" }}>
-            <span>{t("venteTotalTtcLabel")}</span>
+            <span>{totalPartiel ? t("venteTotalTtcPartielLabel") : t("venteTotalTtcLabel")}</span>
             <span className="mono">{totalTtc.toLocaleString()} XOF</span>
           </div>
         </div>
+        {totalPartiel && (
+          <p style={{ fontSize: 12, color: "var(--brique)", marginTop: 10, marginBottom: 0, textAlign: "right" }}>
+            {t("venteTotalPartielAvertissement").replace("{n}", String(nbNonChiffrees))}
+          </p>
+        )}
 
         <button type="submit" disabled={enregistrement} style={{ ...boutonPrincipalStyle, marginTop: 20 }}>
           {enregistrement ? t("saCreating") : t("venteCreateDevisButton")}

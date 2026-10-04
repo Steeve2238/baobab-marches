@@ -7,6 +7,8 @@ import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import { estAdmin, getUtilisateurCourant } from "../../../../lib/api";
 import AppShell from "../../../../lib/components/AppShell";
+import MontantLettresBloc, { AvertissementTotalPartiel } from "../../../../lib/components/MontantLettresBloc";
+import { MENTIONS_PRIX_SUGGEREES, analyserSaisiePrix, ligneApiNonChiffree, mentionLigneApi, montantLigneSaisie } from "../../../../lib/prixLigne";
 
 // Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
 // objet Date JS (qui reintroduirait une conversion de fuseau horaire cote
@@ -124,7 +126,7 @@ export default function DevisDetailPage() {
       delai_livraison: devis.delai_livraison || "",
       validite_offre: devis.validite_offre || "",
     });
-    setLignesEdition(devis.lignes.map((l) => ({ ...l })));
+    setLignesEdition(devis.lignes.map((l) => ({ ...l, prix_unitaire_ht: ligneApiNonChiffree(l) ? mentionLigneApi(l) : l.prix_unitaire_ht })));
     setFormOuvert(true);
   }
 
@@ -151,7 +153,7 @@ export default function DevisDetailPage() {
           designation: l.designation,
           unite: l.unite,
           quantite: Number(l.quantite),
-          prix_unitaire_ht: Number(l.prix_unitaire_ht),
+          prix_unitaire_ht: String(l.prix_unitaire_ht ?? "").trim(),
         })),
       });
       setDevis(maj);
@@ -182,6 +184,10 @@ export default function DevisDetailPage() {
   const peutEditer = ["BROUILLON", "ENVOYE", "REFUSE"].includes(devis.statut);
   const peutValider = ["BROUILLON", "ENVOYE"].includes(devis.statut) && possedeRole(["DIRECTION"]);
   const peutFacturer = devis.statut === "VALIDE" && !devis.facture && possedeRole(["COMPTABLE", "FINANCIER"]);
+  // Lignes non chiffrees (NC) : total partiel, devis ni validable ni facturable.
+  const nbNonChiffrees = Number(devis.nb_lignes_non_chiffrees) || 0;
+  const totalPartiel = nbNonChiffrees > 0;
+  const texteTotalPartiel = t("venteTotalPartielAvertissement").replace("{n}", String(nbNonChiffrees));
 
   return (
     <AppShell title={devis.numero} backHref="/ventes/devis">
@@ -203,7 +209,7 @@ export default function DevisDetailPage() {
             </button>
           )}
           {peutValider && (
-            <button onClick={handleValider} disabled={action} style={boutonPrincipalStyle}>
+            <button onClick={handleValider} disabled={action || totalPartiel} title={totalPartiel ? t("venteDevisPartielValidationAide") : undefined} style={{ ...boutonPrincipalStyle, ...(totalPartiel ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}>
               {t("venteValidateDevisButton")}
             </button>
           )}
@@ -279,7 +285,7 @@ export default function DevisDetailPage() {
               </thead>
               <tbody>
                 {lignesEdition.map((ligne, index) => {
-                  const montant = (Number(ligne.quantite) || 0) * (Number(ligne.prix_unitaire_ht) || 0);
+                  const montant = montantLigneSaisie(ligne);
                   return (
                     <tr key={index}>
                       <td style={{ padding: "4px 6px" }}>
@@ -292,9 +298,15 @@ export default function DevisDetailPage() {
                         <input required type="number" min="0.01" step="0.01" value={ligne.quantite} onChange={(e) => majLigneEdition(index, "quantite", e.target.value)} style={inputStyleCompact} />
                       </td>
                       <td style={{ padding: "4px 6px" }}>
-                        <input required type="number" min="0" step="1" value={ligne.prix_unitaire_ht} onChange={(e) => majLigneEdition(index, "prix_unitaire_ht", e.target.value)} style={inputStyleCompact} />
+                        <input type="text" inputMode="decimal" list="mentions-prix" maxLength={80} value={ligne.prix_unitaire_ht} onChange={(e) => majLigneEdition(index, "prix_unitaire_ht", e.target.value)} style={inputStyleCompact} placeholder={t("venteMentionNcPlaceholder")} />
                       </td>
-                      <td className="mono" style={{ padding: "4px 6px", fontSize: 12.5, textAlign: "right" }}>{montant.toLocaleString()}</td>
+                      <td className="mono" style={{ padding: "4px 6px", fontSize: 12.5, textAlign: "right" }}>
+                        {montant === null ? (
+                          <span style={{ fontStyle: "italic", color: "var(--brique)" }}>{analyserSaisiePrix(ligne.prix_unitaire_ht).mention || "NC"}</span>
+                        ) : (
+                          montant.toLocaleString()
+                        )}
+                      </td>
                       <td style={{ padding: "4px 6px" }}>
                         <button type="button" onClick={() => supprimerLigneEdition(index)} style={boutonSupprimerStyle} title={t("removeLine")}>×</button>
                       </td>
@@ -305,6 +317,12 @@ export default function DevisDetailPage() {
             </table>
           </div>
           <button type="button" onClick={ajouterLigneEdition} style={{ ...boutonSecondaireStyle, marginTop: 8 }}>{t("venteAddLineButton")}</button>
+          <datalist id="mentions-prix">
+            {MENTIONS_PRIX_SUGGEREES.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+          <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 6, marginBottom: 0 }}>{t("venteMentionNcAide")}</p>
 
           <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
             <button type="submit" disabled={enregistrementEdition} style={boutonPrincipalStyle}>{t("save")}</button>
@@ -361,8 +379,16 @@ export default function DevisDetailPage() {
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.designation}</td>
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.unite}</td>
                 <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.quantite).toLocaleString()}</td>
-                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.prix_unitaire_ht).toLocaleString()}</td>
-                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.montant_ht).toLocaleString()}</td>
+                {ligneApiNonChiffree(l) ? (
+                  <td colSpan={2} style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right", fontStyle: "italic", fontWeight: 600 }}>
+                    {mentionLigneApi(l)}
+                  </td>
+                ) : (
+                  <>
+                    <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.prix_unitaire_ht).toLocaleString()}</td>
+                    <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.montant_ht).toLocaleString()}</td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
@@ -370,7 +396,7 @@ export default function DevisDetailPage() {
 
         <div style={{ marginTop: 14, marginLeft: "auto", maxWidth: 260, display: "grid", gap: 4 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
-            <span>{t("venteTotalHtLabel")}</span>
+            <span>{totalPartiel ? t("venteTotalHtPartielLabel") : t("venteTotalHtLabel")}</span>
             <span className="mono">{Number(devis.total_ht).toLocaleString()} XOF</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
@@ -378,10 +404,17 @@ export default function DevisDetailPage() {
             <span className="mono">{Number(devis.montant_tva).toLocaleString()} XOF</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: "var(--petrol)" }}>
-            <span>{t("venteTotalTtcLabel")}</span>
+            <span>{totalPartiel ? t("venteTotalTtcPartielLabel") : t("venteTotalTtcLabel")}</span>
             <span className="mono">{Number(devis.total_ttc).toLocaleString()} XOF</span>
           </div>
         </div>
+
+        {totalPartiel && <AvertissementTotalPartiel texte={texteTotalPartiel} />}
+        <MontantLettresBloc
+          label={totalPartiel ? t("venteDevisArretePartielLabel") : t("venteDevisArreteLabel")}
+          montant={devis.total_ttc}
+          partiel={totalPartiel}
+        />
 
         {(devis.conditions_paiement || devis.delai_livraison || devis.validite_offre) && (
           <div style={{ marginTop: 18, fontSize: 11.5, color: "var(--sub)", display: "grid", gap: 3 }}>

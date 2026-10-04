@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api, estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
+import MontantLettresBloc from "../../../../../lib/components/MontantLettresBloc";
 
 // Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
 // objet Date JS (qui reintroduirait une conversion de fuseau horaire cote
@@ -305,6 +306,17 @@ export default function FactureVenteDetailPage() {
             </div>
           </div>
         )}
+
+        <MontantLettresBloc
+          label={
+            facture.type_facturation === "ACOMPTE"
+              ? t("venteFactureArreteAcompteLabel")
+              : facture.type_facturation === "SOLDE"
+                ? t("venteFactureArreteSoldeLabel")
+                : t("venteFactureArreteLabel")
+          }
+          montant={facture.type_facturation && facture.type_facturation !== "INTEGRALE" ? facture.montant_net_a_payer : facture.total_ttc}
+        />
 
         {facture.statut === "PAYEE" && (
           <div className="no-print" style={{ marginTop: 14, fontSize: 11.5, color: "var(--sub)" }}>

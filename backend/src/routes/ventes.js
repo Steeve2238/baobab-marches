@@ -153,25 +153,82 @@ function formaterNumeroVente(annee, sequence) {
 // la TVA et le total TTC sont ensuite calcules sur le HT NET de remise. Si
 // aucun pourcentage n'est fourni (devis sans remise, cas normal), le calcul
 // est strictement identique a avant.
+//
+// Lignes non chiffrees (chantier du 04/10/2026) : le prix unitaire peut etre
+// un nombre OU une mention texte ("NC", "Non chiffre", "En attente
+// d'informations"...). Une ligne a mention texte (ou sans prix) est enregistree
+// avec non_chiffre = true et sa mention ; elle est EXCLUE de total_ht (jamais
+// comptee comme un montant nul valide). Un 0 saisi explicitement reste un prix
+// chiffre. nb_lignes_non_chiffrees permet de signaler un total partiel.
+const MENTION_PRIX_DEFAUT = "NC";
+const MENTION_PRIX_MAX = 80;
+
+// Renvoie { chiffre: true, valeur } | { chiffre: false, mention } | { invalide: true }.
+function analyserPrixLigne(brut) {
+  if (brut && brut.non_chiffre === true) {
+    return { chiffre: false, mention: normaliserMentionPrix(brut.mention_prix) };
+  }
+  const valeurBrute = brut ? brut.prix_unitaire_ht : undefined;
+  if (typeof valeurBrute === "number") {
+    if (!Number.isFinite(valeurBrute) || valeurBrute < 0) return { invalide: true };
+    return { chiffre: true, valeur: valeurBrute };
+  }
+  if (valeurBrute === undefined || valeurBrute === null) {
+    return { chiffre: false, mention: MENTION_PRIX_DEFAUT };
+  }
+  const texte = String(valeurBrute).trim();
+  if (texte === "") return { chiffre: false, mention: MENTION_PRIX_DEFAUT };
+  // Nombre ecrit en texte : "1500", "1 500", "1500,50", "1500.50"
+  const compact = texte.replace(/[\s\u00a0\u202f]/g, "").replace(",", ".");
+  if (/^-?\d+(\.\d+)?$/.test(compact)) {
+    const valeur = Number(compact);
+    if (!Number.isFinite(valeur) || valeur < 0) return { invalide: true };
+    return { chiffre: true, valeur };
+  }
+  return { chiffre: false, mention: normaliserMentionPrix(texte) };
+}
+
+function normaliserMentionPrix(brut) {
+  const texte = String(brut === undefined || brut === null ? "" : brut).replace(/\s+/g, " ").trim();
+  return (texte || MENTION_PRIX_DEFAUT).slice(0, MENTION_PRIX_MAX);
+}
+
 function calculerLignesEtTotaux(lignesBrutes, tauxTva, pourcentageRemiseBrut) {
   if (!Array.isArray(lignesBrutes) || lignesBrutes.length === 0) {
     return { erreur: "VIDE" };
   }
   const lignes = [];
   let totalHt = 0;
+  let nbNonChiffrees = 0;
   for (const brut of lignesBrutes) {
     const quantite = Number(brut.quantite);
-    const prixUnitaireHt = Number(brut.prix_unitaire_ht);
-    if (!brut.designation || !Number.isFinite(quantite) || quantite <= 0 || !Number.isFinite(prixUnitaireHt) || prixUnitaireHt < 0) {
+    const designation = typeof brut.designation === "string" ? brut.designation.trim() : "";
+    const prix = analyserPrixLigne(brut);
+    if (!designation || !Number.isFinite(quantite) || quantite <= 0 || prix.invalide) {
       return { erreur: "LIGNE_INVALIDE" };
     }
-    const montantHt = Math.round(quantite * prixUnitaireHt * 100) / 100;
+    if (!prix.chiffre) {
+      nbNonChiffrees += 1;
+      lignes.push({
+        designation,
+        unite: (brut.unite || "U").trim(),
+        quantite,
+        prix_unitaire_ht: 0,
+        montant_ht: 0,
+        non_chiffre: true,
+        mention_prix: prix.mention,
+      });
+      continue;
+    }
+    const montantHt = Math.round(quantite * prix.valeur * 100) / 100;
     lignes.push({
-      designation: brut.designation.trim(),
+      designation,
       unite: (brut.unite || "U").trim(),
       quantite,
-      prix_unitaire_ht: prixUnitaireHt,
+      prix_unitaire_ht: prix.valeur,
       montant_ht: montantHt,
+      non_chiffre: false,
+      mention_prix: null,
     });
     totalHt += montantHt;
   }
@@ -195,6 +252,7 @@ function calculerLignesEtTotaux(lignesBrutes, tauxTva, pourcentageRemiseBrut) {
     montant_remise: montantRemise,
     montant_tva: montantTva,
     total_ttc: totalTtc,
+    nb_lignes_non_chiffrees: nbNonChiffrees,
   };
 }
 
@@ -242,7 +300,7 @@ function normaliserStatutImport(brut) {
 
 async function chargerLignesDevis(devisId) {
   const result = await db.query(
-    `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht
+    `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix
      FROM devis_ligne WHERE devis_id = $1 ORDER BY ordre ASC`,
     [devisId]
   );
@@ -251,7 +309,7 @@ async function chargerLignesDevis(devisId) {
 
 async function chargerLignesFacture(factureId) {
   const result = await db.query(
-    `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht
+    `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix
      FROM facture_vente_ligne WHERE facture_vente_id = $1 ORDER BY ordre ASC`,
     [factureId]
   );
@@ -972,13 +1030,15 @@ router.post("/devis", async (req, res) => {
     const devisResult = await client.query(
       `INSERT INTO devis (id, tenant_id, numero, consultation_id, client_commercial_id, objet, date_devis,
                            conditions_paiement, delai_livraison, validite_offre, taux_tva_pourcentage,
-                           total_ht, pourcentage_remise, montant_remise, montant_tva, total_ttc, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+                           total_ht, pourcentage_remise, montant_remise, montant_tva, total_ttc, cree_par,
+                           nb_lignes_non_chiffrees)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        RETURNING *`,
       [
         uuidv4(), req.user.tenantId, numero, consultation_id || null, client_commercial_id, objet || null, date_devis || null,
         conditions_paiement || null, delai_livraison || null, validite_offre || null, tauxTva,
         calcul.total_ht, calcul.pourcentage_remise, calcul.montant_remise, calcul.montant_tva, calcul.total_ttc, req.user.sub,
+        calcul.nb_lignes_non_chiffrees,
       ]
     );
     const devis = devisResult.rows[0];
@@ -986,9 +1046,9 @@ router.post("/devis", async (req, res) => {
     let ordre = 0;
     for (const ligne of calcul.lignes) {
       await client.query(
-        `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [uuidv4(), devis.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
+        `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [uuidv4(), devis.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre, ligne.mention_prix]
       );
     }
 
@@ -1056,6 +1116,7 @@ router.patch("/devis/:id", async (req, res) => {
       montant_remise: devisActuel.montant_remise,
       montant_tva: devisActuel.montant_tva,
       total_ttc: devisActuel.total_ttc,
+      nb_lignes_non_chiffrees: devisActuel.nb_lignes_non_chiffrees,
     };
     // La remise peut etre modifiee meme sans retoucher les lignes (ex :
     // negociation apres coup sur un devis deja chiffre) - on recalcule alors
@@ -1063,6 +1124,7 @@ router.patch("/devis/:id", async (req, res) => {
     if (lignes || pourcentage_remise !== undefined) {
       const lignesPourCalcul = lignes || (await chargerLignesDevis(id)).map((l) => ({
         designation: l.designation, unite: l.unite, quantite: l.quantite, prix_unitaire_ht: l.prix_unitaire_ht,
+        non_chiffre: l.non_chiffre, mention_prix: l.mention_prix,
       }));
       const remisePourCalcul = pourcentage_remise !== undefined ? pourcentage_remise : devisActuel.pourcentage_remise;
       const calcul = calculerLignesEtTotaux(lignesPourCalcul, devisActuel.taux_tva_pourcentage, remisePourCalcul);
@@ -1092,9 +1154,9 @@ router.patch("/devis/:id", async (req, res) => {
         let ordre = 0;
         for (const ligne of calcul.lignes) {
           await client.query(
-            `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-            [uuidv4(), id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
+            `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [uuidv4(), id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre, ligne.mention_prix]
           );
         }
       }
@@ -1110,12 +1172,13 @@ router.patch("/devis/:id", async (req, res) => {
            total_ht = $6, pourcentage_remise = $7, montant_remise = $8, montant_tva = $9, total_ttc = $10,
            statut = CASE WHEN $11 THEN 'BROUILLON' ELSE statut END,
            valide_par = CASE WHEN $11 THEN NULL ELSE valide_par END,
-           date_validation = CASE WHEN $11 THEN NULL ELSE date_validation END
+           date_validation = CASE WHEN $11 THEN NULL ELSE date_validation END,
+           nb_lignes_non_chiffrees = $14
        WHERE id = $12 AND tenant_id = $13`,
       [
         objet || null, date_devis || null, conditions_paiement || null, delai_livraison || null, validite_offre || null,
         totaux.total_ht, totaux.pourcentage_remise, totaux.montant_remise, totaux.montant_tva, totaux.total_ttc,
-        repasseEnBrouillon, id, req.user.tenantId,
+        repasseEnBrouillon, id, req.user.tenantId, totaux.nb_lignes_non_chiffrees || 0,
       ]
     );
     // Relit avec la jointure client (comme GET /devis/:id) plutot que de
@@ -1329,6 +1392,17 @@ router.post("/devis/:id/valider", requireRoleOuValidateurUniversel(...ROLES_VALI
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
+    // Un devis qui comporte encore des lignes non chiffrees (NC) ne peut pas etre
+    // valide : son total n'est que partiel, il ne doit jamais devenir le
+    // montant definitif de la commande.
+    const nonChiffre = await client.query(
+      `SELECT nb_lignes_non_chiffrees FROM devis WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+      [id, req.user.tenantId]
+    );
+    if (nonChiffre.rows.length > 0 && Number(nonChiffre.rows[0].nb_lignes_non_chiffrees) > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_DEVIS_LIGNES_NON_CHIFFREES") });
+    }
     const result = await client.query(
       `UPDATE devis SET statut = 'VALIDE', valide_par = $1, date_validation = now()
        WHERE id = $2 AND tenant_id = $3 AND statut IN ('BROUILLON','ENVOYE') RETURNING *`,
@@ -1457,6 +1531,10 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_VALIDE") });
     }
+    if (Number(devis.nb_lignes_non_chiffrees) > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_DEVIS_LIGNES_NON_CHIFFREES") });
+    }
 
     // Le verrou FOR UPDATE ci-dessus sur la ligne devis serialise toute
     // generation concurrente de facture pour CE devis (une 2e requete
@@ -1524,9 +1602,9 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
     let ordre = 0;
     for (const ligne of lignesDevis) {
       await client.query(
-        `INSERT INTO facture_vente_ligne (id, facture_vente_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [uuidv4(), facture.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht]
+        `INSERT INTO facture_vente_ligne (id, facture_vente_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [uuidv4(), facture.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre === true, ligne.mention_prix || null]
       );
     }
 

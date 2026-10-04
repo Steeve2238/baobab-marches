@@ -72,6 +72,9 @@ export default function DevisListePage() {
                     <div style={{ fontWeight: 600, fontSize: 13.5 }}>{d.numero} — {d.client_nom}</div>
                     <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
                       {d.objet || "—"} · {Number(d.total_ttc).toLocaleString()} XOF TTC
+                      {Number(d.nb_lignes_non_chiffrees) > 0 && (
+                        <span style={{ marginLeft: 8, color: "var(--brique)", fontWeight: 600 }}>· {t("venteDevisPartielBadge")} ({d.nb_lignes_non_chiffrees} NC)</span>
+                      )}
                     </div>
                   </div>
                   <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap", ...style }}>

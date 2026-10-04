@@ -7,6 +7,8 @@ import { api } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import { estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import AppShell from "../../../../../lib/components/AppShell";
+import MontantLettresBloc, { AvertissementTotalPartiel } from "../../../../../lib/components/MontantLettresBloc";
+import { MENTIONS_PRIX_SUGGEREES, analyserSaisiePrix, ligneApiNonChiffree, mentionLigneApi, montantLigneSaisie } from "../../../../../lib/prixLigne";
 
 // Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
 // objet Date JS (qui reintroduirait une conversion de fuseau horaire cote
@@ -165,7 +167,8 @@ export default function DevisDetailPage() {
       pourcentage_remise: devis.pourcentage_remise || "0",
       client_commercial_id: devis.client_commercial_id,
     });
-    setLignesEdition(devis.lignes.map((l) => ({ ...l })));
+    // Une ligne non chiffree est reeditee avec sa mention (NC...) dans le champ prix.
+    setLignesEdition(devis.lignes.map((l) => ({ ...l, prix_unitaire_ht: ligneApiNonChiffree(l) ? mentionLigneApi(l) : l.prix_unitaire_ht })));
     setFormOuvert(true);
   }
 
@@ -202,7 +205,8 @@ export default function DevisDetailPage() {
           designation: l.designation,
           unite: l.unite,
           quantite: Number(l.quantite),
-          prix_unitaire_ht: Number(l.prix_unitaire_ht),
+          // Nombre OU mention texte (NC...) : le serveur tranche et recalcule.
+          prix_unitaire_ht: String(l.prix_unitaire_ht ?? "").trim(),
         })),
       });
       setFormOuvert(false);
@@ -271,6 +275,11 @@ export default function DevisDetailPage() {
   const peutValider =
     ["BROUILLON", "ENVOYE"].includes(devis.statut) &&
     (possedeRole(["DIRECTION"]) || !!permissions?.validateurUniversel);
+  // Lignes non chiffrees (NC) : le total n'est que partiel, le devis ne peut
+  // etre ni valide ni facture tant qu'elles existent (garde-fou aussi cote serveur).
+  const nbNonChiffrees = Number(devis.nb_lignes_non_chiffrees) || 0;
+  const totalPartiel = nbNonChiffrees > 0;
+  const texteTotalPartiel = t("venteTotalPartielAvertissement").replace("{n}", String(nbNonChiffrees));
   // "Reste a facturer" (calcule cote serveur, voir GET /devis/:id) plutot que
   // "pas encore de facture" : un devis VALIDE peut desormais avoir plusieurs
   // factures (acompte(s) + solde, migration 024) - on peut continuer a en
@@ -316,7 +325,7 @@ export default function DevisDetailPage() {
             </button>
           )}
           {peutValider && (
-            <button onClick={handleValider} disabled={action} style={boutonPrincipalStyle}>
+            <button onClick={handleValider} disabled={action || totalPartiel} title={totalPartiel ? t("venteDevisPartielValidationAide") : undefined} style={{ ...boutonPrincipalStyle, ...(totalPartiel ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}>
               {t("venteValidateDevisButton")}
             </button>
           )}
@@ -335,6 +344,13 @@ export default function DevisDetailPage() {
           </button>
         </div>
       </div>
+
+      {totalPartiel && (
+        <div className="no-print card" style={{ marginBottom: 16, borderColor: "var(--brique)" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--brique)" }}>{texteTotalPartiel}</div>
+          <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 4 }}>{t("venteDevisPartielValidationAide")}</div>
+        </div>
+      )}
 
       {devis.statut === "VALIDE" && (
         <div className="no-print card" style={{ marginBottom: 16 }}>
@@ -517,7 +533,7 @@ export default function DevisDetailPage() {
               </thead>
               <tbody>
                 {lignesEdition.map((ligne, index) => {
-                  const montant = (Number(ligne.quantite) || 0) * (Number(ligne.prix_unitaire_ht) || 0);
+                  const montant = montantLigneSaisie(ligne);
                   return (
                     <tr key={index}>
                       <td style={{ padding: "4px 6px" }}>
@@ -530,9 +546,15 @@ export default function DevisDetailPage() {
                         <input required type="number" min="0.01" step="0.01" value={ligne.quantite} onChange={(e) => majLigneEdition(index, "quantite", e.target.value)} style={inputStyleCompact} />
                       </td>
                       <td style={{ padding: "4px 6px" }}>
-                        <input required type="number" min="0" step="1" value={ligne.prix_unitaire_ht} onChange={(e) => majLigneEdition(index, "prix_unitaire_ht", e.target.value)} style={inputStyleCompact} />
+                        <input type="text" inputMode="decimal" list="mentions-prix" maxLength={80} value={ligne.prix_unitaire_ht} onChange={(e) => majLigneEdition(index, "prix_unitaire_ht", e.target.value)} style={inputStyleCompact} placeholder={t("venteMentionNcPlaceholder")} />
                       </td>
-                      <td className="mono" style={{ padding: "4px 6px", fontSize: 12.5, textAlign: "right" }}>{montant.toLocaleString()}</td>
+                      <td className="mono" style={{ padding: "4px 6px", fontSize: 12.5, textAlign: "right" }}>
+                        {montant === null ? (
+                          <span style={{ fontStyle: "italic", color: "var(--brique)" }}>{analyserSaisiePrix(ligne.prix_unitaire_ht).mention || "NC"}</span>
+                        ) : (
+                          montant.toLocaleString()
+                        )}
+                      </td>
                       <td style={{ padding: "4px 6px" }}>
                         <button type="button" onClick={() => supprimerLigneEdition(index)} style={boutonSupprimerStyle} title={t("removeLine")}>×</button>
                       </td>
@@ -542,7 +564,13 @@ export default function DevisDetailPage() {
               </tbody>
             </table>
           </div>
+          <datalist id="mentions-prix">
+            {MENTIONS_PRIX_SUGGEREES.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
           <button type="button" onClick={ajouterLigneEdition} style={{ ...boutonSecondaireStyle, marginTop: 8 }}>{t("venteAddLineButton")}</button>
+          <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 6, marginBottom: 0 }}>{t("venteMentionNcAide")}</p>
 
           <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
             <div style={{ maxWidth: 200 }}>
@@ -614,8 +642,16 @@ export default function DevisDetailPage() {
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.designation}</td>
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.unite}</td>
                 <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.quantite).toLocaleString()}</td>
-                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.prix_unitaire_ht).toLocaleString()}</td>
-                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.montant_ht).toLocaleString()}</td>
+                {ligneApiNonChiffree(l) ? (
+                  <td colSpan={2} style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right", fontStyle: "italic", fontWeight: 600 }}>
+                    {mentionLigneApi(l)}
+                  </td>
+                ) : (
+                  <>
+                    <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.prix_unitaire_ht).toLocaleString()}</td>
+                    <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.montant_ht).toLocaleString()}</td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
@@ -623,7 +659,7 @@ export default function DevisDetailPage() {
 
         <div style={{ marginTop: 14, marginLeft: "auto", maxWidth: 260, display: "grid", gap: 4 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>
-            <span>{t("venteTotalHtLabel")}</span>
+            <span>{totalPartiel ? t("venteTotalHtPartielLabel") : t("venteTotalHtLabel")}</span>
             <span className="mono">{Number(devis.total_ht).toLocaleString()} XOF</span>
           </div>
           {Number(devis.pourcentage_remise) > 0 && (
@@ -643,10 +679,17 @@ export default function DevisDetailPage() {
             <span className="mono">{Number(devis.montant_tva).toLocaleString()} XOF</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: "var(--petrol)" }}>
-            <span>{t("venteTotalTtcLabel")}</span>
+            <span>{totalPartiel ? t("venteTotalTtcPartielLabel") : t("venteTotalTtcLabel")}</span>
             <span className="mono">{Number(devis.total_ttc).toLocaleString()} XOF</span>
           </div>
         </div>
+
+        {totalPartiel && <AvertissementTotalPartiel texte={texteTotalPartiel} />}
+        <MontantLettresBloc
+          label={totalPartiel ? t("venteDevisArretePartielLabel") : t("venteDevisArreteLabel")}
+          montant={devis.total_ttc}
+          partiel={totalPartiel}
+        />
 
         {(devis.conditions_paiement || devis.delai_livraison || devis.validite_offre) && (
           <div style={{ marginTop: 18, fontSize: 11.5, color: "var(--sub)", display: "grid", gap: 3 }}>
