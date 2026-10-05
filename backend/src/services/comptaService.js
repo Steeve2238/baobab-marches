@@ -595,14 +595,14 @@ async function genererCodeTiers(client, tenantId, typeTiers, nom) {
   return `${prefixe}${String(max + 1).padStart(3, "0")}`;
 }
 
-async function creerTiers(client, tenantId, { type_tiers, nom, client_commercial_id = null, fournisseur_id = null }) {
+async function creerTiers(client, tenantId, { type_tiers, nom, client_commercial_id = null, fournisseur_id = null, transitaire_id = null }) {
   const p = await exigerInitialise(client, tenantId);
   const collectif = type_tiers === "FOURNISSEUR" ? p.compte_fournisseur_collectif : p.compte_client_collectif;
   const code = await genererCodeTiers(client, tenantId, type_tiers, nom);
   const r = await client.query(
-    `INSERT INTO tiers_comptable (id, tenant_id, type_tiers, code, nom, compte_collectif, client_commercial_id, fournisseur_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-    [uuidv4(), tenantId, type_tiers, code, String(nom).trim(), collectif, client_commercial_id, fournisseur_id]
+    `INSERT INTO tiers_comptable (id, tenant_id, type_tiers, code, nom, compte_collectif, client_commercial_id, fournisseur_id, transitaire_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+    [uuidv4(), tenantId, type_tiers, code, String(nom).trim(), collectif, client_commercial_id, fournisseur_id, transitaire_id]
   );
   return r.rows[0];
 }
@@ -630,7 +630,19 @@ async function assurerTiersFournisseur(client, tenantId, fournisseur) {
   return creerTiers(client, tenantId, { type_tiers: "FOURNISSEUR", nom: fournisseur.nom, fournisseur_id: fournisseur.id });
 }
 
-/** Cree les tiers manquants pour tous les clients et fournisseurs de l'entreprise. */
+/** Tiers comptable (type FOURNISSEUR) d'un transitaire : recoit ses factures (fret, transit, douane...). Idempotent. */
+async function assurerTiersTransitaire(client, tenantId, transitaire) {
+  const e = await client.query(`SELECT * FROM tiers_comptable WHERE tenant_id = $1 AND transitaire_id = $2`, [tenantId, transitaire.id]);
+  if (e.rows[0]) {
+    if (transitaire.nom && e.rows[0].nom !== transitaire.nom) {
+      await client.query(`UPDATE tiers_comptable SET nom = $2 WHERE id = $1`, [e.rows[0].id, transitaire.nom]);
+    }
+    return e.rows[0];
+  }
+  return creerTiers(client, tenantId, { type_tiers: "FOURNISSEUR", nom: transitaire.nom, transitaire_id: transitaire.id });
+}
+
+/** Cree les tiers manquants pour tous les clients, fournisseurs et transitaires de l'entreprise. */
 async function synchroniserTiers(client, tenantId) {
   const clients = await client.query(`SELECT id, nom FROM client_commercial WHERE tenant_id = $1 ORDER BY date_creation, nom`, [tenantId]);
   let crees = 0;
@@ -643,6 +655,12 @@ async function synchroniserTiers(client, tenantId) {
   for (const f of fournisseurs.rows) {
     const avant = await client.query(`SELECT 1 FROM tiers_comptable WHERE fournisseur_id = $1`, [f.id]);
     await assurerTiersFournisseur(client, tenantId, f);
+    if (avant.rows.length === 0) crees++;
+  }
+  const transitaires = await client.query(`SELECT id, nom FROM transitaire WHERE tenant_id = $1 ORDER BY nom`, [tenantId]);
+  for (const tr of transitaires.rows) {
+    const avant = await client.query(`SELECT 1 FROM tiers_comptable WHERE transitaire_id = $1`, [tr.id]);
+    await assurerTiersTransitaire(client, tenantId, tr);
     if (avant.rows.length === 0) crees++;
   }
   return crees;
@@ -674,6 +692,19 @@ async function assurerTiersPourClientSilencieux(tenantId, clientCommercial) {
     });
   } catch (err) {
     console.error("Comptabilite : creation du tiers client impossible", err.message);
+  }
+}
+
+async function assurerTiersPourTransitaireSilencieux(tenantId, transitaire) {
+  try {
+    if (!(await moduleComptabiliteActif(tenantId))) return;
+    await avecTransaction(async (client) => {
+      const p = await getParametre(client, tenantId);
+      if (!p || !p.initialisee) return;
+      await assurerTiersTransitaire(client, tenantId, transitaire);
+    });
+  } catch (err) {
+    console.error("Comptabilite : creation du tiers transitaire impossible", err.message);
   }
 }
 
@@ -1016,6 +1047,8 @@ module.exports = {
   synchroniserTiers,
   assurerTiersClient,
   assurerTiersFournisseur,
+  assurerTiersTransitaire,
+  assurerTiersPourTransitaireSilencieux,
   moduleComptabiliteActif,
   assurerTiersPourClientSilencieux,
   assurerTiersPourFournisseurSilencieux,

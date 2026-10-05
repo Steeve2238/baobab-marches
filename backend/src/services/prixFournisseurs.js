@@ -15,10 +15,16 @@ const SELECT_ACHATS = `
          r.fournisseur_id, f.nom AS fournisseur_nom, r.devise, r.cours_devise, r.incoterm,
          l.produit_id, l.reference_fournisseur, l.designation, l.unite, l.quantite, l.prix_unitaire_devise,
          ROUND(l.prix_unitaire_devise * r.cours_devise, 2) AS prix_achat_xof,
-         COALESCE(l.cout_revient_unitaire_xof, ROUND(l.prix_unitaire_devise * r.cours_devise, 2)) AS cout_revient_xof
+         COALESCE(l.cout_revient_unitaire_xof, ROUND(l.prix_unitaire_devise * r.cours_devise, 2)) AS cout_revient_xof,
+         ROUND(cl.prix_unitaire_devise * cf.cours_devise, 2) AS engage_xof,
+         ROUND(co.prix_unitaire_devise * co.cours_devise, 2) AS offert_xof,
+         cf.numero AS commande_numero
   FROM reception_ligne l
   JOIN reception_marchandise r ON r.id = l.reception_id
-  JOIN fournisseur f ON f.id = r.fournisseur_id`;
+  JOIN fournisseur f ON f.id = r.fournisseur_id
+  LEFT JOIN commande_fournisseur_ligne cl ON cl.id = l.commande_ligne_id
+  LEFT JOIN commande_fournisseur cf ON cf.id = cl.commande_id
+  LEFT JOIN calcul_offre co ON co.id = cl.calcul_offre_id`;
 
 function formaterAchat(x) {
   return {
@@ -37,6 +43,10 @@ function formaterAchat(x) {
     prix_unitaire_devise: Number(x.prix_unitaire_devise),
     prix_achat_xof: Number(x.prix_achat_xof),
     cout_revient_xof: Number(x.cout_revient_xof),
+    // Prix unique : offert (Dossier de calcul) -> engage (commande) -> paye (= prix_achat_xof).
+    offert_xof: x.offert_xof === null || x.offert_xof === undefined ? null : Number(x.offert_xof),
+    engage_xof: x.engage_xof === null || x.engage_xof === undefined ? null : Number(x.engage_xof),
+    commande_numero: x.commande_numero || null,
   };
 }
 

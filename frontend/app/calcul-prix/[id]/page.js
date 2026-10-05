@@ -397,6 +397,7 @@ export default function CalculPrixDetailPage() {
                 {formOffreArticleId === article.id && (
                   <FormulaireOffre
                     t={t}
+                    articleId={article.id}
                     formOffre={formOffre}
                     setFormOffre={setFormOffre}
                     onSubmit={handleSubmitOffre}
@@ -517,6 +518,7 @@ export default function CalculPrixDetailPage() {
                                 <td colSpan={11} style={{ padding: "12px 0" }}>
                                   <FormulaireOffre
                                     t={t}
+                                    articleId={offre.calcul_article_id}
                                     formOffre={formOffre}
                                     setFormOffre={setFormOffre}
                                     onSubmit={handleSubmitOffre}
@@ -557,6 +559,9 @@ export default function CalculPrixDetailPage() {
           </div>
         )}
       </section>
+
+      {/* ---------------- ESTIME / ENGAGE / REEL (Lot 5) ---------------- */}
+      <EstimeEngageReel dossier={dossier} t={t} nombre={nombre} />
 
       {/* ---------------- SYNTHESE PAR ARTICLE ---------------- */}
       {dossier.articles.length > 0 && (
@@ -631,6 +636,7 @@ export default function CalculPrixDetailPage() {
 // tableau).
 function FormulaireOffre({
   t,
+  articleId,
   formOffre,
   setFormOffre,
   onSubmit,
@@ -715,6 +721,7 @@ function FormulaireOffre({
               </option>
             ))}
           </select>
+          <CotationsIndicatives transitaireId={formOffre.transitaire_id} t={t} />
           <button
             type="button"
             onClick={() => setAjoutTransitaireOuvert((v) => !v)}
@@ -752,6 +759,15 @@ function FormulaireOffre({
           />
         </div>
       </div>
+
+      <IndicePrix
+        t={t}
+        articleId={articleId}
+        fournisseurId={formOffre.fournisseur_id}
+        onReprendre={(p) =>
+          setFormOffre((f) => ({ ...f, devise: p.devise, prix_unitaire_devise: String(p.prix_unitaire_devise), cours_devise: String(p.cours_devise) }))
+        }
+      />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
         <div>
@@ -951,6 +967,85 @@ function DetailOffre({ t, nombre, pourcentage, calcul }) {
   );
 }
 
+// Cotations encore valables du transitaire choisi (Lot 4) : aide a la saisie du
+// fret et des frais de transit de l'offre. Indicatif seulement : un utilisateur
+// sans acces au module transitaires n'en voit simplement pas.
+function CotationsIndicatives({ transitaireId, t }) {
+  const [liste, setListe] = useState([]);
+  useEffect(() => {
+    setListe([]);
+    if (!transitaireId) return;
+    let actif = true;
+    api
+      .getCotationsTransitaires({ transitaire_id: transitaireId, valides: "1" })
+      .then((r) => actif && setListe(r))
+      .catch(() => {});
+    return () => {
+      actif = false;
+    };
+  }, [transitaireId]);
+  if (liste.length === 0) return null;
+  return (
+    <div style={{ marginTop: 6, fontSize: 11, color: "var(--sub)" }}>
+      <div style={{ fontWeight: 600 }}>{t("calcPrixCotationsTransitaire")}</div>
+      {liste.slice(0, 4).map((c) => (
+        <div key={c.id} className="mono" style={{ fontSize: 10.5 }}>
+          {[c.incoterm, [c.origine, c.destination].filter(Boolean).join("→"), `${Number(c.total_xof).toLocaleString()} XOF`, c.delai_jours != null ? `${c.delai_jours} j` : null].filter(Boolean).join(" · ")}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Prix connus (Lot 6) : dernier prix offert / engage / paye de cet article chez le
+// fournisseur choisi, avec reprise en un clic. Masque en silence si le module
+// Fournisseurs n'est pas accessible ou si rien n'est connu.
+function IndicePrix({ t, articleId, fournisseurId, onReprendre }) {
+  const [indice, setIndice] = useState(null);
+  useEffect(() => {
+    setIndice(null);
+    if (!articleId || !fournisseurId) return;
+    let actif = true;
+    api
+      .getIndicePrixCalcul(articleId, fournisseurId)
+      .then((r) => actif && setIndice(r))
+      .catch(() => {});
+    return () => {
+      actif = false;
+    };
+  }, [articleId, fournisseurId]);
+  if (!indice) return null;
+  const lignes = [
+    ["calcIndiceOffert", indice.offert, indice.offert && indice.offert.dossier],
+    ["calcIndiceEngage", indice.engage, indice.engage && indice.engage.numero],
+    ["calcIndicePaye", indice.paye, indice.paye && indice.paye.numero],
+  ].filter(([, v]) => v);
+  const nb = (n) => Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return (
+    <div style={{ marginTop: 12, padding: "8px 10px", border: "1px dashed var(--line)", borderRadius: 8, fontSize: 11.5, color: "var(--sub)" }}>
+      {lignes.length === 0 ? (
+        <span>{t("calcIndiceAucun")}</span>
+      ) : (
+        <>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>{t("calcIndiceTitre").replace("{a}", indice.article ? indice.article.designation : "")}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+            {lignes.map(([cle, v, ref]) => (
+              <div key={cle} style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                <span style={{ fontWeight: 600 }}>{t(cle)}</span>
+                <span className="mono">{nb(v.prix_unitaire_devise)} {v.devise}</span>
+                {ref ? <span style={{ fontSize: 10.5 }}>({ref})</span> : null}
+                <button type="button" onClick={() => onReprendre(v)} style={{ background: "none", border: "none", color: "var(--petrol)", fontSize: 11, fontWeight: 600, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+                  {t("calcIndiceReprendre")}
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const labelStyle = { fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 5 };
 const inputStyle = {
   width: "100%",
@@ -1021,3 +1116,92 @@ const thStyle = {
   whiteSpace: "nowrap",
 };
 const tdStyle = { padding: "8px 10px", textAlign: "center", verticalAlign: "top" };
+
+
+// Estime (offres retenues) / engage (commandes fournisseur) / reel (receptions
+// validees + couts d'approche) du dossier, et creation des commandes depuis les
+// offres retenues. Masque en silence si le module Fournisseurs n'est pas accessible.
+function EstimeEngageReel({ dossier, t, nombre }) {
+  const [syn, setSyn] = useState(null);
+  const [info, setInfo] = useState("");
+  const [erreur, setErreur] = useState("");
+  const [enCours, setEnCours] = useState(false);
+  const params = dossier.dossier_ao_id ? { dossier_ao_id: dossier.dossier_ao_id } : { consultation_id: dossier.consultation_id };
+
+  function charger() {
+    api.getSyntheseDossier(params).then(setSyn).catch(() => setSyn(null));
+  }
+  useEffect(charger, [dossier.id]);
+
+  async function creerCommandes() {
+    setEnCours(true);
+    setInfo("");
+    setErreur("");
+    try {
+      const r = await api.commandesDepuisCalcul(dossier.id);
+      setInfo(t("cmdDepuisCalculOk").replace("{n}", Array.isArray(r) ? r.length : 0));
+      charger();
+    } catch (e) {
+      setErreur(e.message);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  if (!syn) return null;
+  const ligne = (label, valeur, fort) => (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: fort ? 13 : 12.5, fontWeight: fort ? 700 : 400, color: fort ? undefined : "var(--sub)" }}>
+      <span>{label}</span>
+      <span className="mono">{valeur}</span>
+    </div>
+  );
+  return (
+    <section style={{ marginBottom: 30 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 6 }}>
+        <h2 style={{ fontSize: 15.5, color: "var(--petrol)", margin: 0 }}>{t("synTitre")}</h2>
+        <span style={{ flex: 1 }} />
+        <a href="/commandes" style={{ fontSize: 12, color: "var(--petrol)", fontWeight: 600 }}>{t("navCommandes")}</a>
+        <button type="button" disabled={enCours} onClick={creerCommandes} style={{ background: "transparent", color: "var(--petrol)", border: "1px solid var(--line)", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+          {t("cmdDepuisCalcul")}
+        </button>
+      </div>
+      <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 10 }}>{t("synAide")} {t("cmdDepuisCalculAide")}</p>
+      {info && <p style={{ fontSize: 12.5, color: "var(--vert)", marginBottom: 8 }}>{info}</p>}
+      {erreur && <p style={{ fontSize: 12.5, color: "var(--brique)", marginBottom: 8 }}>{erreur}</p>}
+      <div className="card" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 22 }}>
+        <div style={{ display: "grid", gap: 4, alignContent: "start" }}>
+          {ligne(t("synEstime"), `${nombre(syn.estime.cout_revient_xof)} XOF`, true)}
+          {ligne(t("synAchatReel"), nombre(syn.estime.achat_xof))}
+        </div>
+        <div style={{ display: "grid", gap: 4, alignContent: "start" }}>
+          {ligne(t("synEngage"), `${nombre(syn.engage.achat_xof)} XOF`, true)}
+          {ligne(t("synCommandes"), syn.engage.nb_commandes)}
+        </div>
+        <div style={{ display: "grid", gap: 4, alignContent: "start" }}>
+          {ligne(t("synReel"), `${nombre(syn.reel.cout_revient_xof)} XOF`, true)}
+          {ligne(t("synAchatReel"), nombre(syn.reel.achat_xof))}
+          {ligne(t("synApprocheReel"), nombre(syn.reel.couts_approche_xof))}
+        </div>
+        <div style={{ display: "grid", gap: 4, alignContent: "start" }}>
+          {syn.marge && syn.marge.estimee_pct !== null && ligne(t("synMargeEstimee"), `${nombre(syn.marge.estimee_pct)} %`)}
+          {syn.marge && syn.marge.reelle_pct !== null && ligne(t("synMargeReelle"), `${nombre(syn.marge.reelle_pct)} %`)}
+          {syn.comparable && syn.ecart_cout_revient_xof !== null ? (
+            <>
+              {ligne(
+                t("synEcart"),
+                <span style={{ color: syn.ecart_cout_revient_xof > 0 ? "var(--brique)" : "var(--vert)" }}>
+                  {syn.ecart_cout_revient_xof > 0 ? "+" : ""}
+                  {nombre(syn.ecart_cout_revient_xof)} XOF ({syn.ecart_cout_revient_pct > 0 ? "+" : ""}
+                  {syn.ecart_cout_revient_pct} %)
+                </span>,
+                true
+              )}
+            </>
+          ) : (
+            <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{t("synNonComparable")}</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}

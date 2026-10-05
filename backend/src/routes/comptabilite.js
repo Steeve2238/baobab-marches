@@ -11,6 +11,7 @@ const achatsCompta = require("../services/comptaAchats");
 const encaissementsCompta = require("../services/comptaEncaissements");
 const tiersCompta = require("../services/comptaTiers");
 const analytiqueCompta = require("../services/comptaAnalytique");
+const receptionsCompta = require("../services/comptaReceptions");
 const exportsAnalytique = require("../services/comptaExportsAnalytique");
 const exportsTiers = require("../services/comptaExportsTiers");
 const etatsCompta = require("../services/comptaEtats");
@@ -724,6 +725,32 @@ router.post(
   blockLectureSeule,
   gerer(async (req, res) => {
     const f = await avecTransaction((client) => achatsCompta.creerFournisseur(client, tenant(req), userId(req), req.body || {}));
+    res.status(201).json(f);
+  })
+);
+
+// Lot 7 : facturation comptable d'une reception de marchandises validee.
+router.get(
+  "/receptions/:id/facturation",
+  gerer(async (req, res) => {
+    res.json(await receptionsCompta.apercuFacturation(db, tenant(req), req.params.id));
+  })
+);
+
+router.post(
+  "/receptions/:id/facture-fournisseur",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const f = await avecTransaction((client) => receptionsCompta.creerFactureFournisseurReception(client, tenant(req), userId(req), req.params.id, req.body || {}));
+    res.status(201).json(f);
+  })
+);
+
+router.post(
+  "/receptions/:id/facture-transitaire",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const f = await avecTransaction((client) => receptionsCompta.creerFactureTransitaireReception(client, tenant(req), userId(req), req.params.id, req.body || {}));
     res.status(201).json(f);
   })
 );

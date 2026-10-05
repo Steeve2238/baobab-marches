@@ -5,6 +5,10 @@ const { requireAuth, requireModule, blockLectureSeule } = require("../middleware
 const { t } = require("../utils/i18n");
 const { evaluerExpression } = require("../services/regleEngine");
 const { evaluerRisqueLogistique } = require("../services/anticipationEngine");
+const { statsTransitaires } = require("../services/transitaires");
+
+const { lireCatalogue, nettoyerInclus } = require("../services/incoterms");
+const { assurerTiersPourTransitaireSilencieux } = require("../services/comptaService");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -60,57 +64,59 @@ function calculerStatutPenalite({ date_arrivee_prevue, date_arrivee_reelle }) {
 // Scenarios Incoterm (EXW, FOB, CIF, DAP, DDP...)
 // ----------------------------------------------------------------------------
 
-// GET /api/logistique/incoterms
+// GET /api/logistique/incoterms : catalogue unique du client (les 11 codes
+// standards sont ajoutes au premier usage, avec les couts deja compris dans le prix).
 router.get("/incoterms", async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT * FROM incoterm_scenario WHERE tenant_id = $1 ORDER BY code ASC`,
-      [req.user.tenantId]
-    );
-    res.json(result.rows);
+    res.json(await lireCatalogue(db, req.user.tenantId));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "INCOTERMS_FETCH_ERROR") });
   }
 });
 
-// POST /api/logistique/incoterms
+// POST /api/logistique/incoterms : ajoute un scenario propre au client (code libre).
 router.post("/incoterms", async (req, res) => {
-  const { code, repartition_couts_json, regle_calcul_id } = req.body;
+  const { repartition_couts_json, regle_calcul_id } = req.body;
+  const code = String(req.body.code || "").trim().toUpperCase();
   if (!code) {
     return res.status(400).json({ error: t(req, "INCOTERM_CODE_REQUIRED") });
   }
   try {
+    const catalogue = await lireCatalogue(db, req.user.tenantId);
+    if (catalogue.some((i) => i.code === code)) return res.status(409).json({ error: t(req, "INCOTERM_EXISTS") });
+    const inclus = nettoyerInclus(req.body.inclus);
+    const json = { ...(repartition_couts_json || {}), ...(inclus ? { inclus } : {}) };
     const result = await db.query(
       `INSERT INTO incoterm_scenario (id, tenant_id, code, repartition_couts_json, regle_calcul_id)
        VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [uuidv4(), req.user.tenantId, code, repartition_couts_json || {}, regle_calcul_id || null]
+       RETURNING id`,
+      [uuidv4(), req.user.tenantId, code, JSON.stringify(json), regle_calcul_id || null]
     );
-    res.status(201).json(result.rows[0]);
+    const cree = (await lireCatalogue(db, req.user.tenantId)).find((i) => i.id === result.rows[0].id);
+    res.status(201).json(cree);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "INCOTERM_CREATE_ERROR") });
   }
 });
 
-// PATCH /api/logistique/incoterms/:id
+// PATCH /api/logistique/incoterms/:id : couts deja compris dans le prix et/ou regle de calcul.
 router.patch("/incoterms/:id", async (req, res) => {
   const { id } = req.params;
   const { repartition_couts_json, regle_calcul_id } = req.body;
   try {
-    const result = await db.query(
-      `UPDATE incoterm_scenario
-       SET repartition_couts_json = COALESCE($1, repartition_couts_json),
-           regle_calcul_id = COALESCE($2, regle_calcul_id)
-       WHERE id = $3 AND tenant_id = $4
-       RETURNING *`,
-      [repartition_couts_json || null, regle_calcul_id || null, id, req.user.tenantId]
-    );
-    if (result.rows.length === 0) {
+    const actuel = (await db.query(`SELECT * FROM incoterm_scenario WHERE id = $1 AND tenant_id = $2`, [id, req.user.tenantId])).rows[0];
+    if (!actuel) {
       return res.status(404).json({ error: t(req, "INCOTERM_NOT_FOUND") });
     }
-    res.json(result.rows[0]);
+    const inclus = nettoyerInclus(req.body.inclus);
+    const json = { ...(actuel.repartition_couts_json || {}), ...(repartition_couts_json || {}), ...(inclus ? { inclus } : {}) };
+    await db.query(
+      `UPDATE incoterm_scenario SET repartition_couts_json = $1, regle_calcul_id = COALESCE($2, regle_calcul_id) WHERE id = $3 AND tenant_id = $4`,
+      [JSON.stringify(json), regle_calcul_id || null, id, req.user.tenantId]
+    );
+    res.json((await lireCatalogue(db, req.user.tenantId)).find((i) => i.id === id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "INCOTERM_UPDATE_ERROR") });
@@ -165,22 +171,8 @@ router.post("/simulations", async (req, res) => {
 // GET /api/logistique/transitaires - liste avec stats de performance agregees
 router.get("/transitaires", async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT
-         tr.*,
-         COUNT(h.id)::int AS nb_expeditions,
-         ROUND(AVG(h.delai_jours)::numeric, 1) AS delai_moyen_jours,
-         ROUND(
-           (COUNT(h.id) FILTER (WHERE h.retard = true)::numeric / NULLIF(COUNT(h.id), 0)) * 100, 1
-         ) AS taux_retard_pct
-       FROM transitaire tr
-       LEFT JOIN transitaire_historique h ON h.transitaire_id = tr.id
-       WHERE tr.tenant_id = $1
-       GROUP BY tr.id
-       ORDER BY tr.nom ASC`,
-      [req.user.tenantId]
-    );
-    res.json(result.rows);
+    // Meme calcul que la page Transitaires : receptions validees + historique des dossiers AO.
+    res.json(await statsTransitaires(req.user.tenantId));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "TRANSITAIRES_FETCH_ERROR") });
@@ -200,6 +192,7 @@ router.post("/transitaires", async (req, res) => {
        RETURNING *`,
       [uuidv4(), req.user.tenantId, nom, contact_json || {}]
     );
+    await assurerTiersPourTransitaireSilencieux(req.user.tenantId, result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);

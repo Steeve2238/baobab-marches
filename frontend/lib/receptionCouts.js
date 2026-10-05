@@ -70,7 +70,7 @@ export function repartirCouts(lignes, couts, cours) {
   };
 }
 
-export function typesDejaInclus(incoterm, couts) {
-  const inclus = INCOTERM_INCLUS[String(incoterm || "").toUpperCase()] || [];
+export function typesDejaInclus(incoterm, couts, table) {
+  const inclus = (table || INCOTERM_INCLUS)[String(incoterm || "").toUpperCase()] || [];
   return [...new Set(couts.filter((c) => inclus.includes(c.type_cout) && c.montant > 0).map((c) => c.type_cout))];
 }

@@ -85,6 +85,9 @@ router.get("/dossiers/:dossierId", async (req, res) => {
 
 // POST /api/marge/dossiers/:dossierId - nouveau calcul de marge
 router.post("/dossiers/:dossierId", async (req, res) => {
+  // Lot 6 : ancien outil ferme, la marge vient du Dossier de calcul + reel.
+  return res.status(409).json({ error: t(req, "MARGE_LEGACY_READONLY") });
+  // eslint-disable-next-line no-unreachable
   const { dossierId } = req.params;
   const champs = req.body;
 
@@ -141,6 +144,8 @@ router.post("/dossiers/:dossierId", async (req, res) => {
 // PATCH /api/marge/:id - mise a jour d'un calcul existant (ex: marge reelle
 // qui evolue au fil de l'execution -> alimente le Radar d'anticipation, Module 15)
 router.patch("/:id", async (req, res) => {
+  return res.status(409).json({ error: t(req, "MARGE_LEGACY_READONLY") });
+  // eslint-disable-next-line no-unreachable
   const { id } = req.params;
   const champs = req.body;
 

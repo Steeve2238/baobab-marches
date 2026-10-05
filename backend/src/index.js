@@ -26,6 +26,10 @@ const calculPrixRoutes = require("./routes/calculPrix");
 const produitsRoutes = require("./routes/produits");
 const receptionsRoutes = require("./routes/receptions");
 const prixFournisseursRoutes = require("./routes/prixFournisseurs");
+const transitairesRoutes = require("./routes/transitaires");
+const commandesRoutes = require("./routes/commandes");
+const incotermsRoutes = require("./routes/incoterms");
+const livraisonsDossierRoutes = require("./routes/livraisonsDossier");
 const comptabiliteRoutes = require("./routes/comptabilite");
 const { t } = require("./utils/i18n");
 
@@ -65,6 +69,10 @@ app.use("/api/calcul-prix", calculPrixRoutes);
 app.use("/api/produits", produitsRoutes);
 app.use("/api/receptions", receptionsRoutes);
 app.use("/api/prix-fournisseurs", prixFournisseursRoutes);
+app.use("/api/transitaires", transitairesRoutes);
+app.use("/api/commandes", commandesRoutes);
+app.use("/api/incoterms", incotermsRoutes);
+app.use("/api/livraisons-dossier", livraisonsDossierRoutes);
 app.use("/api/comptabilite", comptabiliteRoutes);
 
 // Gestionnaire d'erreur generique (dernier recours)

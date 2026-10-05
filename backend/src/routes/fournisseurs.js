@@ -104,6 +104,9 @@ router.get("/dossiers/:dossierId/offres", async (req, res) => {
 
 // POST /api/fournisseurs/dossiers/:dossierId/offres
 router.post("/dossiers/:dossierId/offres", async (req, res) => {
+  // Lot 6 : ancien comparateur en lecture seule, les offres se saisissent dans le Dossier de calcul.
+  return res.status(409).json({ error: t(req, "OFFRE_LEGACY_READONLY") });
+  // eslint-disable-next-line no-unreachable
   const { dossierId } = req.params;
   const {
     fournisseur_id,
@@ -183,6 +186,8 @@ router.post("/dossiers/:dossierId/offres", async (req, res) => {
 // desactive automatiquement les autres offres du meme dossier, puisqu'un
 // seul fournisseur est normalement retenu par besoin).
 router.patch("/offres/:id/retenue", async (req, res) => {
+  return res.status(409).json({ error: t(req, "OFFRE_LEGACY_READONLY") });
+  // eslint-disable-next-line no-unreachable
   const { id } = req.params;
   try {
     const offreResult = await db.query(

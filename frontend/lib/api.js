@@ -280,6 +280,9 @@ export const api = {
 
   // Module 3 - Incoterms & logistique
   getIncoterms: () => request("/logistique/incoterms"),
+  // Catalogue unique d'incoterms (lecture pour toute l'application) + edition des couts "inclus" (Logistique).
+  getCatalogueIncoterms: () => request("/incoterms"),
+  updateIncoterm: (id, data) => request(`/logistique/incoterms/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   createIncoterm: (data) =>
     request("/logistique/incoterms", { method: "POST", body: JSON.stringify(data) }),
   simulerLogistique: (data) =>
@@ -611,6 +614,10 @@ export const api = {
     return request(`/receptions${query ? `?${query}` : ""}`);
   },
   getReception: (id) => request(`/receptions/${id}`),
+  // Facturation comptable d'une reception validee (Lot 7, module Comptabilite requis).
+  getFacturationReception: (id) => request(`/comptabilite/receptions/${id}/facturation`),
+  creerFactureFournisseurReception: (id, data) => request(`/comptabilite/receptions/${id}/facture-fournisseur`, { method: "POST", body: JSON.stringify(data || {}) }),
+  creerFactureTransitaireReception: (id, data) => request(`/comptabilite/receptions/${id}/facture-transitaire`, { method: "POST", body: JSON.stringify(data || {}) }),
   createReception: (data) => request("/receptions", { method: "POST", body: JSON.stringify(data) }),
   patchReception: (id, data) => request(`/receptions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   supprimerReception: (id) => request(`/receptions/${id}`, { method: "DELETE" }),
@@ -636,7 +643,52 @@ export const api = {
   },
   getFournisseursReception: () => request("/receptions/fournisseurs"),
   estimerCoutsApprocheReception: (data) => request("/receptions/estimer-couts-approche", { method: "POST", body: JSON.stringify(data) }),
-  enregistrerCoutsApprocheReception: (id, couts) => request(`/receptions/${id}/couts-approche`, { method: "PUT", body: JSON.stringify({ couts_approche: couts }) }),
+  enregistrerCoutsApprocheReception: (id, couts, transport) =>
+    request(`/receptions/${id}/couts-approche`, { method: "PUT", body: JSON.stringify({ ...(transport || {}), couts_approche: couts }) }),
+  // Commandes fournisseur et livraisons de dossier (Lot 5, 05/10/2026)
+  getCommandes: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/commandes${query ? `?${query}` : ""}`);
+  },
+  getCommande: (id) => request(`/commandes/${id}`),
+  getCommandePourReception: (id) => request(`/commandes/${id}/pour-reception`),
+  createCommande: (data) => request("/commandes", { method: "POST", body: JSON.stringify(data) }),
+  patchCommande: (id, data) => request(`/commandes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  confirmerCommande: (id) => request(`/commandes/${id}/confirmer`, { method: "POST" }),
+  annulerCommande: (id) => request(`/commandes/${id}/annuler`, { method: "POST" }),
+  supprimerCommande: (id) => request(`/commandes/${id}`, { method: "DELETE" }),
+  getIndicePrixCalcul: (articleId, fournisseurId) => request(`/calcul-prix/indice-prix?article_id=${articleId}&fournisseur_id=${fournisseurId}`),
+  commandesDepuisCalcul: (dossierCalculId) => request("/commandes/depuis-calcul", { method: "POST", body: JSON.stringify({ dossier_calcul_id: dossierCalculId }) }),
+  getSyntheseDossier: (params) => request(`/commandes/synthese-dossier?${new URLSearchParams(params).toString()}`),
+  getLivraisonsDossier: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/livraisons-dossier${query ? `?${query}` : ""}`);
+  },
+  getLivraisonDossier: (id) => request(`/livraisons-dossier/${id}`),
+  getALivrerDossier: (dossierId) => request(`/livraisons-dossier/a-livrer?dossier_ao_id=${dossierId}`),
+  createLivraisonDossier: (data) => request("/livraisons-dossier", { method: "POST", body: JSON.stringify(data) }),
+  patchLivraisonDossier: (id, data) => request(`/livraisons-dossier/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  validerLivraisonDossier: (id) => request(`/livraisons-dossier/${id}/valider`, { method: "POST" }),
+  annulerLivraisonDossier: (id) => request(`/livraisons-dossier/${id}/annuler`, { method: "POST" }),
+  supprimerLivraisonDossier: (id) => request(`/livraisons-dossier/${id}`, { method: "DELETE" }),
+  // Transitaires, cotations et performance (Lot 4, 05/10/2026)
+  getTransitairesPerf: () => request("/transitaires"),
+  createTransitairePerf: (data) => request("/transitaires", { method: "POST", body: JSON.stringify(data) }),
+  patchTransitairePerf: (id, data) => request(`/transitaires/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  getFicheTransitaire: (id) => request(`/transitaires/${id}`),
+  getCotationsTransitaires: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/transitaires/cotations${query ? `?${query}` : ""}`);
+  },
+  comparerCotationsTransitaires: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/transitaires/cotations/comparer${query ? `?${query}` : ""}`);
+  },
+  createCotationTransitaire: (data) => request("/transitaires/cotations", { method: "POST", body: JSON.stringify(data) }),
+  patchCotationTransitaire: (id, data) => request(`/transitaires/cotations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  statutCotationTransitaire: (id, statut) => request(`/transitaires/cotations/${id}/statut`, { method: "POST", body: JSON.stringify({ statut }) }),
+  supprimerCotationTransitaire: (id) => request(`/transitaires/cotations/${id}`, { method: "DELETE" }),
+  getCoutsCotation: (id, devise) => request(`/transitaires/cotations/${id}/couts?devise=${encodeURIComponent(devise || "XOF")}`),
   createFournisseurReception: (data) => request("/receptions/fournisseurs", { method: "POST", body: JSON.stringify(data) }),
   ajusterStockProduit: (id, data) => request(`/produits/${id}/ajustement-stock`, { method: "POST", body: JSON.stringify(data) }),
   getMouvementsProduit: (id) => request(`/produits/${id}/mouvements`),

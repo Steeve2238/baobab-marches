@@ -5,6 +5,8 @@ const { requireAuth, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { assurerTiersPourFournisseurSilencieux } = require("../services/comptaService");
 const { calculerOffre } = require("../services/calculPrixEngine");
+const { recalculerScoreFiabilite } = require("../services/fournisseurScore");
+const { assurerTiersPourTransitaireSilencieux } = require("../services/comptaService");
 const { chargerParametres } = require("../services/produitsCatalogue");
 
 const router = express.Router();
@@ -100,6 +102,7 @@ router.post("/transitaires", async (req, res) => {
       `INSERT INTO transitaire (id, tenant_id, nom, contact_json) VALUES ($1, $2, $3, $4) RETURNING id, nom`,
       [uuidv4(), req.user.tenantId, nom.trim(), {}]
     );
+    await assurerTiersPourTransitaireSilencieux(req.user.tenantId, result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -493,6 +496,7 @@ router.post("/articles/:id/offres", async (req, res) => {
     );
 
     const offreComplete = await rechargerOffre(result.rows[0].id, req.user.tenantId);
+    await recalculerScoreFiabilite(fournisseur_id);
     res.status(201).json(offreComplete);
   } catch (err) {
     console.error(err);
@@ -592,6 +596,7 @@ router.patch("/offres/:id", async (req, res) => {
     }
 
     const offreComplete = await rechargerOffre(id, req.user.tenantId);
+    await recalculerScoreFiabilite(offreComplete.fournisseur_id);
     res.json(offreComplete);
   } catch (err) {
     console.error(err);
@@ -606,16 +611,102 @@ router.delete("/offres/:id", async (req, res) => {
       `DELETE FROM calcul_offre co
        USING calcul_article ca, dossier_calcul dc
        WHERE co.id = $1 AND co.calcul_article_id = ca.id AND ca.dossier_calcul_id = dc.id AND dc.tenant_id = $2
-       RETURNING co.id`,
+       RETURNING co.id, co.fournisseur_id`,
       [id, req.user.tenantId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "CALCUL_OFFRE_NOT_FOUND") });
     }
+    await recalculerScoreFiabilite(result.rows[0].fournisseur_id);
     res.status(204).send();
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "CALCUL_OFFRE_DELETE_ERROR") });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// Prix unique (Lot 6, 05/10/2026) : pour un article du dossier et un fournisseur,
+// le dernier prix OFFERT (autre dossier de calcul), ENGAGE (commande confirmee) et
+// PAYE (reception validee). L'article du catalogue est retrouve par designation
+// exacte (casse/accents/espaces ignores) ou par la designation memorisee du
+// fournisseur. Sert a preremplir l'offre ; rien n'est enregistre.
+// ----------------------------------------------------------------------------
+const normaliser = (v) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+router.get("/indice-prix", async (req, res) => {
+  const { article_id: articleId, fournisseur_id: fournisseurId } = req.query;
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID.test(String(articleId)) || !UUID.test(String(fournisseurId))) return res.status(400).json({ error: t(req, "CALCUL_OFFRE_FIELDS_REQUIRED") });
+  try {
+    const tenantId = req.user.tenantId;
+    const article = (
+      await db.query(
+        `SELECT ca.id, ca.libelle FROM calcul_article ca JOIN dossier_calcul dc ON dc.id = ca.dossier_calcul_id
+         WHERE ca.id = $1 AND dc.tenant_id = $2`,
+        [articleId, tenantId]
+      )
+    ).rows[0];
+    if (!article) return res.status(404).json({ error: t(req, "CALCUL_ARTICLE_NOT_FOUND") });
+    const cible = normaliser(article.libelle);
+    const produits = (await db.query(`SELECT id, reference, designation FROM produit WHERE tenant_id = $1`, [tenantId])).rows;
+    let produit = produits.find((p) => normaliser(p.designation) === cible) || null;
+    if (!produit) {
+      const m = (
+        await db.query(
+          `SELECT produit_id, designation_fournisseur FROM produit_reference_fournisseur WHERE tenant_id = $1 AND fournisseur_id = $2`,
+          [tenantId, fournisseurId]
+        )
+      ).rows.find((x) => normaliser(x.designation_fournisseur) === cible);
+      if (m) produit = produits.find((p) => p.id === m.produit_id) || null;
+    }
+    let paye = null;
+    let engage = null;
+    if (produit) {
+      const p = (
+        await db.query(
+          `SELECT r.numero, r.date_reception AS date, r.devise, r.cours_devise, l.prix_unitaire_devise
+           FROM reception_ligne l JOIN reception_marchandise r ON r.id = l.reception_id
+           WHERE r.tenant_id = $1 AND r.fournisseur_id = $2 AND r.statut = 'VALIDEE' AND l.produit_id = $3
+           ORDER BY r.date_reception DESC, r.date_validation DESC NULLS LAST LIMIT 1`,
+          [tenantId, fournisseurId, produit.id]
+        )
+      ).rows[0];
+      if (p) paye = { numero: p.numero, date: p.date, devise: p.devise, cours_devise: Number(p.cours_devise), prix_unitaire_devise: Number(p.prix_unitaire_devise) };
+    }
+    // Engage : derniere commande confirmee du fournisseur pour cet article (par article du catalogue
+    // OU par designation, car une commande creee depuis un Dossier de calcul n'a pas encore d'article).
+    {
+      const lignesCmd = (
+        await db.query(
+          `SELECT c.numero, c.date_commande AS date, c.devise, c.cours_devise, l.prix_unitaire_devise, l.produit_id, l.designation
+           FROM commande_fournisseur_ligne l JOIN commande_fournisseur c ON c.id = l.commande_id
+           WHERE c.tenant_id = $1 AND c.fournisseur_id = $2 AND c.statut = 'CONFIRMEE'
+           ORDER BY c.date_commande DESC, c.date_creation DESC LIMIT 300`,
+          [tenantId, fournisseurId]
+        )
+      ).rows;
+      const e = lignesCmd.find((x) => (produit && x.produit_id === produit.id) || normaliser(x.designation) === cible);
+      if (e) engage = { numero: e.numero, date: e.date, devise: e.devise, cours_devise: Number(e.cours_devise), prix_unitaire_devise: Number(e.prix_unitaire_devise) };
+    }
+    const autres = (
+      await db.query(
+        `SELECT co.devise, co.cours_devise, co.prix_unitaire_devise, co.retenue, dc.nom AS dossier_nom, dc.date_creation AS date, ca.libelle
+         FROM calcul_offre co
+         JOIN calcul_article ca ON ca.id = co.calcul_article_id
+         JOIN dossier_calcul dc ON dc.id = ca.dossier_calcul_id
+         WHERE dc.tenant_id = $1 AND co.fournisseur_id = $2 AND ca.id <> $3
+         ORDER BY dc.date_creation DESC`,
+        [tenantId, fournisseurId, articleId]
+      )
+    ).rows.find((x) => normaliser(x.libelle) === cible);
+    const offert = autres
+      ? { dossier: autres.dossier_nom, date: autres.date, devise: autres.devise, cours_devise: Number(autres.cours_devise), prix_unitaire_devise: Number(autres.prix_unitaire_devise), retenue: autres.retenue }
+      : null;
+    res.json({ article: produit ? { id: produit.id, reference: produit.reference, designation: produit.designation } : null, paye, engage, offert });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "CALCUL_DOSSIER_FETCH_ERROR") });
   }
 });
 

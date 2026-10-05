@@ -50,6 +50,8 @@ export default function DossierDetailPage() {
   const [utilisateurs, setUtilisateurs] = useState([]);
   const [simulations, setSimulations] = useState([]);
   const [calculsMarge, setCalculsMarge] = useState([]);
+  // Lot 6 : marge estimee / reelle issue du Dossier de calcul + receptions (null si module non accessible).
+  const [syntheseMarge, setSyntheseMarge] = useState(null);
   const [suivisLogistiques, setSuivisLogistiques] = useState([]);
   const [incoterms, setIncoterms] = useState([]);
   const [transitaires, setTransitaires] = useState([]);
@@ -190,6 +192,7 @@ export default function DossierDetailPage() {
         setTransitaires(transitairesData);
         setFournisseurs(fournisseursData);
         setOffres(offresData);
+        api.getSyntheseDossier({ dossier_ao_id: id }).then(setSyntheseMarge).catch(() => setSyntheseMarge(null));
       } catch (err) {
         setErreur(err.message || t("defaultLoadError"));
       } finally {
@@ -1172,140 +1175,16 @@ export default function DossierDetailPage() {
       </section>
 
       {/* ---------------- FOURNISSEURS ---------------- */}
+      {offres.length > 0 && (
       <section style={{ marginBottom: 30 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("suppliersSection")}</h2>
-          <button onClick={() => setFormOffreOuvert((v) => !v)} style={boutonPrincipalStyle}>
-            {formOffreOuvert ? t("cancel") : t("newOffer")}
-          </button>
         </div>
 
-        {formOffreOuvert && (
-          <form onSubmit={handleAjouterOffre} className="card" style={{ marginBottom: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr 1fr", gap: 12 }}>
-              <div>
-                <label style={labelStyle}>{t("supplierLabel")}</label>
-                <select
-                  required
-                  value={formOffre.fournisseur_id}
-                  onChange={(e) => setFormOffre((f) => ({ ...f, fournisseur_id: e.target.value }))}
-                  style={inputStyle}
-                >
-                  <option value="">—</option>
-                  {fournisseurs.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.nom}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>{t("priceExwLabel")}</label>
-                <input
-                  type="number"
-                  value={formOffre.prix_exw}
-                  onChange={(e) => setFormOffre((f) => ({ ...f, prix_exw: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>{t("currencyLabel")}</label>
-                <select
-                  value={formOffre.devise}
-                  onChange={(e) => setFormOffre((f) => ({ ...f, devise: e.target.value }))}
-                  style={inputStyle}
-                >
-                  {DEVISES.map((d) => (
-                    <option key={d.code} value={d.code}>
-                      {d.libelle}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
-              <div>
-                <label style={labelStyle}>{t("deliveryDelayLabel")}</label>
-                <input
-                  type="number"
-                  value={formOffre.delai_jours}
-                  onChange={(e) => setFormOffre((f) => ({ ...f, delai_jours: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>{t("paymentDelayLabel")}</label>
-                <input
-                  type="number"
-                  value={formOffre.delai_paiement_jours}
-                  onChange={(e) => setFormOffre((f) => ({ ...f, delai_paiement_jours: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>{t("incotermLabel")}</label>
-                <select
-                  value={formOffre.incoterm_scenario_id}
-                  onChange={(e) => setFormOffre((f) => ({ ...f, incoterm_scenario_id: e.target.value }))}
-                  style={inputStyle}
-                >
-                  <option value="">{t("none")}</option>
-                  {incoterms.map((inc) => (
-                    <option key={inc.id} value={inc.id}>
-                      {inc.code}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: formOffre.condition_reglement === "ACOMPTE_SOLDE" ? "1.4fr 1fr" : "1fr",
-                gap: 12,
-                marginTop: 12,
-              }}
-            >
-              <div>
-                <label style={labelStyle}>{t("paymentTermsLabel")}</label>
-                <select
-                  value={formOffre.condition_reglement}
-                  onChange={(e) => setFormOffre((f) => ({ ...f, condition_reglement: e.target.value }))}
-                  style={inputStyle}
-                >
-                  <option value="">—</option>
-                  {CONDITIONS_REGLEMENT.map((code) => (
-                    <option key={code} value={code}>
-                      {conditionReglementLabel(code)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {formOffre.condition_reglement === "ACOMPTE_SOLDE" && (
-                <div>
-                  <label style={labelStyle}>{t("depositPercentLabel")}</label>
-                  <input
-                    type="number"
-                    value={formOffre.pourcentage_acompte}
-                    onChange={(e) => setFormOffre((f) => ({ ...f, pourcentage_acompte: e.target.value }))}
-                    style={inputStyle}
-                  />
-                </div>
-              )}
-            </div>
-
-            {["LC", "AVAL_TRAITE", "CREDIT_FOURNISSEUR"].includes(formOffre.condition_reglement) && (
-              <p style={{ fontSize: 11.5, color: "var(--ocre)", marginTop: 10 }}>{t("financingHint")}</p>
-            )}
-
-            <button type="submit" disabled={offreEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
-              {t("save")}
-            </button>
-          </form>
-        )}
-
+        <p style={{ fontSize: 12, color: "var(--sub)", marginBottom: 10 }}>
+          {t("dossierLegacyOffres")}{" "}
+          <a href="#dossier-calcul" style={{ color: "var(--petrol)", fontWeight: 600 }}>{t("dossierVoirCalcul")}</a>
+        </p>
         {offres.length === 0 ? (
           <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("noOffers")}</p>
         ) : (
@@ -1356,19 +1235,14 @@ export default function DossierDetailPage() {
                   </div>
                 </div>
                 <div>
-                  {o.retenue ? (
-                    <span className="chip ok">{t("retainedOffer")}</span>
-                  ) : (
-                    <button onClick={() => handleRetenirOffre(o.id)} style={boutonSecondaireStyle}>
-                      {t("retainOffer")}
-                    </button>
-                  )}
+                  {o.retenue ? <span className="chip ok">{t("retainedOffer")}</span> : null}
                 </div>
               </div>
             ))}
           </div>
         )}
       </section>
+      )}
 
       {/* ---------------- LOGISTIQUE ---------------- */}
       <section style={{ marginBottom: 30 }}>
@@ -1504,7 +1378,7 @@ export default function DossierDetailPage() {
       </section>
 
       {/* ---------------- DOSSIER DE CALCUL ---------------- */}
-      <section style={{ marginBottom: 30 }}>
+      <section id="dossier-calcul" style={{ marginBottom: 30 }}>
         <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 4 }}>{t("calcPrixSectionTitle")}</h2>
         <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 12 }}>{t("calcPrixSectionDescription")}</p>
         <div className="card">
@@ -1552,48 +1426,19 @@ export default function DossierDetailPage() {
       <section>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("marginSection")}</h2>
-          <button onClick={() => setFormMargeOuvert((v) => !v)} style={boutonPrincipalStyle}>
-            {formMargeOuvert ? t("cancel") : t("newMarginCalc")}
-          </button>
         </div>
 
-        {formMargeOuvert && (
-          <form onSubmit={handleCalculerMarge} className="card" style={{ marginBottom: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12 }}>
-              {[
-                ["prix_achat_devise", "purchasePriceLabel"],
-                ["taux_change", "exchangeRateLabel"],
-                ["frais_douane_transit", "customsFeesLabel"],
-                ["frais_bancaires", "bankFeesLabel"],
-                ["frais_dao_caution", "guaranteeFeesLabel"],
-                ["redevance_armp", "armpFeesLabel"],
-                ["marge_pct_visee", "targetMarginLabel"],
-                ["prix_final_ht_hd", "finalPriceLabel"],
-              ].map(([champ, cle]) => (
-                <div key={champ}>
-                  <label style={labelStyle}>{t(cle)}</label>
-                  <input
-                    type="number"
-                    step="any"
-                    value={formMarge[champ]}
-                    onChange={(e) => setFormMarge((f) => ({ ...f, [champ]: e.target.value }))}
-                    style={inputStyle}
-                  />
-                </div>
-              ))}
-            </div>
-            <button type="submit" disabled={margeEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
-              {t("calculate")}
-            </button>
-          </form>
-        )}
+        <MargeDossier t={t} syn={syntheseMarge} />
 
-        <h3 style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 8, fontWeight: 600 }}>
-          {t("marginHistory")}
-        </h3>
-        {calculsMarge.length === 0 ? (
-          <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("noMarginCalcs")}</p>
-        ) : (
+        {calculsMarge.length > 0 && (
+          <p style={{ fontSize: 12, color: "var(--sub)", marginBottom: 10 }}>{t("dossierLegacyMarge")}</p>
+        )}
+        {calculsMarge.length > 0 && (
+          <h3 style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 8, fontWeight: 600 }}>
+            {t("marginHistory")}
+          </h3>
+        )}
+        {calculsMarge.length === 0 ? null : (
           <div style={{ display: "grid", gap: 10 }}>
             {calculsMarge.map((calc) => (
               <div
@@ -1705,3 +1550,45 @@ const boutonLienStyle = {
   textDecoration: "underline",
   cursor: "pointer",
 };
+
+// Marge du dossier (Lot 6) : marge estimee = marge nette du Dossier de calcul ;
+// marge reelle = recalculee avec le cout de revient reel des receptions, une fois
+// tout commande et recu. Alimente le Radar d'anticipation.
+function MargeDossier({ t, syn }) {
+  if (!syn) return <p className="card" style={{ fontSize: 13, color: "var(--sub)", marginBottom: 12 }}>{t("dossierMargeIndispo")}</p>;
+  const nb = (n) => (n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+  const m = syn.marge;
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 18 }}>
+        <div>
+          <div style={miniLabelStyle}>{t("dossierMargeEstimee")}</div>
+          <div className="mono" style={{ fontSize: 17, fontWeight: 700 }}>{m.estimee_pct == null ? "—" : `${nb(m.estimee_pct)} %`}</div>
+          <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)" }}>{nb(m.estimee_xof)} XOF</div>
+        </div>
+        <div>
+          <div style={miniLabelStyle}>{t("dossierMargeReelle")}</div>
+          {m.reelle_pct == null ? (
+            <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 4 }}>{t("dossierMargeReelleAttente")}</div>
+          ) : (
+            <>
+              <div className="mono" style={{ fontSize: 17, fontWeight: 700 }}>{nb(m.reelle_pct)} %</div>
+              <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)" }}>{nb(m.reelle_xof)} XOF</div>
+            </>
+          )}
+        </div>
+        <div>
+          <div style={miniLabelStyle}>{t("dossierMargeEcart")}</div>
+          {m.ecart_points == null ? (
+            <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 4 }}>—</div>
+          ) : (
+            <div className="mono" style={{ fontSize: 17, fontWeight: 700, color: m.ecart_points > 0 ? "var(--brique)" : "var(--vert)" }}>
+              {m.ecart_points > 0 ? "▼ " : "▲ "}
+              {nb(Math.abs(m.ecart_points))} {t("dossierMargePoints")}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

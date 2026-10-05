@@ -51,11 +51,12 @@ export default function ReceptionsPage() {
         <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("receptionsVide")}</p>
       ) : (
         <div className="card" style={{ overflowX: "auto", padding: 0 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 820 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 900 }}>
             <thead>
               <tr>
                 <th style={thStyle}>{t("receptionsColNumero")}</th>
                 <th style={thStyle}>{t("receptionsColFournisseur")}</th>
+                <th style={thStyle}>{t("receptionsCommandeLien")}</th>
                 <th style={thStyle}>{t("receptionsColFacture")}</th>
                 <th style={thStyle}>{t("receptionsColDate")}</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>{t("receptionsColLignes")}</th>
@@ -73,6 +74,13 @@ export default function ReceptionsPage() {
                     </Link>
                   </td>
                   <td style={tdStyle}>{r.fournisseur_nom}</td>
+                  <td className="mono" style={tdStyle}>
+                    {r.commande_id ? (
+                      <Link href={`/commandes/${r.commande_id}`} style={{ color: "var(--petrol)" }}>{r.commande_numero}</Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="mono" style={tdStyle}>{r.reference_facture || "—"}</td>
                   <td className="mono" style={tdStyle}>{new Date(r.date_reception).toLocaleDateString(dict.dateLocale)}</td>
                   <td className="mono" style={{ ...tdStyle, textAlign: "right" }}>{r.nb_lignes}</td>

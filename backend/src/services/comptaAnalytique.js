@@ -111,6 +111,15 @@ async function sectionPourConsultation(client, tenantId, consultationId) {
   return r.rows[0]?.id || null;
 }
 
+/** Section d'un dossier d'appel d'offres (creee au besoin). */
+async function sectionPourDossierAo(client, tenantId, dossierAoId) {
+  let r = await client.query(`SELECT id FROM section_analytique WHERE tenant_id = $1 AND dossier_ao_id = $2`, [tenantId, dossierAoId]);
+  if (r.rows[0]) return r.rows[0].id;
+  await synchroniserSections(client, tenantId);
+  r = await client.query(`SELECT id FROM section_analytique WHERE tenant_id = $1 AND dossier_ao_id = $2`, [tenantId, dossierAoId]);
+  return r.rows[0]?.id || null;
+}
+
 async function creerSection(client, tenantId, utilisateurId, { code, libelle } = {}) {
   const lib = String(libelle || "").trim();
   if (!lib) throw new ComptaError("COMPTA_ANALYTIQUE_LIBELLE_REQUIS", 400);
@@ -462,6 +471,7 @@ module.exports = {
   synchroniserSections,
   listerSections,
   sectionPourConsultation,
+  sectionPourDossierAo,
   creerSection,
   modifierSection,
   ventilerLigne,

@@ -7,6 +7,8 @@ const { t } = require("../utils/i18n");
 const { assurerTiersPourFournisseurSilencieux } = require("../services/comptaService");
 const { chargerParametres } = require("../services/produitsCatalogue");
 const { enregistrerMouvement, stockProduit, genererReferenceInterne } = require("../services/stockService");
+const { reevaluerMargeDossier } = require("./commandes");
+const { tableInclus } = require("../services/incoterms");
 const { lireFactureExcel } = require("../services/receptionExcel");
 const { derniersAchatsFournisseur, pct } = require("../services/prixFournisseurs");
 const { TYPES_COUT, REPARTITIONS, repartirCouts, avertissementsIncoterm, estimerAssuranceEtDouane } = require("../services/receptionCouts");
@@ -88,6 +90,7 @@ function nettoyerLignes(lignesBrutes) {
       produit_id: typeof l.produit_id === "string" && UUID_RE.test(l.produit_id) ? l.produit_id : null,
       reference_interne: String(l.reference_interne ?? "").trim() || null,
       poids_unitaire_kg: poids,
+      commande_ligne_id: typeof l.commande_ligne_id === "string" && UUID_RE.test(l.commande_ligne_id) ? l.commande_ligne_id : null,
     });
   }
   return { lignes };
@@ -110,19 +113,44 @@ function nettoyerCouts(coutsBruts) {
       montant: arr2(brut),
       en_devise_facture: c.en_devise_facture === true || c.en_devise_facture === "true",
       repartition: REPARTITIONS.includes(repartition) ? repartition : "VALEUR",
+      transitaire_id: typeof c.transitaire_id === "string" && UUID_RE.test(c.transitaire_id) ? c.transitaire_id : null,
+      facture_reference: String(c.facture_reference || "").trim().slice(0, 100) || null,
+      montant_cote_xof: c.montant_cote_xof === "" || c.montant_cote_xof === undefined || c.montant_cote_xof === null || !(Number(c.montant_cote_xof) >= 0)
+        ? null
+        : arr2(Number(c.montant_cote_xof)),
     });
   }
   return { couts };
 }
 
 async function remplacerCouts(client, tenantId, receptionId, couts) {
+  // Les couts sont reecrits en bloc : un cout inchange (meme type, montant, devise, transitaire)
+  // garde le lien vers sa facture comptable (Lot 7).
+  const anciens = (
+    await client.query(
+      `SELECT type_cout, montant, en_devise_facture, transitaire_id, facture_fournisseur_id
+       FROM reception_cout_approche WHERE reception_id = $1 AND facture_fournisseur_id IS NOT NULL`,
+      [receptionId]
+    )
+  ).rows;
   await client.query(`DELETE FROM reception_cout_approche WHERE reception_id = $1`, [receptionId]);
   let ordre = 0;
   for (const c of couts) {
+    const i = anciens.findIndex(
+      (a) =>
+        a.type_cout === c.type_cout &&
+        Number(a.montant) === Number(c.montant) &&
+        !!a.en_devise_facture === !!c.en_devise_facture &&
+        (a.transitaire_id || null) === (c.transitaire_id || null)
+    );
+    const factureId = i >= 0 ? anciens.splice(i, 1)[0].facture_fournisseur_id : null;
     await client.query(
-      `INSERT INTO reception_cout_approche (id, tenant_id, reception_id, ordre, type_cout, libelle, montant, en_devise_facture, repartition)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [uuidv4(), tenantId, receptionId, ordre++, c.type_cout, c.libelle, c.montant, c.en_devise_facture, c.repartition]
+      `INSERT INTO reception_cout_approche (id, tenant_id, reception_id, ordre, type_cout, libelle, montant, en_devise_facture, repartition,
+                                            transitaire_id, facture_reference, montant_cote_xof, facture_fournisseur_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,
+               (SELECT id FROM transitaire WHERE id = $10 AND tenant_id = $2), $11, $12, $13)`,
+      [uuidv4(), tenantId, receptionId, ordre++, c.type_cout, c.libelle, c.montant, c.en_devise_facture, c.repartition,
+       c.transitaire_id, c.facture_reference, c.montant_cote_xof, factureId]
     );
   }
 }
@@ -130,11 +158,16 @@ async function remplacerCouts(client, tenantId, receptionId, couts) {
 async function lireCouts(queryable, receptionId) {
   return (
     await queryable.query(
-      `SELECT id, ordre, type_cout, libelle, montant, en_devise_facture, repartition
-       FROM reception_cout_approche WHERE reception_id = $1 ORDER BY ordre ASC`,
+      `SELECT c.id, c.ordre, c.type_cout, c.libelle, c.montant, c.en_devise_facture, c.repartition,
+              c.transitaire_id, tr.nom AS transitaire_nom, c.facture_reference, c.montant_cote_xof,
+              c.facture_fournisseur_id, ff.numero AS facture_compta_numero
+       FROM reception_cout_approche c
+       LEFT JOIN transitaire tr ON tr.id = c.transitaire_id
+       LEFT JOIN facture_fournisseur ff ON ff.id = c.facture_fournisseur_id AND ff.statut = 'ENREGISTREE'
+       WHERE c.reception_id = $1 ORDER BY c.ordre ASC`,
       [receptionId]
     )
-  ).rows.map((c) => ({ ...c, montant: Number(c.montant) }));
+  ).rows.map((c) => ({ ...c, montant: Number(c.montant), montant_cote_xof: c.montant_cote_xof === null ? null : Number(c.montant_cote_xof) }));
 }
 
 const libelleSource = (rec, fournisseurNom) => `${rec.numero} · ${fournisseurNom}`.slice(0, 300);
@@ -151,6 +184,10 @@ function validerEntete(b) {
     date_facture: b.date_facture || null,
     date_reception: b.date_reception || null,
     notes: String(b.notes || "").trim() || null,
+    transitaire_id: typeof b.transitaire_id === "string" && UUID_RE.test(b.transitaire_id) ? b.transitaire_id : null,
+    cotation_id: typeof b.cotation_id === "string" && UUID_RE.test(b.cotation_id) ? b.cotation_id : null,
+    date_expedition: b.date_expedition || null,
+    date_arrivee_prevue: b.date_arrivee_prevue || null,
   };
 }
 
@@ -158,6 +195,16 @@ async function fournisseurDuTenant(queryable, tenantId, id) {
   if (!id || !UUID_RE.test(String(id))) return false;
   const r = await queryable.query(`SELECT 1 FROM fournisseur WHERE id = $1 AND tenant_id = $2`, [id, tenantId]);
   return r.rows.length > 0;
+}
+
+// Commande fournisseur a laquelle rattacher une reception : du tenant et confirmee.
+async function commandeRattachable(queryable, tenantId, id) {
+  if (!id || !UUID_RE.test(String(id))) return null;
+  const r = await queryable.query(
+    `SELECT * FROM commande_fournisseur WHERE id = $1 AND tenant_id = $2 AND statut = 'CONFIRMEE'`,
+    [id, tenantId]
+  );
+  return r.rows[0] || null;
 }
 
 function ecartPrecedent(precedent, prixXof) {
@@ -173,10 +220,19 @@ function ecartPrecedent(precedent, prixXof) {
 async function chargerReception(tenantId, id) {
   if (!UUID_RE.test(String(id))) return null;
   const r = await db.query(
-    `SELECT r.*, f.nom AS fournisseur_nom, ff.numero AS facture_fournisseur_numero
+    `SELECT r.*, f.nom AS fournisseur_nom, ff.numero AS facture_fournisseur_numero,
+            tr.nom AS transitaire_nom, ct.reference AS cotation_reference,
+            cf.numero AS commande_numero, cf.statut AS commande_statut,
+            cf.dossier_ao_id AS commande_dossier_ao_id, cf.consultation_id AS commande_consultation_id,
+            d.reference_externe AS dossier_ao_reference, d.intitule AS dossier_ao_intitule, cons.objet AS consultation_objet
      FROM reception_marchandise r
      JOIN fournisseur f ON f.id = r.fournisseur_id
-     LEFT JOIN facture_fournisseur ff ON ff.id = r.facture_fournisseur_id
+     LEFT JOIN facture_fournisseur ff ON ff.id = r.facture_fournisseur_id AND ff.statut = 'ENREGISTREE'
+     LEFT JOIN transitaire tr ON tr.id = r.transitaire_id
+     LEFT JOIN transitaire_cotation ct ON ct.id = r.cotation_id
+     LEFT JOIN commande_fournisseur cf ON cf.id = r.commande_id
+     LEFT JOIN dossier_ao d ON d.id = cf.dossier_ao_id
+     LEFT JOIN consultation cons ON cons.id = cf.consultation_id
      WHERE r.id = $1 AND r.tenant_id = $2`,
     [id, tenantId]
   );
@@ -185,8 +241,12 @@ async function chargerReception(tenantId, id) {
   const lignes = (
     await db.query(
       `SELECT l.*, p.reference AS produit_reference, p.designation AS produit_designation,
-              pm.id AS mapping_produit_id, pp.id AS mapping_article_id, pp.reference AS mapping_reference, pp.designation AS mapping_designation
+              pm.id AS mapping_produit_id, pp.id AS mapping_article_id, pp.reference AS mapping_reference, pp.designation AS mapping_designation,
+              cl.quantite AS commande_quantite, cl.prix_unitaire_devise AS commande_prix_devise,
+              COALESCE((SELECT SUM(rl2.quantite) FROM reception_ligne rl2 JOIN reception_marchandise r2 ON r2.id = rl2.reception_id
+                        WHERE rl2.commande_ligne_id = l.commande_ligne_id AND r2.statut = 'VALIDEE' AND r2.id <> l.reception_id), 0) AS commande_deja_recue
        FROM reception_ligne l
+       LEFT JOIN commande_fournisseur_ligne cl ON cl.id = l.commande_ligne_id
        LEFT JOIN produit p ON p.id = l.produit_id
        LEFT JOIN produit_reference_fournisseur pm
          ON pm.tenant_id = $2 AND pm.fournisseur_id = $3 AND l.reference_fournisseur IS NOT NULL
@@ -217,8 +277,14 @@ async function chargerReception(tenantId, id) {
   const lignesCalculees = lignesBase.map((l, i) => {
     const montantDevise = arr2(l.quantite * l.prix_unitaire_devise);
     totalDevise += montantDevise;
+    const cmdQte = l.commande_quantite === null || l.commande_quantite === undefined ? null : Number(l.commande_quantite);
+    const cmdPrix = l.commande_prix_devise === null || l.commande_prix_devise === undefined ? null : Number(l.commande_prix_devise);
     return {
       ...l,
+      commande_quantite: cmdQte,
+      commande_prix_devise: cmdPrix,
+      commande_deja_recue: Number(l.commande_deja_recue || 0),
+      ecart_prix_commande_pct: cmdPrix !== null && cmdPrix > 0 ? pct(l.prix_unitaire_devise, cmdPrix) : null,
       montant_devise: montantDevise,
       cout_unitaire_xof: arr2(l.prix_unitaire_devise * cours),
       montant_xof: arr2(montantDevise * cours),
@@ -235,25 +301,42 @@ async function chargerReception(tenantId, id) {
     ...reception,
     cours_devise: cours,
     lignes: lignesCalculees,
-    couts_approche: rep.couts,
+    couts_approche: rep.couts.map((c) => ({
+      ...c,
+      ecart_cote_xof: c.montant_cote_xof === null || c.montant_cote_xof === undefined ? null : arr2(c.montant_xof - c.montant_cote_xof),
+    })),
+    delai_transport_jours:
+      reception.date_expedition && reception.date_reception
+        ? Math.round((new Date(String(reception.date_reception).slice(0, 10)) - new Date(String(reception.date_expedition).slice(0, 10))) / 86400000)
+        : null,
     total_couts_approche_xof: rep.total_couts_approche_xof,
     cout_revient_total_xof: arr2(rep.total_achat_xof + rep.total_couts_approche_xof),
-    avertissements_couts: [...rep.avertissements, ...avertissementsIncoterm(reception.incoterm, couts)],
+    avertissements_couts: [...rep.avertissements, ...avertissementsIncoterm(reception.incoterm, couts, await tableInclus(db, tenantId))],
+    avertissements_commande: reception.commande_id
+      ? lignesBase.flatMap((l, i) => {
+          const res = [];
+          if (!l.commande_ligne_id) res.push({ code: "HORS_COMMANDE", designation: l.designation });
+          else if (Number(l.commande_deja_recue || 0) + l.quantite > Number(l.commande_quantite) + 0.0005)
+            res.push({ code: "QUANTITE_SUPERIEURE", designation: l.designation, commande: Number(l.commande_quantite), recue: Number(l.commande_deja_recue || 0) + l.quantite });
+          return res;
+        })
+      : [],
     total_devise: arr2(totalDevise),
     total_xof: arr2(totalDevise * cours),
   };
 }
 
-async function remplacerLignes(client, receptionId, lignes) {
+async function remplacerLignes(client, receptionId, lignes, commandeId) {
   await client.query(`DELETE FROM reception_ligne WHERE reception_id = $1`, [receptionId]);
   let ordre = 0;
   for (const l of lignes) {
     await client.query(
       `INSERT INTO reception_ligne (id, reception_id, ordre, reference_fournisseur, designation, unite, quantite,
-                                    prix_unitaire_devise, produit_id, reference_interne, poids_unitaire_kg)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                                    prix_unitaire_devise, produit_id, reference_interne, poids_unitaire_kg, commande_ligne_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+               (SELECT id FROM commande_fournisseur_ligne WHERE id = $12 AND commande_id = $13))`,
       [uuidv4(), receptionId, ordre++, l.reference_fournisseur, l.designation, l.unite, l.quantite,
-       l.prix_unitaire_devise, l.produit_id, l.reference_interne, l.poids_unitaire_kg]
+       l.prix_unitaire_devise, l.produit_id, l.reference_interne, l.poids_unitaire_kg, l.commande_ligne_id, commandeId || null]
     );
   }
 }
@@ -275,15 +358,16 @@ router.get("/", async (req, res) => {
       conditions.push(`r.statut = $${valeurs.length}`);
     }
     const r = await db.query(
-      `SELECT r.id, r.numero, r.reference_facture, r.date_reception, r.devise, r.cours_devise, r.incoterm, r.statut,
-              f.nom AS fournisseur_nom,
+      `SELECT r.id, r.numero, r.commande_id, r.reference_facture, r.date_reception, r.devise, r.cours_devise, r.incoterm, r.statut,
+              f.nom AS fournisseur_nom, cf.numero AS commande_numero,
               COUNT(l.id)::int AS nb_lignes,
               COALESCE(SUM(ROUND(l.quantite * l.prix_unitaire_devise, 2)), 0) AS total_devise
        FROM reception_marchandise r
        JOIN fournisseur f ON f.id = r.fournisseur_id
+       LEFT JOIN commande_fournisseur cf ON cf.id = r.commande_id
        LEFT JOIN reception_ligne l ON l.reception_id = r.id
        WHERE ${conditions.join(" AND ")}
-       GROUP BY r.id, f.nom
+       GROUP BY r.id, f.nom, cf.numero
        ORDER BY r.date_reception DESC, r.numero DESC`,
       valeurs
     );
@@ -341,6 +425,16 @@ router.post("/", async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
+    // Commande fournisseur OBLIGATOIRE : le fournisseur de la reception est celui de la commande.
+    const commande = await commandeRattachable(client, req.user.tenantId, b.commande_id);
+    if (!commande) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, b.commande_id ? "RECEPTION_COMMANDE_INVALID" : "RECEPTION_COMMANDE_REQUIRED") });
+    }
+    b.fournisseur_id = commande.fournisseur_id;
+    if (b.transitaire_id === undefined) entete.transitaire_id = commande.transitaire_id;
+    if (b.cotation_id === undefined) entete.cotation_id = commande.cotation_id;
+    if (!entete.incoterm && commande.incoterm && b.incoterm === undefined) entete.incoterm = commande.incoterm;
     if (!(await fournisseurDuTenant(client, req.user.tenantId, b.fournisseur_id))) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: t(req, "RECEPTION_FOURNISSEUR_REQUIRED") });
@@ -361,12 +455,16 @@ router.post("/", async (req, res) => {
     const id = uuidv4();
     await client.query(
       `INSERT INTO reception_marchandise (id, tenant_id, numero, fournisseur_id, reference_facture, date_facture, date_reception,
-                                          devise, cours_devise, incoterm, notes, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12)`,
+                                          devise, cours_devise, incoterm, notes, cree_par,
+                                          transitaire_id, cotation_id, date_expedition, date_arrivee_prevue, commande_id)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,
+               (SELECT id FROM transitaire WHERE id = $13 AND tenant_id = $2),
+               (SELECT id FROM transitaire_cotation WHERE id = $14 AND tenant_id = $2), $15, $16, $17)`,
       [id, req.user.tenantId, `REC-${annee}-${String(seq).padStart(4, "0")}`, b.fournisseur_id, entete.reference_facture,
-       entete.date_facture, entete.date_reception, entete.devise, entete.cours, entete.incoterm, entete.notes, req.user.sub]
+       entete.date_facture, entete.date_reception, entete.devise, entete.cours, entete.incoterm, entete.notes, req.user.sub,
+       entete.transitaire_id, entete.cotation_id, entete.date_expedition, entete.date_arrivee_prevue, commande.id]
     );
-    await remplacerLignes(client, id, net.lignes);
+    await remplacerLignes(client, id, net.lignes, commande.id);
     await remplacerCouts(client, req.user.tenantId, id, netCouts.couts);
     await client.query("COMMIT");
     res.status(201).json(await chargerReception(req.user.tenantId, id));
@@ -405,10 +503,28 @@ router.patch("/:id", async (req, res) => {
       date_facture: b.date_facture !== undefined ? b.date_facture : actuelle.date_facture,
       date_reception: b.date_reception !== undefined ? b.date_reception : actuelle.date_reception,
       notes: b.notes !== undefined ? b.notes : actuelle.notes,
+      transitaire_id: b.transitaire_id !== undefined ? b.transitaire_id : actuelle.transitaire_id,
+      cotation_id: b.cotation_id !== undefined ? b.cotation_id : actuelle.cotation_id,
+      date_expedition: b.date_expedition !== undefined ? b.date_expedition : actuelle.date_expedition,
+      date_arrivee_prevue: b.date_arrivee_prevue !== undefined ? b.date_arrivee_prevue : actuelle.date_arrivee_prevue,
     });
     if (entete.erreur) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: t(req, entete.erreur) });
+    }
+    let commandeId = actuelle.commande_id;
+    if (!commandeId && b.commande_id) {
+      // Reception anterieure sans commande : on peut la rattacher (jamais la changer ensuite).
+      const commande = await commandeRattachable(client, req.user.tenantId, b.commande_id);
+      if (!commande) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: t(req, "RECEPTION_COMMANDE_INVALID") });
+      }
+      commandeId = commande.id;
+      b.fournisseur_id = commande.fournisseur_id;
+      await client.query(`UPDATE reception_marchandise SET commande_id = $1 WHERE id = $2`, [commandeId, id]);
+    } else if (commandeId) {
+      b.fournisseur_id = undefined; // fournisseur impose par la commande
     }
     let fournisseurId = actuelle.fournisseur_id;
     if (b.fournisseur_id !== undefined) {
@@ -420,10 +536,14 @@ router.patch("/:id", async (req, res) => {
     }
     await client.query(
       `UPDATE reception_marchandise SET fournisseur_id = $1, reference_facture = $2, date_facture = $3,
-              date_reception = COALESCE($4, date_reception), devise = $5, cours_devise = $6, incoterm = $7, notes = $8
+              date_reception = COALESCE($4, date_reception), devise = $5, cours_devise = $6, incoterm = $7, notes = $8,
+              transitaire_id = (SELECT id FROM transitaire WHERE id = $10 AND tenant_id = $11),
+              cotation_id = (SELECT id FROM transitaire_cotation WHERE id = $12 AND tenant_id = $11),
+              date_expedition = $13, date_arrivee_prevue = $14
        WHERE id = $9`,
       [fournisseurId, entete.reference_facture, entete.date_facture, entete.date_reception, entete.devise, entete.cours,
-       entete.incoterm, entete.notes, id]
+       entete.incoterm, entete.notes, id, entete.transitaire_id, req.user.tenantId, entete.cotation_id,
+       entete.date_expedition, entete.date_arrivee_prevue]
     );
     if (Array.isArray(b.lignes)) {
       const net = nettoyerLignes(b.lignes);
@@ -431,7 +551,7 @@ router.patch("/:id", async (req, res) => {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: t(req, net.erreur) });
       }
-      await remplacerLignes(client, id, net.lignes);
+      await remplacerLignes(client, id, net.lignes, commandeId);
     }
     if (Array.isArray(b.couts_approche)) {
       const netCouts = nettoyerCouts(b.couts_approche);
@@ -486,7 +606,7 @@ router.post("/estimer-couts-approche", async (req, res) => {
   }
   try {
     const parametres = await chargerParametres(req.user.tenantId);
-    res.json(estimerAssuranceEtDouane({ totalAchatXof: total, fretXof: fret, incoterm: req.body.incoterm }, parametres));
+    res.json(estimerAssuranceEtDouane({ totalAchatXof: total, fretXof: fret, incoterm: req.body.incoterm }, parametres, await tableInclus(db, req.user.tenantId)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "RECEPTION_UPDATE_ERROR") });
@@ -517,6 +637,33 @@ router.put("/:id/couts-approche", async (req, res) => {
       return res.status(409).json({ error: t(req, "RECEPTION_NON_MODIFIABLE") });
     }
     await remplacerCouts(client, req.user.tenantId, id, netCouts.couts);
+    // Informations de transport saisies ou completees apres la reception
+    // (la facture et les dates du transitaire arrivent souvent plus tard).
+    const b = req.body;
+    if (["transitaire_id", "cotation_id", "date_expedition", "date_arrivee_prevue"].some((k) => b[k] !== undefined)) {
+      const ent = validerEntete({
+        devise: rec.devise,
+        cours_devise: rec.cours_devise,
+        transitaire_id: b.transitaire_id !== undefined ? b.transitaire_id : rec.transitaire_id,
+        cotation_id: b.cotation_id !== undefined ? b.cotation_id : rec.cotation_id,
+        date_expedition: b.date_expedition !== undefined ? b.date_expedition : rec.date_expedition,
+        date_arrivee_prevue: b.date_arrivee_prevue !== undefined ? b.date_arrivee_prevue : rec.date_arrivee_prevue,
+      });
+      await client.query(
+        `UPDATE reception_marchandise SET
+                transitaire_id = (SELECT id FROM transitaire WHERE id = $1 AND tenant_id = $5),
+                cotation_id = (SELECT id FROM transitaire_cotation WHERE id = $2 AND tenant_id = $5),
+                date_expedition = $3, date_arrivee_prevue = $4
+         WHERE id = $6`,
+        [ent.transitaire_id, ent.cotation_id, ent.date_expedition, ent.date_arrivee_prevue, req.user.tenantId, id]
+      );
+      if (rec.statut === "VALIDEE" && ent.cotation_id) {
+        await client.query(
+          `UPDATE transitaire_cotation SET statut = 'RETENUE' WHERE id = $1 AND tenant_id = $2 AND statut = 'RECUE'`,
+          [ent.cotation_id, req.user.tenantId]
+        );
+      }
+    }
     if (rec.statut === "VALIDEE") {
       const fournisseur = (await client.query(`SELECT nom FROM fournisseur WHERE id = $1`, [rec.fournisseur_id])).rows[0];
       const label = libelleSource(rec, fournisseur.nom);
@@ -539,6 +686,7 @@ router.put("/:id/couts-approche", async (req, res) => {
       }
     }
     await client.query("COMMIT");
+    if (rec.commande_id && rec.statut === "VALIDEE") await reevaluerMargeDossier(req.user.tenantId, rec.commande_id);
     res.json(await chargerReception(req.user.tenantId, id));
   } catch (err) {
     await client.query("ROLLBACK");
@@ -576,6 +724,11 @@ router.post("/:id/valider", async (req, res) => {
     if (lignes.length === 0) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: t(req, "RECEPTION_VIDE") });
+    }
+    // Une reception ne se valide que rattachee a une commande fournisseur confirmee.
+    if (!rec.commande_id || !(await commandeRattachable(client, req.user.tenantId, rec.commande_id))) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, rec.commande_id ? "RECEPTION_COMMANDE_INVALID" : "RECEPTION_COMMANDE_REQUIRED") });
     }
     const fournisseur = (await client.query(`SELECT nom FROM fournisseur WHERE id = $1`, [rec.fournisseur_id])).rows[0];
     const parametres = await chargerParametres(req.user.tenantId);
@@ -664,7 +817,15 @@ router.post("/:id/valider", async (req, res) => {
       `UPDATE reception_marchandise SET statut = 'VALIDEE', valide_par = $1, date_validation = now() WHERE id = $2`,
       [req.user.sub, id]
     );
+    // La cotation du transitaire utilisee pour cette reception devient "retenue".
+    if (rec.cotation_id) {
+      await client.query(
+        `UPDATE transitaire_cotation SET statut = 'RETENUE' WHERE id = $1 AND tenant_id = $2 AND statut = 'RECUE'`,
+        [rec.cotation_id, req.user.tenantId]
+      );
+    }
     await client.query("COMMIT");
+    if (rec.commande_id) await reevaluerMargeDossier(req.user.tenantId, rec.commande_id);
     const reception = await chargerReception(req.user.tenantId, id);
     res.json({ ...reception, nouveaux_articles: nouveaux });
   } catch (err) {
@@ -724,6 +885,7 @@ router.post("/:id/annuler", async (req, res) => {
     }
     await client.query(`UPDATE reception_marchandise SET statut = 'ANNULEE' WHERE id = $1`, [id]);
     await client.query("COMMIT");
+    if (rec.commande_id) await reevaluerMargeDossier(req.user.tenantId, rec.commande_id);
     res.json(await chargerReception(req.user.tenantId, id));
   } catch (err) {
     await client.query("ROLLBACK");

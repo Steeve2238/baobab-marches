@@ -100,8 +100,8 @@ function repartirCouts(lignes, couts, cours) {
 
 // Couts saisis qui sont normalement DEJA dans le prix du fournisseur (risque de
 // double comptage) : renvoye comme simple avertissement, jamais bloquant.
-function avertissementsIncoterm(incoterm, couts) {
-  const inclus = INCOTERM_INCLUS[String(incoterm || "").toUpperCase()] || [];
+function avertissementsIncoterm(incoterm, couts, table = INCOTERM_INCLUS) {
+  const inclus = (table || INCOTERM_INCLUS)[String(incoterm || "").toUpperCase()] || [];
   const vus = new Set();
   const res = [];
   for (const c of couts) {
@@ -119,8 +119,8 @@ function avertissementsIncoterm(incoterm, couts) {
  * - fret/assurance deja compris dans le prix (CFR, CIF, DAP, DDP...) : non
  *   ajoutes a la valeur en douane (ils sont dans le prix d'achat).
  */
-function estimerAssuranceEtDouane({ totalAchatXof, fretXof, incoterm }, parametres) {
-  const inclus = INCOTERM_INCLUS[String(incoterm || "").toUpperCase()] || [];
+function estimerAssuranceEtDouane({ totalAchatXof, fretXof, incoterm }, parametres, table = INCOTERM_INCLUS) {
+  const inclus = (table || INCOTERM_INCLUS)[String(incoterm || "").toUpperCase()] || [];
   const fretInclus = inclus.includes("FRET");
   const assuranceIncluse = inclus.includes("ASSURANCE");
   const offre = {

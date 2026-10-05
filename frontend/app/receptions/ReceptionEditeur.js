@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import AppShell from "../../lib/components/AppShell";
+import { useIncoterms, codesAvec } from "../../lib/incoterms";
+import ReceptionCompta from "./ReceptionCompta";
 import { TYPES_COUT, REPARTITIONS, repartirCouts, typesDejaInclus } from "../../lib/receptionCouts";
 
 // Saisie / controle d'une reception de marchandises (facture fournisseur).
@@ -13,9 +15,8 @@ import { TYPES_COUT, REPARTITIONS, repartirCouts, typesDejaInclus } from "../../
 // et fait entrer les quantites en stock (back : routes/receptions.js,
 // 05/10/2026). Rien n'est ecrit en stock avant la validation.
 
-const INCOTERMS = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"];
-const LIGNE_VIDE = { reference_fournisseur: "", designation: "", unite: "U", quantite: 1, prix_unitaire_devise: "", produit_id: "", reference_interne: "", poids_unitaire_kg: "", article_reconnu: null };
-const COUT_VIDE = { type_cout: "FRET", libelle: "", montant: "", en_devise_facture: false, repartition: "VALEUR" };
+const LIGNE_VIDE = { commande_ligne_id: "", commande_quantite: null, commande_prix_devise: null, commande_deja_recue: 0, reference_fournisseur: "", designation: "", unite: "U", quantite: 1, prix_unitaire_devise: "", produit_id: "", reference_interne: "", poids_unitaire_kg: "", article_reconnu: null };
+const COUT_VIDE = { type_cout: "FRET", libelle: "", montant: "", en_devise_facture: false, repartition: "VALEUR", transitaire_id: "", facture_reference: "", montant_cote_xof: null };
 const arr2 = (n) => Math.round(n * 100) / 100;
 const num = (v) => {
   const n = Number(String(v ?? "").replace(/[\s  ]/g, "").replace(",", "."));
@@ -24,6 +25,7 @@ const num = (v) => {
 
 export default function ReceptionEditeur({ id }) {
   const { t } = useLangue();
+  const incoterms = useIncoterms();
   const router = useRouter();
   const fichierRef = useRef(null);
   const [fournisseurs, setFournisseurs] = useState([]);
@@ -43,10 +45,20 @@ export default function ReceptionEditeur({ id }) {
     cours_devise: "1",
     incoterm: "",
     notes: "",
+    transitaire_id: "",
+    cotation_id: "",
+    date_expedition: "",
+    date_arrivee_prevue: "",
   });
+  const [transitaires, setTransitaires] = useState([]);
+  const [cotations, setCotations] = useState([]);
   const [lignes, setLignes] = useState([{ ...LIGNE_VIDE }]);
   const [couts, setCouts] = useState([]);
   const [nouveauFournisseur, setNouveauFournisseur] = useState(null);
+  // Commande fournisseur : obligatoire pour toute reception (Lot 5).
+  const [commandeId, setCommandeId] = useState("");
+  const [commandes, setCommandes] = useState([]);
+  const [commandeInfo, setCommandeInfo] = useState(null);
 
   const statut = reception ? reception.statut : "BROUILLON";
   const modifiable = statut === "BROUILLON";
@@ -54,6 +66,12 @@ export default function ReceptionEditeur({ id }) {
 
   function appliquer(r) {
     setReception(r);
+    setCommandeId(r.commande_id || "");
+    setCommandeInfo(
+      r.commande_id
+        ? { numero: r.commande_numero, dossier_ao_id: r.commande_dossier_ao_id, consultation_id: r.commande_consultation_id, dossier_ao_reference: r.dossier_ao_reference, dossier_ao_intitule: r.dossier_ao_intitule, consultation_objet: r.consultation_objet }
+        : null
+    );
     setForm({
       fournisseur_id: r.fournisseur_id,
       reference_facture: r.reference_facture || "",
@@ -63,10 +81,18 @@ export default function ReceptionEditeur({ id }) {
       cours_devise: String(r.cours_devise),
       incoterm: r.incoterm || "",
       notes: r.notes || "",
+      transitaire_id: r.transitaire_id || "",
+      cotation_id: r.cotation_id || "",
+      date_expedition: r.date_expedition ? String(r.date_expedition).slice(0, 10) : "",
+      date_arrivee_prevue: r.date_arrivee_prevue ? String(r.date_arrivee_prevue).slice(0, 10) : "",
     });
     setLignes(
       r.lignes.length
         ? r.lignes.map((l) => ({
+            commande_ligne_id: l.commande_ligne_id || "",
+            commande_quantite: l.commande_quantite ?? null,
+            commande_prix_devise: l.commande_prix_devise ?? null,
+            commande_deja_recue: l.commande_deja_recue || 0,
             reference_fournisseur: l.reference_fournisseur || "",
             designation: l.designation,
             unite: l.unite,
@@ -90,6 +116,9 @@ export default function ReceptionEditeur({ id }) {
         montant: c.montant,
         en_devise_facture: !!c.en_devise_facture,
         repartition: c.repartition,
+        transitaire_id: c.transitaire_id || "",
+        facture_reference: c.facture_reference || "",
+        montant_cote_xof: c.montant_cote_xof ?? null,
       }))
     );
   }
@@ -97,6 +126,16 @@ export default function ReceptionEditeur({ id }) {
   useEffect(() => {
     api.getFournisseursReception().then(setFournisseurs).catch(() => {});
     api.getProduits().then(setProduits).catch(() => {});
+    api.getTransitairesPerf().then(setTransitaires).catch(() => {});
+    api.getCotationsTransitaires().then(setCotations).catch(() => {});
+    if (!id) {
+      api.getCommandes({ a_recevoir: 1 }).then(setCommandes).catch(() => {});
+      let voulue = "";
+      try {
+        voulue = new URLSearchParams(window.location.search).get("commande") || "";
+      } catch (e) {}
+      if (voulue) choisirCommande(voulue);
+    }
     if (id) {
       api
         .getReception(id)
@@ -105,6 +144,50 @@ export default function ReceptionEditeur({ id }) {
         .finally(() => setChargement(false));
     }
   }, [id]);
+
+  // Choix d'une commande : reprend fournisseur, devise, incoterm, transitaire et les lignes restant a recevoir.
+  async function choisirCommande(valeur) {
+    setErreur("");
+    setInfo("");
+    if (!valeur) {
+      setCommandeId("");
+      setCommandeInfo(null);
+      return;
+    }
+    try {
+      const c = await api.getCommandePourReception(valeur);
+      setCommandeId(c.commande_id);
+      setCommandeInfo({ numero: c.numero, dossier_ao_id: c.dossier_ao_id, consultation_id: c.consultation_id });
+      setForm((f) => ({
+        ...f,
+        fournisseur_id: c.fournisseur_id,
+        devise: c.devise,
+        cours_devise: String(c.cours_devise),
+        incoterm: c.incoterm || f.incoterm,
+        transitaire_id: c.transitaire_id || f.transitaire_id,
+        cotation_id: c.cotation_id || f.cotation_id,
+      }));
+      setLignes(
+        c.lignes.length
+          ? c.lignes.map((l) => ({
+              ...LIGNE_VIDE,
+              commande_ligne_id: l.commande_ligne_id,
+              commande_quantite: l.commande_quantite,
+              commande_prix_devise: l.prix_unitaire_devise,
+              commande_deja_recue: l.commande_deja_recue,
+              reference_fournisseur: l.reference_fournisseur || "",
+              designation: l.designation,
+              unite: l.unite,
+              quantite: l.quantite,
+              prix_unitaire_devise: l.prix_unitaire_devise,
+              produit_id: l.produit_id || "",
+            }))
+          : [{ ...LIGNE_VIDE }]
+      );
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
 
   function majLigne(index, champ, valeur) {
     setLignes((prev) => prev.map((l, i) => (i === index ? { ...l, [champ]: valeur } : l)));
@@ -130,19 +213,33 @@ export default function ReceptionEditeur({ id }) {
   const afficherPoids = couts.some((c) => c.repartition === "POIDS") || lignes.some((l) => num(l.poids_unitaire_kg) > 0);
   const avertissementsCouts = [
     ...apercu.avertissements.map((a) => t(a.code === "POIDS_MANQUANT" ? "receptionsAvertPoidsManquant" : "receptionsAvertPoidsPartiel").replace("{type}", t(`receptionsCoutType${a.type_cout}`))),
-    ...typesDejaInclus(form.incoterm, coutsNum).map((type) =>
+    ...typesDejaInclus(form.incoterm, coutsNum, incoterms.table).map((type) =>
       t("receptionsAvertIncoterm").replace("{type}", t(`receptionsCoutType${type}`)).replace("{incoterm}", form.incoterm)
     ),
   ];
+  // Avertissements non bloquants par rapport a la commande (calcul en direct ; le serveur reste la reference).
+  const avertissementsCommande = commandeId
+    ? lignes
+        .filter((l) => l.designation.trim() || l.reference_fournisseur.trim())
+        .flatMap((l) => {
+          if (!l.commande_ligne_id) return [t("receptionsAvertHorsCommande").replace("{d}", l.designation || l.reference_fournisseur)];
+          const total = Number(l.commande_deja_recue || 0) + num(l.quantite);
+          if (l.commande_quantite !== null && total > Number(l.commande_quantite) + 0.0005)
+            return [t("receptionsAvertQuantite").replace("{d}", l.designation).replace("{recue}", total).replace("{commande}", l.commande_quantite)];
+          return [];
+        })
+    : [];
   const majCout = (index, champ, valeur) => setCouts((prev) => prev.map((c, i) => (i === index ? { ...c, [champ]: valeur } : c)));
 
   function charge() {
     return {
       ...form,
+      commande_id: commandeId || undefined,
       cours_devise: coursNum,
       lignes: lignes
         .filter((l) => l.designation.trim() || l.reference_fournisseur.trim())
         .map((l) => ({
+          commande_ligne_id: l.commande_ligne_id || undefined,
           reference_fournisseur: l.reference_fournisseur,
           designation: l.designation,
           unite: l.unite,
@@ -177,12 +274,56 @@ export default function ReceptionEditeur({ id }) {
     }
   }
 
+  // Cotations proposees : celles du transitaire choisi, encore valables (+ celle deja retenue).
+  const cotationsProposees = cotations.filter(
+    (c) =>
+      (!form.transitaire_id || c.transitaire_id === form.transitaire_id) &&
+      ((c.statut !== "REFUSEE" && c.statut_validite !== "EXPIREE") || c.id === form.cotation_id)
+  );
+  const cotationChoisie = cotations.find((c) => c.id === form.cotation_id) || null;
+
+  async function handleAppliquerCotation() {
+    if (!form.cotation_id) return;
+    setErreur("");
+    setInfo("");
+    try {
+      const r = await api.getCoutsCotation(form.cotation_id, form.devise.trim().toUpperCase() || "XOF");
+      setCouts((prev) => [
+        ...prev.filter((c) => c.montant_cote_xof === null || c.montant_cote_xof === undefined),
+        ...r.couts.map((c) => ({ ...c, transitaire_id: c.transitaire_id || "", facture_reference: "" })),
+      ]);
+      setForm((f) => ({ ...f, transitaire_id: r.transitaire_id, incoterm: f.incoterm || r.incoterm || "" }));
+      setInfo(t("receptionsCotationAppliquee"));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  function choisirTransitaire(valeur) {
+    setForm((f) => {
+      const cotationOk = cotations.find((c) => c.id === f.cotation_id && c.transitaire_id === valeur);
+      return { ...f, transitaire_id: valeur, cotation_id: cotationOk ? f.cotation_id : "" };
+    });
+  }
+
+  // Delai de transport et retard calcules en direct (le serveur reste la reference).
+  const jours = (a, b) => Math.round((new Date(a + "T00:00:00Z") - new Date(b + "T00:00:00Z")) / 86400000);
+  const delaiTransport = form.date_expedition && form.date_reception ? jours(form.date_reception, form.date_expedition) : null;
+  const retardTransport = form.date_arrivee_prevue && form.date_reception ? jours(form.date_reception, form.date_arrivee_prevue) : null;
+
   async function handleEnregistrerCouts() {
     setEnCours(true);
     setErreur("");
     setInfo("");
     try {
-      appliquer(await api.enregistrerCoutsApprocheReception(id, coutsNum));
+      appliquer(
+        await api.enregistrerCoutsApprocheReception(id, coutsNum, {
+          transitaire_id: form.transitaire_id || null,
+          cotation_id: form.cotation_id || null,
+          date_expedition: form.date_expedition || null,
+          date_arrivee_prevue: form.date_arrivee_prevue || null,
+        })
+      );
       setInfo(t("receptionsCoutsEnregistres"));
       api.getProduits().then(setProduits).catch(() => {});
     } catch (err) {
@@ -193,6 +334,10 @@ export default function ReceptionEditeur({ id }) {
   }
 
   async function enregistrer() {
+    if (!commandeId) {
+      setErreur(t("receptionsCommandeRequise"));
+      return null;
+    }
     if (!form.fournisseur_id) {
       setErreur(t("receptionsFournisseurRequis"));
       return null;
@@ -313,10 +458,51 @@ export default function ReceptionEditeur({ id }) {
       {desactive && <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 12 }}>{t("receptionsLectureSeule")} ({t(`receptionsStatut${statut}`)})</p>}
 
       <section className="card" style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 14.5, color: "var(--petrol)", margin: "0 0 6px" }}>{t("receptionsCommandeTitre")}</h2>
+        {!id && !commandeId && (
+          <>
+            <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 10 }}>{t("receptionsCommandeAide")}</p>
+            {commandes.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: "var(--brique)" }}>
+                {t("receptionsCommandeAucune")} <a href="/commandes/nouvelle" style={{ color: "var(--petrol)", fontWeight: 600 }}>{t("cmdNouvelle")}</a>
+              </p>
+            ) : (
+              <select value="" onChange={(e) => choisirCommande(e.target.value)} style={{ ...inputStyle, maxWidth: 520 }}>
+                <option value="">{t("receptionsCommandeChoisir")}</option>
+                {commandes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {[c.numero, c.fournisseur_nom, c.dossier_ao_reference || c.consultation_objet].filter(Boolean).join(" · ")}
+                  </option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
+        {commandeId && (
+          <p style={{ fontSize: 12.5, margin: 0 }}>
+            {t("receptionsCommandeLien")} :{" "}
+            <a href={`/commandes/${commandeId}`} className="mono" style={{ color: "var(--petrol)", fontWeight: 600 }}>
+              {commandeInfo?.numero || commandeId.slice(0, 8)}
+            </a>
+            {(commandeInfo?.dossier_ao_reference || commandeInfo?.consultation_objet) && (
+              <span style={{ color: "var(--sub)" }}>
+                {" "}· {t("receptionsCommandeDossier")} : {commandeInfo.dossier_ao_reference || commandeInfo.consultation_objet}
+              </span>
+            )}
+            {!id && (
+              <button type="button" onClick={() => choisirCommande("")} style={{ ...lienStyle, marginLeft: 10, marginTop: 0 }}>
+                {t("receptionsCommandeChoisir")}
+              </button>
+            )}
+          </p>
+        )}
+      </section>
+
+      <section className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           <div>
             <label style={labelStyle}>{t("receptionsFournisseurLabel")}</label>
-            <select disabled={desactive} value={form.fournisseur_id} onChange={(e) => setForm((f) => ({ ...f, fournisseur_id: e.target.value }))} style={inputStyle}>
+            <select disabled={desactive || !!commandeId} value={form.fournisseur_id} onChange={(e) => setForm((f) => ({ ...f, fournisseur_id: e.target.value }))} style={inputStyle}>
               <option value="">{t("receptionsFournisseurChoisir")}</option>
               {fournisseurs.map((f) => (
                 <option key={f.id} value={f.id}>
@@ -324,7 +510,7 @@ export default function ReceptionEditeur({ id }) {
                 </option>
               ))}
             </select>
-            {modifiable && nouveauFournisseur === null && (
+            {modifiable && !commandeId && nouveauFournisseur === null && (
               <button type="button" onClick={() => setNouveauFournisseur("")} style={lienStyle}>
                 + {t("receptionsNouveauFournisseur")}
               </button>
@@ -365,7 +551,7 @@ export default function ReceptionEditeur({ id }) {
             <label style={labelStyle}>{t("receptionsIncoterm")}</label>
             <select disabled={desactive} value={form.incoterm} onChange={(e) => setForm((f) => ({ ...f, incoterm: e.target.value }))} style={inputStyle}>
               <option value="">{t("receptionsIncotermAucun")}</option>
-              {INCOTERMS.map((i) => (
+              {codesAvec(incoterms.codes, form.incoterm).map((i) => (
                 <option key={i} value={i}>
                   {i}
                 </option>
@@ -398,6 +584,9 @@ export default function ReceptionEditeur({ id }) {
           )}
         </div>
         {modifiable && <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 10 }}>{t("receptionsImportAide")}</p>}
+        {avertissementsCommande.map((a, i) => (
+          <p key={`c${i}`} style={{ fontSize: 12, color: "var(--brique)", margin: "0 0 6px" }}>{a}</p>
+        ))}
         {avertissements.length > 0 && (
           <div style={{ fontSize: 12, color: "var(--brique)", marginBottom: 10 }}>
             <strong>{t("receptionsAvertissements")}</strong>
@@ -442,9 +631,19 @@ export default function ReceptionEditeur({ id }) {
                     </td>
                     <td style={td}>
                       <input disabled={desactive} inputMode="decimal" value={l.quantite} onChange={(e) => majLigne(index, "quantite", e.target.value)} style={inputCompact} />
+                      {commandeId && l.commande_ligne_id && l.commande_quantite !== null && (
+                        <div style={{ fontSize: 10.5, color: "var(--sub)", marginTop: 3, whiteSpace: "nowrap" }}>
+                          {t("receptionsCommandeCommande").replace("{n}", l.commande_quantite)}
+                          {l.commande_deja_recue > 0 ? ` · ${t("receptionsCommandeDejaRecu").replace("{n}", l.commande_deja_recue)}` : ""}
+                        </div>
+                      )}
                     </td>
                     <td style={td}>
                       <input disabled={desactive} inputMode="decimal" value={l.prix_unitaire_devise} onChange={(e) => majLigne(index, "prix_unitaire_devise", e.target.value)} style={inputCompact} />
+                      {commandeId && l.commande_prix_devise > 0 && num(l.prix_unitaire_devise) > 0 && Math.abs(num(l.prix_unitaire_devise) - l.commande_prix_devise) > 0.0005 && (() => {
+                        const p = Math.round(((num(l.prix_unitaire_devise) - l.commande_prix_devise) / l.commande_prix_devise) * 10000) / 100;
+                        return <div style={{ fontSize: 10.5, color: p > 0 ? "var(--brique)" : "var(--vert)", fontWeight: 600, marginTop: 3, whiteSpace: "nowrap" }}>{(p > 0 ? "+" : "") + t("receptionsEcartCommande").replace("{p}", p)}</div>;
+                      })()}
                       {l.prix_precedent_xof > 0 && num(l.prix_unitaire_devise) > 0 && (() => {
                         const ecart = Math.round(((num(l.prix_unitaire_devise) * coursNum - l.prix_precedent_xof) / l.prix_precedent_xof) * 10000) / 100;
                         const couleur = ecart > 0 ? "var(--brique)" : ecart < 0 ? "var(--vert)" : "var(--sub)";
@@ -520,6 +719,59 @@ export default function ReceptionEditeur({ id }) {
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>
+        <h2 style={{ fontSize: 14.5, color: "var(--petrol)", margin: "0 0 6px" }}>{t("receptionsTransportTitre")}</h2>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 10 }}>{t("receptionsTransportAide")}</p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
+          <div>
+            <label style={labelStyle}>{t("receptionsTransitaire")}</label>
+            <select disabled={!coutsEditables} value={form.transitaire_id} onChange={(e) => choisirTransitaire(e.target.value)} style={inputStyle}>
+              <option value="">{t("receptionsTransitaireAucun")}</option>
+              {transitaires.map((tr) => (
+                <option key={tr.id} value={tr.id}>{tr.nom}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>{t("receptionsCotation")}</label>
+            <select disabled={!coutsEditables} value={form.cotation_id} onChange={(e) => setForm((f) => ({ ...f, cotation_id: e.target.value }))} style={inputStyle}>
+              <option value="">{t("receptionsAucuneCotation")}</option>
+              {cotationsProposees.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {[c.transitaire_nom, c.reference, c.incoterm, [c.origine, c.destination].filter(Boolean).join("→"), `${Number(c.total_xof).toLocaleString()} XOF`].filter(Boolean).join(" · ")}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>{t("receptionsDateExpedition")}</label>
+            <input disabled={!coutsEditables} type="date" value={form.date_expedition} onChange={(e) => setForm((f) => ({ ...f, date_expedition: e.target.value }))} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>{t("receptionsDateArriveePrevue")}</label>
+            <input disabled={!coutsEditables} type="date" value={form.date_arrivee_prevue} onChange={(e) => setForm((f) => ({ ...f, date_arrivee_prevue: e.target.value }))} style={inputStyle} />
+          </div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginTop: 10 }}>
+          {coutsEditables && (
+            <button type="button" disabled={!form.cotation_id} onClick={handleAppliquerCotation} style={{ ...boutonSecondaireStyle, opacity: form.cotation_id ? 1 : 0.5 }}>
+              {t("receptionsAppliquerCotation")}
+            </button>
+          )}
+          <a
+            href={`/transitaires?onglet=comparer${form.incoterm ? `&incoterm=${encodeURIComponent(form.incoterm)}` : ""}`}
+            target="_blank"
+            rel="noreferrer"
+            style={{ fontSize: 12, color: "var(--petrol)", fontWeight: 600 }}
+          >
+            {t("receptionsComparerCotations")}
+          </a>
+          {cotationChoisie && cotationChoisie.statut_validite === "EXPIREE" && <span style={{ fontSize: 12, color: "var(--brique)" }}>{t("receptionsCotationExpiree")}</span>}
+          {delaiTransport !== null && <span style={{ fontSize: 12, color: "var(--sub)" }}>{t("receptionsDelaiTransport").replace("{n}", delaiTransport)}</span>}
+          {retardTransport !== null && retardTransport > 0 && <span style={{ fontSize: 12, color: "var(--brique)" }}>{t("receptionsRetardTransport").replace("{n}", retardTransport)}</span>}
+        </div>
+      </section>
+
+      <section className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 6 }}>
           <h2 style={{ fontSize: 14.5, color: "var(--petrol)", margin: 0 }}>{t("receptionsCoutsTitre")}</h2>
           <span style={{ flex: 1 }} />
@@ -535,14 +787,17 @@ export default function ReceptionEditeur({ id }) {
         ))}
         {couts.length > 0 && (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 820 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 960 }}>
               <thead>
                 <tr style={{ fontSize: 11, color: "var(--sub)", textAlign: "left" }}>
-                  <th style={{ ...th, width: 190 }}>{t("receptionsCoutType")}</th>
-                  <th style={{ ...th, minWidth: 170 }}>{t("receptionsCoutLibelle")}</th>
-                  <th style={{ ...th, width: 130 }}>{t("receptionsCoutMontant")}</th>
-                  <th style={{ ...th, width: 120 }}>{form.devise.trim().toUpperCase() === "XOF" ? "" : t("receptionsCoutDeviseFacture")}</th>
-                  <th style={{ ...th, width: 120 }}>{t("receptionsCoutRepartition")}</th>
+                  <th style={{ ...th, width: 150 }}>{t("receptionsCoutType")}</th>
+                  <th style={{ ...th, minWidth: 100 }}>{t("receptionsCoutLibelle")}</th>
+                  <th style={{ ...th, width: 105 }}>{t("receptionsCoutMontant")}</th>
+                  <th style={{ ...th, width: 85 }}>{form.devise.trim().toUpperCase() === "XOF" ? "" : t("receptionsCoutDeviseFacture")}</th>
+                  <th style={{ ...th, width: 100 }}>{t("receptionsCoutRepartition")}</th>
+                  <th style={{ ...th, width: 130 }}>{t("receptionsCoutTransitaire")}</th>
+                  <th style={{ ...th, width: 95 }}>{t("receptionsCoutFacture")}</th>
+                  <th style={{ ...th, width: 95, textAlign: "right" }}>{t("receptionsCoutEcartCote")}</th>
                   {coutsEditables && <th style={{ width: 28 }}></th>}
                 </tr>
               </thead>
@@ -581,6 +836,27 @@ export default function ReceptionEditeur({ id }) {
                         ))}
                       </select>
                     </td>
+                    <td style={td}>
+                      <select disabled={!coutsEditables} value={c.transitaire_id || ""} onChange={(e) => majCout(index, "transitaire_id", e.target.value)} style={inputCompact}>
+                        <option value="">—</option>
+                        {transitaires.map((tr) => (
+                          <option key={tr.id} value={tr.id}>{tr.nom}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td style={td}>
+                      <input disabled={!coutsEditables} value={c.facture_reference || ""} onChange={(e) => majCout(index, "facture_reference", e.target.value)} style={inputCompact} />
+                    </td>
+                    <td className="mono" style={{ ...td, textAlign: "right", fontSize: 12, paddingTop: 11 }}>
+                      {c.montant_cote_xof === null || c.montant_cote_xof === undefined ? (
+                        <span style={{ color: "var(--sub)" }}>—</span>
+                      ) : (
+                        (() => {
+                          const ecart = arr2((c.en_devise_facture ? num(c.montant) * coursNum : num(c.montant)) - c.montant_cote_xof);
+                          return <span style={{ color: ecart > 0 ? "var(--brique)" : ecart < 0 ? "var(--vert)" : "var(--sub)" }}>{ecart > 0 ? "+" : ""}{ecart.toLocaleString()}</span>;
+                        })()
+                      )}
+                    </td>
                     {coutsEditables && (
                       <td style={td}>
                         <button type="button" onClick={() => setCouts((prev) => prev.filter((_, i) => i !== index))} style={boutonSupprimerStyle}>
@@ -596,7 +872,7 @@ export default function ReceptionEditeur({ id }) {
         )}
         {coutsEditables && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 10 }}>
-            <button type="button" onClick={() => setCouts((prev) => [...prev, { ...COUT_VIDE }])} style={boutonSecondaireStyle}>
+            <button type="button" onClick={() => setCouts((prev) => [...prev, { ...COUT_VIDE, transitaire_id: form.transitaire_id || "" }])} style={boutonSecondaireStyle}>
               {t("receptionsCoutAjouter")}
             </button>
             {statut === "VALIDEE" && (
@@ -622,6 +898,8 @@ export default function ReceptionEditeur({ id }) {
         </div>
       </section>
 
+      {id && statut === "VALIDEE" && reception && <ReceptionCompta reception={reception} onChange={() => api.getReception(id).then(appliquer).catch(() => {})} />}
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
         {modifiable && (
           <>
@@ -637,6 +915,11 @@ export default function ReceptionEditeur({ id }) {
               </button>
             )}
           </>
+        )}
+        {statut === "VALIDEE" && commandeInfo?.dossier_ao_id && (
+          <a href={`/livraisons-dossier/nouvelle?dossier=${commandeInfo.dossier_ao_id}`} style={{ ...boutonSecondaireStyle, textDecoration: "none", display: "inline-block" }}>
+            {t("receptionsPreparerLivraison")}
+          </a>
         )}
         {statut === "VALIDEE" && (
           <button type="button" disabled={enCours} onClick={handleAnnuler} style={{ ...boutonSecondaireStyle, color: "var(--brique)" }}>

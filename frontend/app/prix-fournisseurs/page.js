@@ -232,7 +232,7 @@ function Detail({ t, produitId, onRetour }) {
 
           <section className="card" style={{ padding: 0, overflowX: "auto" }}>
             <h3 style={{ fontSize: 13, color: "var(--petrol)", margin: 0, padding: "12px 14px 4px" }}>{t("prixTableauAchats")}</h3>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 860 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 1020 }}>
               <thead>
                 <tr>
                   <th style={thStyle}>{t("prixColDate")}</th>
@@ -240,6 +240,8 @@ function Detail({ t, produitId, onRetour }) {
                   <th style={thStyle}>{t("prixColFournisseur")}</th>
                   <th style={{ ...thStyle, textAlign: "right" }}>{t("prixColQuantite")}</th>
                   <th style={{ ...thStyle, textAlign: "right" }}>{t("prixColPuDevise")}</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>{t("prixColOffert")}</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>{t("prixColEngage")}</th>
                   <th style={{ ...thStyle, textAlign: "right" }}>{t("prixColPrixXof")}</th>
                   <th style={{ ...thStyle, textAlign: "right" }}>{t("prixColCoutRevient")}</th>
                   <th style={thStyle}>{t("prixColVariation")}</th>
@@ -256,6 +258,8 @@ function Detail({ t, produitId, onRetour }) {
                     </td>
                     <td className="mono" style={{ ...tdStyle, textAlign: "right" }}>{nf(a.quantite)}</td>
                     <td className="mono" style={{ ...tdStyle, textAlign: "right" }}>{nf(a.prix_unitaire_devise)} {a.devise}</td>
+                    <td className="mono" style={{ ...tdStyle, textAlign: "right", color: "var(--sub)" }}>{a.offert_xof == null ? "—" : nf(a.offert_xof)}</td>
+                    <td className="mono" style={{ ...tdStyle, textAlign: "right", color: "var(--sub)" }}>{a.engage_xof == null ? "—" : nf(a.engage_xof)}</td>
                     <td className="mono" style={{ ...tdStyle, textAlign: "right", fontWeight: 700 }}>{nf(a.prix_achat_xof)}</td>
                     <td className="mono" style={{ ...tdStyle, textAlign: "right" }}>{nf(a.cout_revient_xof)}</td>
                     <td style={tdStyle}>{a.variation_prix_pct === null ? <span style={{ color: "var(--sub)", fontSize: 11.5 }}>{t("prixPremierAchat")}</span> : <Variation pct={a.variation_prix_pct} seuil={Infinity} />}</td>

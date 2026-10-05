@@ -5,6 +5,8 @@ import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import AppShell from "../../lib/components/AppShell";
 
+const TYPES_INCLUS = ["FRET", "ASSURANCE", "TRANSPORT_LOCAL", "DOUANE", "TRANSIT"];
+
 export default function LogistiquePage() {
   const { t, dict } = useLangue();
 
@@ -31,6 +33,19 @@ export default function LogistiquePage() {
     }
   }
 
+  async function basculerInclus(inc, type) {
+    const actuel = Array.isArray(inc.inclus) ? inc.inclus : [];
+    const inclus = actuel.includes(type) ? actuel.filter((x) => x !== type) : [...actuel, type];
+    setErreur("");
+    setIncoterms((prev) => prev.map((i) => (i.id === inc.id ? { ...i, inclus } : i)));
+    try {
+      await api.updateIncoterm(inc.id, { inclus });
+    } catch (err) {
+      setErreur(err.message);
+      setIncoterms((prev) => prev.map((i) => (i.id === inc.id ? { ...i, inclus: actuel } : i)));
+    }
+  }
+
   async function handleAjouterTransitaire(e) {
     e.preventDefault();
     try {
@@ -50,6 +65,9 @@ export default function LogistiquePage() {
         {/* Incoterms */}
         <div>
           <h2 style={colTitleStyle}>{t("incotermsSection")}</h2>
+          <p style={{ fontSize: 11.5, color: "var(--sub)", margin: "0 0 10px" }}>
+            {t("incotermInclusLabel")} {t("incotermInclusAide")}
+          </p>
           <form onSubmit={handleAjouterIncoterm} className="card" style={{ marginBottom: 12 }}>
             <label style={labelStyle}>{t("incotermCodeLabel")}</label>
             <input
@@ -69,9 +87,34 @@ export default function LogistiquePage() {
           ) : (
             <div style={{ display: "grid", gap: 6 }}>
               {incoterms.map((inc) => (
-                <div key={inc.id} style={ligneListeStyle}>
-                  <span className="mono" style={{ fontWeight: 700 }}>
+                <div key={inc.id} style={{ ...ligneListeStyle, flexWrap: "wrap", gap: 8 }}>
+                  <span className="mono" style={{ fontWeight: 700, minWidth: 44 }}>
                     {inc.code}
+                  </span>
+                  <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4 }} aria-label={t("incotermInclusLabel")}>
+                    {TYPES_INCLUS.map((type) => {
+                      const actif = (inc.inclus || []).includes(type);
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          aria-pressed={actif}
+                          onClick={() => basculerInclus(inc, type)}
+                          style={{
+                            border: "1px solid " + (actif ? "var(--petrol)" : "var(--line)"),
+                            background: actif ? "var(--petrol)" : "transparent",
+                            color: actif ? "#fff" : "var(--sub)",
+                            borderRadius: 999,
+                            padding: "2px 9px",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {t(`receptionsCoutType${type}`)}
+                        </button>
+                      );
+                    })}
                   </span>
                 </div>
               ))}
@@ -81,7 +124,12 @@ export default function LogistiquePage() {
 
         {/* Transitaires + dashboard */}
         <div>
-          <h2 style={colTitleStyle}>{t("transitairesSection")}</h2>
+          <h2 style={colTitleStyle}>
+            {t("transitairesSection")}{" "}
+            <a href="/transitaires" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--petrol)", marginLeft: 8 }}>
+              {t("logistiqueTransitairesLien")}
+            </a>
+          </h2>
           <form onSubmit={handleAjouterTransitaire} className="card" style={{ marginBottom: 12 }}>
             <label style={labelStyle}>{t("transitaireNameLabel")}</label>
             <input
