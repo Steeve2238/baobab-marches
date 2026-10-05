@@ -24,6 +24,7 @@
  */
 const { v4: uuidv4 } = require("uuid");
 const compta = require("./comptaService");
+const analytique = require("./comptaAnalytique");
 
 const { versCentimes, centimesVersDecimal } = compta;
 
@@ -170,10 +171,13 @@ async function genererEcritureFacture(client, tenantId, utilisateurId, factureId
       lignes.push({ designation: p.designation, produit: true, montant: montants[i] });
     });
     // Resolution des comptes de vente (regles memorisees) pour les lignes produit
+    // Analytique (3C) : dossier choisi sur le devis, sinon section de sa consultation.
+    const section = await analytique.sectionDeFacture(client, tenantId, facture.id);
     for (let i = 0; i < lignes.length; i++) {
       if (!lignes[i].produit) continue;
       const cv = await compteDeVente(client, tenantId, parametre, facture.client_commercial_id, lignes[i].designation);
-      lignes[i] = { compte_id: cv.id, tiers_id: null, libelle: lignes[i].designation, debit_c: 0, credit_c: lignes[i].montant, date_echeance: null, compte_modifiable: "PRODUIT" };
+      const ventil = section && (await client.query(`SELECT analytique FROM compte_comptable WHERE id = $1`, [cv.id])).rows[0]?.analytique ? [{ section_id: section }] : null;
+      lignes[i] = { compte_id: cv.id, tiers_id: null, libelle: lignes[i].designation, debit_c: 0, credit_c: lignes[i].montant, date_echeance: null, compte_modifiable: "PRODUIT", analytique: ventil };
     }
     if (htAcomptesC > 0) {
       const idAcompte = await idCompte(client, tenantId, parametre.compte_acompte_client);
@@ -282,6 +286,7 @@ async function genererAnnulationFacture(client, tenantId, utilisateurId, facture
         debit_c: versCentimes(l.credit), credit_c: versCentimes(l.debit),
         date_echeance: l.date_echeance ? dateSql(l.date_echeance) : null,
         compte_modifiable: l.compte_modifiable === "TRESORERIE" ? "TRESORERIE" : null,
+        analytique_inverse_de: l.id,
       }))
     );
     await client.query(`UPDATE ecriture_comptable SET extournee_par_id = $2 WHERE id = $1`, [e.id, inverse.rows[0].id]);

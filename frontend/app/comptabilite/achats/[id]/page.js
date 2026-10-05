@@ -75,6 +75,7 @@ export default function FactureFournisseurDetailPage() {
                 <tr>
                   <th style={thStyle}>{t("comptaAchatsLigneLibelle")}</th>
                   <th style={thStyle}>{t("comptaAchatsLigneCompte")}</th>
+                  {f.lignes.some((l) => l.section_code) && <th style={thStyle}>{t("comptaAnaDossier")}</th>}
                   <th style={{ ...thStyle, textAlign: "right" }}>{t("comptaAchatsLigneHt")}</th>
                   <th style={{ ...thStyle, textAlign: "right" }}>{t("comptaAchatsLigneTva")}</th>
                   <th style={{ ...thStyle, textAlign: "right" }}>{t("comptaAchatsTva")}</th>
@@ -85,6 +86,7 @@ export default function FactureFournisseurDetailPage() {
                   <tr key={l.id}>
                     <td style={tdStyle}>{l.libelle}</td>
                     <td style={tdStyle}><span style={{ fontFamily: "IBM Plex Mono, monospace" }}>{l.compte_numero}</span><div style={{ fontSize: 11, color: "var(--sub)" }}>{l.compte_libelle}</div></td>
+                    {f.lignes.some((x) => x.section_code) && <td style={tdStyle}>{l.section_code ? <><span style={{ fontFamily: "IBM Plex Mono, monospace" }}>{l.section_code}</span><div style={{ fontSize: 11, color: "var(--sub)" }}>{l.section_libelle}</div></> : ""}</td>}
                     <td style={{ ...tdStyle, ...numStyle }}>{m(l.montant_ht)}</td>
                     <td style={{ ...tdStyle, ...numStyle }}>{Number(l.taux_tva)}</td>
                     <td style={{ ...tdStyle, ...numStyle }}>{m(l.montant_tva)}</td>

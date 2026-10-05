@@ -18,6 +18,7 @@ const ONGLETS = [
   { href: "/comptabilite/balance", key: "comptaNavBalance" },
   { href: "/comptabilite/balances-tiers", key: "comptaNavBalancesTiers" },
   { href: "/comptabilite/balance-agee", key: "comptaNavBalanceAgee" },
+  { href: "/comptabilite/analytique", key: "comptaNavAnalytique" },
   { href: "/comptabilite/plan", key: "comptaNavPlan" },
   { href: "/comptabilite/tiers", key: "comptaNavTiers" },
   { href: "/comptabilite/importer", key: "comptaNavImporter" },

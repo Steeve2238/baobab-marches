@@ -97,6 +97,7 @@ async function contrePasser(client, tenantId, utilisateurId, ecriture, origine, 
       debit_c: versCentimes(l.credit),
       credit_c: versCentimes(l.debit),
       date_echeance: l.date_echeance ? dateSql(l.date_echeance) : null,
+      analytique_inverse_de: l.id,
     }))
   );
   await client.query(`UPDATE ecriture_comptable SET extournee_par_id = $2 WHERE id = $1`, [ecriture.id, inverse.rows[0].id]);
@@ -185,7 +186,14 @@ async function chiffrerLignesFacture(client, tenantId, lignesSaisies, parametre)
       throw new ComptaError("COMPTA_FACTURE_FOURNISSEUR_COMPTE_INVALIDE", 400, { ligne: i + 1, numero: compte.numero });
     }
     const tvaC = Math.round((montantC * Math.round(taux * 100)) / 10000);
-    lignes.push({ libelle, compte, montant_c: montantC, taux, tva_c: tvaC });
+    // Analytique (3C) : un dossier par ligne (section_id) ou une ventilation detaillee (analytique[]).
+    const analytique = Array.isArray(l.analytique) && l.analytique.length > 0 ? l.analytique : l.section_id ? [{ section_id: l.section_id }] : null;
+    if (analytique) {
+      const ids = analytique.map((x) => String(x && x.section_id));
+      const sec = await client.query(`SELECT id FROM section_analytique WHERE tenant_id = $1 AND actif = true AND id::text = ANY($2::text[])`, [tenantId, ids]);
+      if (sec.rows.length !== new Set(ids).size) throw new ComptaError("COMPTA_ANALYTIQUE_SECTION_INTROUVABLE", 400);
+    }
+    lignes.push({ libelle, compte, montant_c: montantC, taux, tva_c: tvaC, analytique });
     ht += montantC;
     tva += tvaC;
   }
@@ -232,9 +240,10 @@ async function creerFactureFournisseur(client, tenantId, utilisateurId, data) {
   for (let i = 0; i < lignes.length; i++) {
     const l = lignes[i];
     await client.query(
-      `INSERT INTO facture_fournisseur_ligne (id, tenant_id, facture_id, ordre, libelle, compte_id, montant_ht, taux_tva, montant_tva)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [uuidv4(), tenantId, facture.id, i + 1, l.libelle, l.compte.id, centimesVersDecimal(l.montant_c), l.taux, centimesVersDecimal(l.tva_c)]
+      `INSERT INTO facture_fournisseur_ligne (id, tenant_id, facture_id, ordre, libelle, compte_id, montant_ht, taux_tva, montant_tva, section_analytique_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [uuidv4(), tenantId, facture.id, i + 1, l.libelle, l.compte.id, centimesVersDecimal(l.montant_c), l.taux, centimesVersDecimal(l.tva_c),
+       l.analytique && l.analytique.length === 1 ? l.analytique[0].section_id : null]
     );
   }
 
@@ -251,6 +260,7 @@ async function creerFactureFournisseur(client, tenantId, utilisateurId, data) {
     debit_c: l.montant_c,
     credit_c: 0,
     date_echeance: null,
+    analytique: l.analytique,
   }));
   if (tva_c > 0) {
     lignesEcriture.push({
@@ -317,8 +327,9 @@ async function lireFactureFournisseur(client, tenantId, id) {
   const r = await client.query(`${SELECT_FACTURE} WHERE f.tenant_id = $1 AND f.id = $2`, [tenantId, id]);
   if (!r.rows[0]) throw new ComptaError("COMPTA_FACTURE_FOURNISSEUR_INTROUVABLE", 404);
   const lignes = await client.query(
-    `SELECT l.*, c.numero AS compte_numero, c.libelle AS compte_libelle
+    `SELECT l.*, c.numero AS compte_numero, c.libelle AS compte_libelle, s.code AS section_code, s.libelle AS section_libelle
      FROM facture_fournisseur_ligne l JOIN compte_comptable c ON c.id = l.compte_id
+     LEFT JOIN section_analytique s ON s.id = l.section_analytique_id
      WHERE l.facture_id = $1 ORDER BY l.ordre`,
     [id]
   );

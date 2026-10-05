@@ -6,9 +6,10 @@ import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
 import ComptaSousNav from "../../../../lib/components/ComptaSousNav";
+import VentilationEditor, { ventilationVersPayload, totalParts } from "../../../../lib/components/VentilationEditor";
 import { useComptaStatut, labelStyle, inputStyle, boutonPrincipalStyle, boutonSecondaireStyle, thStyle, tdStyle, numStyle, formaterMontant } from "../../../../lib/comptaUi";
 
-const LIGNE_VIDE = () => ({ cle: Math.random().toString(36).slice(2), libelle: "", compte_numero: "", montant_ht: "", taux_tva: "18" });
+const LIGNE_VIDE = () => ({ cle: Math.random().toString(36).slice(2), libelle: "", compte_numero: "", montant_ht: "", taux_tva: "18", parts: [] });
 const nombre = (v) => Number(String(v || "").replace(/\s/g, "").replace(",", ".")) || 0;
 const arrondi = (n) => Math.round(n * 100) / 100;
 
@@ -22,6 +23,7 @@ export default function NouvelleFactureFournisseurPage() {
   const { statut } = useComptaStatut();
   const [fournisseurs, setFournisseurs] = useState([]);
   const [comptes, setComptes] = useState([]);
+  const [sections, setSections] = useState([]);
   const [entete, setEntete] = useState({ tiers_id: "", reference_fournisseur: "", date_facture: new Date().toISOString().slice(0, 10), date_echeance: "", libelle: "" });
   const [lignes, setLignes] = useState([LIGNE_VIDE()]);
   const [nouveau, setNouveau] = useState(null);
@@ -31,9 +33,16 @@ export default function NouvelleFactureFournisseurPage() {
   useEffect(() => {
     api.comptaAchatsFournisseurs().then(setFournisseurs).catch((e) => setErreur(e.message));
     api.comptaComptes({ limit: 5000, actif: "true" }).then((c) => setComptes(c.filter((x) => [2, 3, 6].includes(x.classe)))).catch(() => {});
+    api.comptaAnalytiqueSections({ actifs: "1" }).then(setSections).catch(() => {});
   }, []);
 
   const defaut = statut?.parametre?.compte_achat_defaut || "";
+  const compteParNumero = useMemo(() => new Map(comptes.map((c) => [c.numero, c])), [comptes]);
+  // Une ligne n'est ventilable que si son compte porte la comptabilite analytique (charges par defaut).
+  const ligneAnalytique = (l) => {
+    const c = compteParNumero.get(l.compte_numero || defaut);
+    return c ? !!c.analytique : true;
+  };
   const totaux = useMemo(() => {
     let ht = 0;
     let tva = 0;
@@ -66,7 +75,7 @@ export default function NouvelleFactureFournisseurPage() {
       const f = await api.comptaAchatsCreerFacture({
         ...entete,
         date_echeance: entete.date_echeance || undefined,
-        lignes: lignes.map((l) => ({ libelle: l.libelle, compte_numero: l.compte_numero || undefined, montant_ht: l.montant_ht, taux_tva: l.taux_tva })),
+        lignes: lignes.map((l) => ({ libelle: l.libelle, compte_numero: l.compte_numero || undefined, montant_ht: l.montant_ht, taux_tva: l.taux_tva, ...(ligneAnalytique(l) && ventilationVersPayload(l.parts) ? { analytique: ventilationVersPayload(l.parts) } : {}) })),
       });
       router.push(`/comptabilite/achats/${f.id}?cree=1`);
     } catch (e) {
@@ -75,7 +84,7 @@ export default function NouvelleFactureFournisseurPage() {
     }
   }
 
-  const peutEnregistrer = entete.tiers_id && entete.reference_fournisseur.trim() && totaux.ttc > 0 && lignes.every((l) => l.libelle.trim() && nombre(l.montant_ht) > 0);
+  const peutEnregistrer = entete.tiers_id && entete.reference_fournisseur.trim() && totaux.ttc > 0 && lignes.every((l) => l.libelle.trim() && nombre(l.montant_ht) > 0) && lignes.every((l) => (l.parts || []).filter((p) => p.section_id).length < 2 || Math.abs(totalParts(l.parts) - 100) < 0.005);
 
   return (
     <AppShell title={t("comptaAchatsNouvelle")} subNav={<ComptaSousNav />}>
@@ -130,11 +139,12 @@ export default function NouvelleFactureFournisseurPage() {
 
       <div className="card" style={{ padding: 0, overflowX: "auto", marginBottom: 14 }}>
         <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--line)", fontWeight: 700, fontSize: 13 }}>{t("comptaAchatsLignes")}</div>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 960 }}>
           <thead>
             <tr>
               <th style={thStyle}>{t("comptaAchatsLigneLibelle")}</th>
               <th style={{ ...thStyle, width: 250 }}>{t("comptaAchatsLigneCompte")}</th>
+              {sections.length > 0 && <th style={{ ...thStyle, width: 230 }}>{t("comptaAnaDossier")}</th>}
               <th style={{ ...thStyle, width: 150, textAlign: "right" }}>{t("comptaAchatsLigneHt")}</th>
               <th style={{ ...thStyle, width: 80, textAlign: "right" }}>{t("comptaAchatsLigneTva")}</th>
               <th style={{ ...thStyle, width: 40 }}></th>
@@ -147,6 +157,11 @@ export default function NouvelleFactureFournisseurPage() {
                 <td style={tdStyle}>
                   <input list="comptes-charge" placeholder={defaut} value={l.compte_numero} onChange={(e) => majLigne(l.cle, { compte_numero: e.target.value })} style={{ ...inputStyle, fontFamily: "IBM Plex Mono, monospace" }} />
                 </td>
+                {sections.length > 0 && (
+                  <td style={tdStyle}>
+                    {ligneAnalytique(l) ? <VentilationEditor sections={sections} parts={l.parts} onChange={(parts) => majLigne(l.cle, { parts })} /> : null}
+                  </td>
+                )}
                 <td style={tdStyle}><input inputMode="decimal" value={l.montant_ht} onChange={(e) => majLigne(l.cle, { montant_ht: e.target.value })} style={{ ...inputStyle, textAlign: "right" }} /></td>
                 <td style={tdStyle}><input inputMode="decimal" value={l.taux_tva} onChange={(e) => majLigne(l.cle, { taux_tva: e.target.value })} style={{ ...inputStyle, textAlign: "right" }} /></td>
                 <td style={tdStyle}>

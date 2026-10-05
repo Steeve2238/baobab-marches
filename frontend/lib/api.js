@@ -614,7 +614,7 @@ export const api = {
   comptaExporter: (etat, format, params = {}) =>
     requestDownload(
       `/comptabilite/${etat}/export?${new URLSearchParams({ ...params, format }).toString()}`,
-      `${etat}.${format}`
+      `${String(etat).replace(/\//g, "_")}.${format}`
     ),
   comptaAudit: () => request("/comptabilite/audit"),
   // --- Comptabilite phase 2 : ecritures en instance (ventes automatiques) ---
@@ -654,6 +654,19 @@ export const api = {
   comptaLettrageAuto: () => request("/comptabilite/lettrage/automatique", { method: "POST" }),
   comptaBalanceTiers: (params = {}) => request(`/comptabilite/balance-tiers?${new URLSearchParams(params).toString()}`),
   comptaBalanceAgee: (params = {}) => request(`/comptabilite/balance-agee?${new URLSearchParams(params).toString()}`),
+  // --- Comptabilite phase 3C : analytique par dossier ---
+  comptaAnalytiqueSections: (params = {}) => request(`/comptabilite/analytique/sections?${new URLSearchParams(params).toString()}`),
+  comptaAnalytiqueCreerSection: (data) => request("/comptabilite/analytique/sections", { method: "POST", body: JSON.stringify(data) }),
+  comptaAnalytiqueModifierSection: (id, data) => request(`/comptabilite/analytique/sections/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  comptaAnalytiqueResultats: (params = {}) => request(`/comptabilite/analytique/resultats?${new URLSearchParams(params).toString()}`),
+  comptaAnalytiqueDossier: (params = {}) => request(`/comptabilite/analytique/dossier?${new URLSearchParams(params).toString()}`),
+  comptaAnalytiqueGrandLivre: (params = {}) => request(`/comptabilite/analytique/grand-livre?${new URLSearchParams(params).toString()}`),
+  comptaAnalytiqueAVentiler: (params = {}) => request(`/comptabilite/analytique/a-ventiler?${new URLSearchParams(params).toString()}`),
+  comptaAnalytiqueVentilerLigne: (ligneId, ventilations) => request(`/comptabilite/analytique/lignes/${ligneId}`, { method: "PUT", body: JSON.stringify({ ventilations }) }),
+  comptaAnalytiqueVentilerLot: (data) => request("/comptabilite/analytique/ventiler-lot", { method: "POST", body: JSON.stringify(data) }),
+  comptaAnalytiqueHeritageVentes: () => request("/comptabilite/analytique/heritage-ventes", { method: "POST" }),
+  ventesSectionsAnalytiques: () => request("/ventes/sections-analytiques"),
+  modifierDevisSectionAnalytique: (id, sectionId) => request(`/ventes/devis/${id}/section-analytique`, { method: "PATCH", body: JSON.stringify({ section_analytique_id: sectionId || null }) }),
   comptaTresorerieComptes: () => request("/comptabilite/tresorerie/comptes"),
   comptaTresorerieCreerCompte: (data) => request("/comptabilite/tresorerie/comptes", { method: "POST", body: JSON.stringify(data) }),
   comptaTresorerieMouvement: (data) => request("/comptabilite/tresorerie/mouvements", { method: "POST", body: JSON.stringify(data) }),

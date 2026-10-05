@@ -10,6 +10,8 @@ const importCompta = require("../services/comptaImport");
 const achatsCompta = require("../services/comptaAchats");
 const encaissementsCompta = require("../services/comptaEncaissements");
 const tiersCompta = require("../services/comptaTiers");
+const analytiqueCompta = require("../services/comptaAnalytique");
+const exportsAnalytique = require("../services/comptaExportsAnalytique");
 const exportsTiers = require("../services/comptaExportsTiers");
 const multer = require("multer");
 
@@ -954,6 +956,121 @@ router.get(
     const buffer = format === "pdf" ? await exportsTiers.balanceAgeePdf(data, entreprise) : exportsTiers.balanceAgeeXlsx(data, entreprise);
     const base = `balance_agee_${data.type === "CLIENT" ? "clients" : "fournisseurs"}_${data.date_arrete}`;
     envoyerFichier(res, buffer, `${base}.${format}`, format);
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Analytique par dossier (phase 3C)
+// ----------------------------------------------------------------------------
+
+const optionsAnalytique = (req) => ({ ...optionsRapport(req), section_id: req.query.section_id || undefined });
+
+router.get(
+  "/analytique/sections",
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => analytiqueCompta.listerSections(client, tenant(req), { actifs: vrai(req.query.actifs) })));
+  })
+);
+
+router.post(
+  "/analytique/sections",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const s = await avecTransaction((client) => analytiqueCompta.creerSection(client, tenant(req), userId(req), req.body || {}));
+    res.status(201).json(s);
+  })
+);
+
+router.patch(
+  "/analytique/sections/:id",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => analytiqueCompta.modifierSection(client, tenant(req), userId(req), req.params.id, req.body || {})));
+  })
+);
+
+router.get(
+  "/analytique/resultats",
+  gerer(async (req, res) => {
+    res.json(await analytiqueCompta.balanceAnalytique(db, tenant(req), optionsAnalytique(req)));
+  })
+);
+
+router.get(
+  "/analytique/resultats/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await analytiqueCompta.balanceAnalytique(db, tenant(req), optionsAnalytique(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await exportsAnalytique.balanceAnalytiquePdf(data, entreprise) : exportsAnalytique.balanceAnalytiqueXlsx(data, entreprise);
+    envoyerFichier(res, buffer, nomFichier("resultat_par_dossier", data, format), format);
+  })
+);
+
+router.get(
+  "/analytique/dossier",
+  gerer(async (req, res) => {
+    res.json(await analytiqueCompta.resultatDossier(db, tenant(req), optionsAnalytique(req)));
+  })
+);
+
+router.get(
+  "/analytique/dossier/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await analytiqueCompta.resultatDossier(db, tenant(req), optionsAnalytique(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await exportsAnalytique.resultatDossierPdf(data, entreprise) : exportsAnalytique.resultatDossierXlsx(data, entreprise);
+    envoyerFichier(res, buffer, nomFichier(`dossier_${data.section.code}`, data, format), format);
+  })
+);
+
+router.get(
+  "/analytique/grand-livre",
+  gerer(async (req, res) => {
+    res.json(await analytiqueCompta.grandLivreAnalytique(db, tenant(req), optionsAnalytique(req)));
+  })
+);
+
+router.get(
+  "/analytique/grand-livre/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await analytiqueCompta.grandLivreAnalytique(db, tenant(req), optionsAnalytique(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await exportsAnalytique.grandLivreAnalytiquePdf(data, entreprise) : exportsAnalytique.grandLivreAnalytiqueXlsx(data, entreprise);
+    envoyerFichier(res, buffer, nomFichier(`grand_livre_analytique_${data.section.code}`, data, format), format);
+  })
+);
+
+router.get(
+  "/analytique/a-ventiler",
+  gerer(async (req, res) => {
+    res.json(await analytiqueCompta.lignesAVentiler(db, tenant(req), { exercice_id: req.query.exercice_id || undefined, limit: req.query.limit }));
+  })
+);
+
+router.put(
+  "/analytique/lignes/:id",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => analytiqueCompta.ventilerLigne(client, tenant(req), userId(req), req.params.id, req.body?.ventilations || [])));
+  })
+);
+
+router.post(
+  "/analytique/ventiler-lot",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => analytiqueCompta.ventilerLot(client, tenant(req), userId(req), req.body || {})));
+  })
+);
+
+router.post(
+  "/analytique/heritage-ventes",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => analytiqueCompta.appliquerHeritageVentes(client, tenant(req), userId(req))));
   })
 );
 

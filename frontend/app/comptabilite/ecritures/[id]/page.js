@@ -7,6 +7,7 @@ import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
 import ComptaSousNav from "../../../../lib/components/ComptaSousNav";
+import VentilationEditor, { ventilationVersPayload, totalParts, partsDepuisLigne } from "../../../../lib/components/VentilationEditor";
 import {
   useComptaStatut,
   labelStyle,
@@ -23,7 +24,7 @@ import {
   STATUT_COULEURS,
 } from "../../../../lib/comptaUi";
 
-const LIGNE_VIDE = () => ({ cle: Math.random().toString(36).slice(2), compte_numero: "", tiers_id: "", libelle: "", debit: "", credit: "", date_echeance: "" });
+const LIGNE_VIDE = () => ({ cle: Math.random().toString(36).slice(2), compte_numero: "", tiers_id: "", libelle: "", debit: "", credit: "", date_echeance: "", parts: [] });
 const nombre = (v) => Number(String(v || "").replace(/\s/g, "").replace(",", ".")) || 0;
 const estCollectif = (n) => /^(40|41)/.test(n || "");
 
@@ -44,6 +45,8 @@ export default function EcritureDetailPage() {
   const [journaux, setJournaux] = useState([]);
   const [comptes, setComptes] = useState([]);
   const [tiers, setTiers] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [editVent, setEditVent] = useState(null); // { ligneId, parts } : ventilation d'une ligne d'ecriture deja validee
   const [ecriture, setEcriture] = useState(null);
   const [entete, setEntete] = useState({ journal_id: "", date_ecriture: new Date().toISOString().slice(0, 10), libelle: "", numero_piece: "" });
   const [lignes, setLignes] = useState([LIGNE_VIDE(), LIGNE_VIDE()]);
@@ -55,6 +58,7 @@ export default function EcritureDetailPage() {
     api.comptaJournaux().then((j) => setJournaux(j.filter((x) => x.actif))).catch(() => {});
     api.comptaComptes({ limit: 5000, actif: "true" }).then(setComptes).catch(() => {});
     api.comptaTiers().then(setTiers).catch(() => {});
+    api.comptaAnalytiqueSections({ actifs: "1" }).then(setSections).catch(() => {});
   }, []);
 
   function chargerEcriture() {
@@ -72,6 +76,7 @@ export default function EcritureDetailPage() {
             debit: Number(l.debit) ? String(l.debit) : "",
             credit: Number(l.credit) ? String(l.credit) : "",
             date_echeance: l.date_echeance || "",
+            parts: partsDepuisLigne(l.analytique, Number(l.debit) || Number(l.credit)),
           }))
         );
       })
@@ -109,6 +114,7 @@ export default function EcritureDetailPage() {
           debit: nombre(l.debit),
           credit: nombre(l.credit),
           date_echeance: l.date_echeance || null,
+          ...(compteParNumero.get(l.compte_numero)?.analytique && ventilationVersPayload(l.parts) ? { analytique: ventilationVersPayload(l.parts) } : {}),
         })),
     };
   }
@@ -141,6 +147,19 @@ export default function EcritureDetailPage() {
       setErreur(err.message);
     } finally {
       setEnvoi(false);
+    }
+  }
+
+  async function enregistrerVentilation(ligneId, parts) {
+    setErreur("");
+    setInfo("");
+    try {
+      await api.comptaAnalytiqueVentilerLigne(ligneId, ventilationVersPayload(parts) || []);
+      setEditVent(null);
+      setInfo(t("comptaAnaVentilationEnregistree"));
+      chargerEcriture();
+    } catch (err) {
+      setErreur(err.message);
     }
   }
 
@@ -239,7 +258,7 @@ export default function EcritureDetailPage() {
       </datalist>
 
       <div className="card" style={{ padding: 0, overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 900 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1100 }}>
           <thead>
             <tr>
               <th style={thStyle}>{t("comptaCompte")}</th>
@@ -248,6 +267,7 @@ export default function EcritureDetailPage() {
               <th style={{ ...thStyle, textAlign: "right" }}>{t("comptaDebit")}</th>
               <th style={{ ...thStyle, textAlign: "right" }}>{t("comptaCredit")}</th>
               <th style={thStyle}>{t("comptaEcheance")}</th>
+              {sections.length > 0 && <th style={thStyle}>{t("comptaAnaDossier")}</th>}
               {!lectureSeule && <th style={thStyle}></th>}
             </tr>
           </thead>
@@ -311,6 +331,39 @@ export default function EcritureDetailPage() {
                       <input disabled={lectureSeule} type="date" value={l.date_echeance} onChange={(e) => majLigne(l.cle, { date_echeance: e.target.value })} style={{ ...inputStyle, width: 140 }} />
                     )}
                   </td>
+                  {sections.length > 0 && (
+                    <td style={{ ...tdStyle, minWidth: 210 }}>
+                      {!compte?.analytique ? null : !lectureSeule ? (
+                        <VentilationEditor sections={sections} parts={l.parts} onChange={(parts) => majLigne(l.cle, { parts })} />
+                      ) : editVent?.ligneId === l.cle ? (
+                        <div style={{ display: "grid", gap: 6 }}>
+                          <VentilationEditor sections={sections} parts={editVent.parts} onChange={(parts) => setEditVent((v) => ({ ...v, parts }))} />
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button type="button" style={{ ...boutonPrincipalStyle, padding: "4px 10px" }} disabled={(editVent.parts || []).filter((p) => p.section_id).length > 1 && Math.abs(totalParts(editVent.parts) - 100) > 0.005} onClick={() => enregistrerVentilation(l.cle, editVent.parts)}>{t("comptaAnaEnregistrer")}</button>
+                            <button type="button" style={{ ...boutonSecondaireStyle, padding: "3px 8px" }} onClick={() => setEditVent(null)}>{t("comptaAnnuler")}</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12 }}>
+                          {(lignePersistee?.analytique || []).length === 0 ? (
+                            <span style={{ color: "var(--sub)" }}>{t("comptaAnaNonAffecte")}</span>
+                          ) : (
+                            lignePersistee.analytique.map((a) => (
+                              <div key={a.section_id}>
+                                <span style={{ fontFamily: "IBM Plex Mono, monospace", fontWeight: 600 }}>{a.code}</span>{" "}
+                                {(lignePersistee.analytique.length > 1) && <span style={{ color: "var(--sub)" }}>{formaterMontant(a.montant, locale)}</span>}
+                              </div>
+                            ))
+                          )}
+                          {peutEcrire && ecriture?.statut !== "BROUILLON" && (
+                            <button type="button" onClick={() => setEditVent({ ligneId: l.cle, parts: l.parts })} style={{ border: "none", background: "transparent", color: "var(--petrol)", fontWeight: 600, padding: 0, fontSize: 11, marginTop: 2 }}>
+                              {t("comptaAnaModifierVentilation")}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  )}
                   {!lectureSeule && (
                     <td style={tdStyle}>
                       <button type="button" style={{ ...boutonSecondaireStyle, padding: "3px 8px" }} onClick={() => setLignes((ls) => (ls.length > 2 ? ls.filter((x) => x.cle !== l.cle) : ls))}>
@@ -334,7 +387,7 @@ export default function EcritureDetailPage() {
               </td>
               <td style={{ ...tdStyle, ...numStyle, fontWeight: 700 }}>{formaterMontant(totaux.d / 100, locale)}</td>
               <td style={{ ...tdStyle, ...numStyle, fontWeight: 700 }}>{formaterMontant(totaux.c / 100, locale)}</td>
-              <td colSpan={2} style={{ ...tdStyle, fontWeight: 700, color: equilibre ? "var(--vert)" : "var(--brique)" }}>
+              <td colSpan={sections.length > 0 ? 3 : 2} style={{ ...tdStyle, fontWeight: 700, color: equilibre ? "var(--vert)" : "var(--brique)" }}>
                 {equilibre ? t("comptaEquilibree") : `${t("comptaEcart")} : ${formaterMontant(Math.abs(totaux.ecart) / 100, locale)}`}
               </td>
             </tr>

@@ -8,6 +8,7 @@ const { t } = require("../utils/i18n");
 const { genererChronogrammeConsultation } = require("../services/chronogrammeConsultationEngine");
 const { assurerTiersPourClientSilencieux } = require("../services/comptaService");
 const comptaVentes = require("../services/comptaVentes");
+const comptaAnalytique = require("../services/comptaAnalytique");
 const { verifierAffectationValide } = require("../utils/affectationTache");
 
 const router = express.Router();
@@ -1217,6 +1218,61 @@ router.patch("/devis/:id", async (req, res) => {
 // ce sujet plus haut) puisse tout de meme corriger un client - une
 // correction plus sensible qu'un simple ajustement de lignes/remise, jamais
 // ouverte au meme perimetre que la creation/edition courante.
+// ----------------------------------------------------------------------------
+// Analytique (comptabilite, phase 3C) : dossier choisi sur le devis. La facture
+// de vente et son ecriture comptable en heritent ; sans choix, c'est la section
+// de la consultation liee au devis. Sans effet tant que le module Comptabilite
+// n'est pas actif et initialise.
+// ----------------------------------------------------------------------------
+
+async function comptabiliteUtilisable(tenantId) {
+  const actif = await require("../services/comptaService").moduleComptabiliteActif(tenantId);
+  if (!actif) return false;
+  const p = await require("../services/comptaService").getParametre(db, tenantId);
+  return !!(p && p.initialisee);
+}
+
+router.get("/sections-analytiques", async (req, res) => {
+  try {
+    if (!(await comptabiliteUtilisable(req.user.tenantId))) return res.json([]);
+    const sections = await comptaAnalytique.listerSections(db, req.user.tenantId, { actifs: true });
+    res.json(sections.map((s) => ({ id: s.id, code: s.code, libelle: s.libelle, type_section: s.type_section })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_DEVIS_FETCH_ERROR") });
+  }
+});
+
+router.patch("/devis/:id/section-analytique", requireRoleOuValidateurUniversel(...ROLES_CREATION, ...ROLES_VALIDATION), async (req, res) => {
+  const { id } = req.params;
+  const sectionId = req.body.section_analytique_id || null;
+  try {
+    const existant = await db.query(`SELECT id FROM devis WHERE id = $1 AND tenant_id = $2`, [id, req.user.tenantId]);
+    if (existant.rows.length === 0) return res.status(404).json({ error: t(req, "VENTE_DEVIS_NOT_FOUND") });
+    if (sectionId) {
+      const s = await db.query(`SELECT 1 FROM section_analytique WHERE id = $1 AND tenant_id = $2 AND actif = true`, [sectionId, req.user.tenantId]);
+      if (s.rows.length === 0) return res.status(400).json({ error: t(req, "VENTE_DEVIS_SECTION_INTROUVABLE") });
+    }
+    await db.query(`UPDATE devis SET section_analytique_id = $3 WHERE id = $1 AND tenant_id = $2`, [id, req.user.tenantId, sectionId]);
+    // Factures deja comptabilisees pour ce devis : leurs lignes de produit non ventilees heritent du dossier.
+    let ventile = 0;
+    try {
+      if (await comptabiliteUtilisable(req.user.tenantId)) {
+        const r = await require("../services/comptaService").avecTransaction((client) =>
+          comptaAnalytique.appliquerHeritageVentes(client, req.user.tenantId, req.user.sub, { devis_id: id })
+        );
+        ventile = r.lignes;
+      }
+    } catch (err) {
+      console.error("Analytique : heritage du dossier impossible", err.message);
+    }
+    res.json({ id, section_analytique_id: sectionId, lignes_ventilees: ventile });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_DEVIS_UPDATE_ERROR") });
+  }
+});
+
 router.patch("/devis/:id/client", async (req, res) => {
   const { id } = req.params;
   const { client_commercial_id } = req.body;

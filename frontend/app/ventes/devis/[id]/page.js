@@ -43,6 +43,8 @@ export default function DevisDetailPage() {
   const [chargement, setChargement] = useState(true);
   const [action, setAction] = useState(false);
   const [referenceBc, setReferenceBc] = useState("");
+  const [sectionsAna, setSectionsAna] = useState([]);
+  const [infoAna, setInfoAna] = useState("");
   const [formOuvert, setFormOuvert] = useState(false);
   const [formDevis, setFormDevis] = useState(null);
   const [lignesEdition, setLignesEdition] = useState([]);
@@ -65,6 +67,23 @@ export default function DevisDetailPage() {
   }
 
   useEffect(charger, [params.id]);
+
+  // Dossiers analytiques (comptabilite) : liste vide si le module n'est pas actif pour ce client.
+  useEffect(() => {
+    api.ventesSectionsAnalytiques().then(setSectionsAna).catch(() => setSectionsAna([]));
+  }, []);
+
+  async function handleChangerSectionAna(valeur) {
+    setErreur("");
+    setInfoAna("");
+    try {
+      await api.modifierDevisSectionAnalytique(devis.id, valeur);
+      setDevis((prev) => ({ ...prev, section_analytique_id: valeur || null }));
+      setInfoAna(t("comptaAnaDevisEnregistre"));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
 
   // Personnalise dynamiquement document.title (numero du devis + entreprise
   // du tenant) car document.title est injecte par le navigateur dans
@@ -242,6 +261,23 @@ export default function DevisDetailPage() {
           </button>
         </div>
       </div>
+
+      {sectionsAna.length > 0 && possedeRole(["COMMERCIAL", "ADMINISTRATIF", "DIRECTION"]) && (
+        <div className="no-print card" style={{ marginBottom: 16, display: "flex", gap: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div style={{ minWidth: 280 }}>
+            <label style={labelStyle}>{t("comptaAnaDevisLabel")}</label>
+            <select value={devis.section_analytique_id || ""} onChange={(e) => handleChangerSectionAna(e.target.value)} style={{ ...inputStyle, maxWidth: 420 }}>
+              <option value="">{t("comptaAnaDevisAucun")}</option>
+              {sectionsAna.map((x) => (
+                <option key={x.id} value={x.id}>{x.code} — {x.libelle}</option>
+              ))}
+            </select>
+          </div>
+          <p style={{ fontSize: 11.5, color: "var(--sub)", margin: 0, maxWidth: 460, lineHeight: 1.45 }}>
+            {t("comptaAnaDevisAide")} {infoAna && <strong style={{ color: "var(--vert)" }}>{infoAna}</strong>}
+          </p>
+        </div>
+      )}
 
       {formOuvert && (
         <form onSubmit={handleEnregistrerDevis} className="no-print card" style={{ marginBottom: 16 }}>

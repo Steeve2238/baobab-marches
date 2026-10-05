@@ -728,19 +728,22 @@ async function normaliserLignes(client, tenantId, lignesSaisies) {
       debit_c: debit,
       credit_c: credit,
       date_echeance: l.date_echeance || null,
+      analytique: Array.isArray(l.analytique) && l.analytique.length > 0 ? l.analytique : null,
     });
   }
   return lignes;
 }
 
 async function insererLignes(client, tenantId, ecritureId, lignes) {
+  const ventilation = require("./comptaVentilation");
   for (let i = 0; i < lignes.length; i++) {
     const l = lignes[i];
+    const ligneId = uuidv4();
     await client.query(
       `INSERT INTO ligne_ecriture (id, tenant_id, ecriture_id, ordre, compte_id, tiers_id, libelle, debit, credit, date_echeance, compte_modifiable)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
-        uuidv4(),
+        ligneId,
         tenantId,
         ecritureId,
         i + 1,
@@ -753,6 +756,11 @@ async function insererLignes(client, tenantId, ecritureId, lignes) {
         l.compte_modifiable || null,
       ]
     );
+    // Analytique (phase 3C) : ventilation saisie, ou recopie inversee d'une ligne d'origine (extourne, annulation).
+    if (l.analytique_inverse_de) await ventilation.copierInverse(client, tenantId, l.analytique_inverse_de, ligneId);
+    else if (Array.isArray(l.analytique) && l.analytique.length > 0) {
+      await ventilation.ventilerLigne(client, tenantId, ligneId, l.compte_id, l.debit_c, l.credit_c, l.analytique);
+    }
   }
 }
 
@@ -939,6 +947,7 @@ async function extournerEcriture(client, tenantId, utilisateurId, id, { date_ecr
       debit_c: versCentimes(l.credit),
       credit_c: versCentimes(l.debit),
       date_echeance: l.date_echeance ? String(l.date_echeance).slice(0, 10) : null,
+      analytique_inverse_de: l.id,
     }))
   );
   const validee = await validerEcriture(client, tenantId, utilisateurId, ex.rows[0].id);
@@ -968,6 +977,19 @@ async function lireEcriture(client, tenantId, id) {
      WHERE l.ecriture_id = $1 ORDER BY l.ordre`,
     [id]
   );
+  // Ventilation analytique de chaque ligne (phase 3C) : [{ section_id, code, libelle, montant (positif) }]
+  const v = await client.query(
+    `SELECT v.ligne_ecriture_id, v.section_id, v.montant, s.code, s.libelle
+     FROM ventilation_analytique v JOIN section_analytique s ON s.id = v.section_id
+     JOIN ligne_ecriture l ON l.id = v.ligne_ecriture_id
+     WHERE l.ecriture_id = $1 ORDER BY s.code`,
+    [id]
+  );
+  for (const ligne of l.rows) {
+    ligne.analytique = v.rows
+      .filter((x) => x.ligne_ecriture_id === ligne.id)
+      .map((x) => ({ section_id: x.section_id, code: x.code, libelle: x.libelle, montant: Math.abs(Number(x.montant)) }));
+  }
   ecriture.lignes = l.rows;
   return ecriture;
 }
