@@ -622,6 +622,8 @@ export const api = {
     return requestUpload("/receptions/importer-excel", formData);
   },
   getFournisseursReception: () => request("/receptions/fournisseurs"),
+  estimerCoutsApprocheReception: (data) => request("/receptions/estimer-couts-approche", { method: "POST", body: JSON.stringify(data) }),
+  enregistrerCoutsApprocheReception: (id, couts) => request(`/receptions/${id}/couts-approche`, { method: "PUT", body: JSON.stringify({ couts_approche: couts }) }),
   createFournisseurReception: (data) => request("/receptions/fournisseurs", { method: "POST", body: JSON.stringify(data) }),
   ajusterStockProduit: (id, data) => request(`/produits/${id}/ajustement-stock`, { method: "POST", body: JSON.stringify(data) }),
   getMouvementsProduit: (id) => request(`/produits/${id}/mouvements`),

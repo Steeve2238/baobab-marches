@@ -8,6 +8,7 @@ const { assurerTiersPourFournisseurSilencieux } = require("../services/comptaSer
 const { chargerParametres } = require("../services/produitsCatalogue");
 const { enregistrerMouvement, stockProduit, genererReferenceInterne } = require("../services/stockService");
 const { lireFactureExcel } = require("../services/receptionExcel");
+const { TYPES_COUT, REPARTITIONS, repartirCouts, avertissementsIncoterm, estimerAssuranceEtDouane } = require("../services/receptionCouts");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -70,6 +71,9 @@ function nettoyerLignes(lignesBrutes) {
   for (const l of lignesBrutes) {
     const designation = String(l.designation ?? "").trim();
     const quantite = Number(l.quantite);
+    const poidsBrut = l.poids_unitaire_kg === "" || l.poids_unitaire_kg === undefined || l.poids_unitaire_kg === null ? null : Number(l.poids_unitaire_kg);
+    if (poidsBrut !== null && (!Number.isFinite(poidsBrut) || poidsBrut < 0)) return { erreur: "RECEPTION_LIGNE_INVALID" };
+    const poids = poidsBrut === null || poidsBrut === 0 ? null : Math.round(poidsBrut * 10000) / 10000;
     const pu = l.prix_unitaire_devise === "" || l.prix_unitaire_devise === undefined || l.prix_unitaire_devise === null ? 0 : Number(l.prix_unitaire_devise);
     if (!designation || !Number.isFinite(quantite) || quantite <= 0 || !Number.isFinite(pu) || pu < 0) {
       return { erreur: "RECEPTION_LIGNE_INVALID" };
@@ -82,10 +86,57 @@ function nettoyerLignes(lignesBrutes) {
       prix_unitaire_devise: Math.round(pu * 10000) / 10000,
       produit_id: typeof l.produit_id === "string" && UUID_RE.test(l.produit_id) ? l.produit_id : null,
       reference_interne: String(l.reference_interne ?? "").trim() || null,
+      poids_unitaire_kg: poids,
     });
   }
   return { lignes };
 }
+
+// Couts d'approche saisis (transport, assurance, douane, transit...). Les lignes
+// a montant nul sont ignorees ; un montant negatif ou un type inconnu est refuse.
+function nettoyerCouts(coutsBruts) {
+  if (!Array.isArray(coutsBruts)) return { couts: [] };
+  const couts = [];
+  for (const c of coutsBruts) {
+    const brut = c.montant === "" || c.montant === undefined || c.montant === null ? 0 : Number(c.montant);
+    const type = String(c.type_cout || "AUTRE").toUpperCase();
+    if (!Number.isFinite(brut) || brut < 0 || !TYPES_COUT.includes(type)) return { erreur: "RECEPTION_COUT_INVALID" };
+    if (brut === 0) continue;
+    const repartition = String(c.repartition || "VALEUR").toUpperCase();
+    couts.push({
+      type_cout: type,
+      libelle: String(c.libelle || "").trim().slice(0, 200) || null,
+      montant: arr2(brut),
+      en_devise_facture: c.en_devise_facture === true || c.en_devise_facture === "true",
+      repartition: REPARTITIONS.includes(repartition) ? repartition : "VALEUR",
+    });
+  }
+  return { couts };
+}
+
+async function remplacerCouts(client, tenantId, receptionId, couts) {
+  await client.query(`DELETE FROM reception_cout_approche WHERE reception_id = $1`, [receptionId]);
+  let ordre = 0;
+  for (const c of couts) {
+    await client.query(
+      `INSERT INTO reception_cout_approche (id, tenant_id, reception_id, ordre, type_cout, libelle, montant, en_devise_facture, repartition)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [uuidv4(), tenantId, receptionId, ordre++, c.type_cout, c.libelle, c.montant, c.en_devise_facture, c.repartition]
+    );
+  }
+}
+
+async function lireCouts(queryable, receptionId) {
+  return (
+    await queryable.query(
+      `SELECT id, ordre, type_cout, libelle, montant, en_devise_facture, repartition
+       FROM reception_cout_approche WHERE reception_id = $1 ORDER BY ordre ASC`,
+      [receptionId]
+    )
+  ).rows.map((c) => ({ ...c, montant: Number(c.montant) }));
+}
+
+const libelleSource = (rec, fournisseurNom) => `${rec.numero} · ${fournisseurNom}`.slice(0, 300);
 
 function validerEntete(b) {
   const devise = String(b.devise || "XOF").trim().toUpperCase().slice(0, 8) || "XOF";
@@ -135,17 +186,26 @@ async function chargerReception(tenantId, id) {
     )
   ).rows;
   const cours = Number(reception.cours_devise);
+  const couts = await lireCouts(db, id);
+  const lignesBase = lignes.map((l) => ({
+    ...l,
+    quantite: Number(l.quantite),
+    prix_unitaire_devise: Number(l.prix_unitaire_devise),
+    poids_unitaire_kg: l.poids_unitaire_kg === null ? null : Number(l.poids_unitaire_kg),
+  }));
+  const rep = repartirCouts(lignesBase, couts, cours);
   let totalDevise = 0;
-  const lignesCalculees = lignes.map((l) => {
-    const montantDevise = arr2(Number(l.quantite) * Number(l.prix_unitaire_devise));
+  const lignesCalculees = lignesBase.map((l, i) => {
+    const montantDevise = arr2(l.quantite * l.prix_unitaire_devise);
     totalDevise += montantDevise;
     return {
       ...l,
-      quantite: Number(l.quantite),
-      prix_unitaire_devise: Number(l.prix_unitaire_devise),
       montant_devise: montantDevise,
-      cout_unitaire_xof: arr2(Number(l.prix_unitaire_devise) * cours),
+      cout_unitaire_xof: arr2(l.prix_unitaire_devise * cours),
       montant_xof: arr2(montantDevise * cours),
+      cout_approche_xof: rep.lignes[i].cout_approche_xof,
+      cout_revient_unitaire_xof: rep.lignes[i].cout_revient_unitaire_xof,
+      cout_revient_total_xof: rep.lignes[i].cout_revient_total_xof,
       article_reconnu: l.mapping_produit_id
         ? { id: l.mapping_produit_id, reference: l.mapping_reference, designation: l.mapping_designation }
         : null,
@@ -155,6 +215,10 @@ async function chargerReception(tenantId, id) {
     ...reception,
     cours_devise: cours,
     lignes: lignesCalculees,
+    couts_approche: rep.couts,
+    total_couts_approche_xof: rep.total_couts_approche_xof,
+    cout_revient_total_xof: arr2(rep.total_achat_xof + rep.total_couts_approche_xof),
+    avertissements_couts: [...rep.avertissements, ...avertissementsIncoterm(reception.incoterm, couts)],
     total_devise: arr2(totalDevise),
     total_xof: arr2(totalDevise * cours),
   };
@@ -166,10 +230,10 @@ async function remplacerLignes(client, receptionId, lignes) {
   for (const l of lignes) {
     await client.query(
       `INSERT INTO reception_ligne (id, reception_id, ordre, reference_fournisseur, designation, unite, quantite,
-                                    prix_unitaire_devise, produit_id, reference_interne)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                                    prix_unitaire_devise, produit_id, reference_interne, poids_unitaire_kg)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [uuidv4(), receptionId, ordre++, l.reference_fournisseur, l.designation, l.unite, l.quantite,
-       l.prix_unitaire_devise, l.produit_id, l.reference_interne]
+       l.prix_unitaire_devise, l.produit_id, l.reference_interne, l.poids_unitaire_kg]
     );
   }
 }
@@ -252,6 +316,8 @@ router.post("/", async (req, res) => {
   if (entete.erreur) return res.status(400).json({ error: t(req, entete.erreur) });
   const net = nettoyerLignes(b.lignes || []);
   if (net.erreur) return res.status(400).json({ error: t(req, net.erreur) });
+  const netCouts = nettoyerCouts(b.couts_approche);
+  if (netCouts.erreur) return res.status(400).json({ error: t(req, netCouts.erreur) });
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
@@ -281,6 +347,7 @@ router.post("/", async (req, res) => {
        entete.date_facture, entete.date_reception, entete.devise, entete.cours, entete.incoterm, entete.notes, req.user.sub]
     );
     await remplacerLignes(client, id, net.lignes);
+    await remplacerCouts(client, req.user.tenantId, id, netCouts.couts);
     await client.query("COMMIT");
     res.status(201).json(await chargerReception(req.user.tenantId, id));
   } catch (err) {
@@ -346,6 +413,14 @@ router.patch("/:id", async (req, res) => {
       }
       await remplacerLignes(client, id, net.lignes);
     }
+    if (Array.isArray(b.couts_approche)) {
+      const netCouts = nettoyerCouts(b.couts_approche);
+      if (netCouts.erreur) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: t(req, netCouts.erreur) });
+      }
+      await remplacerCouts(client, req.user.tenantId, id, netCouts.couts);
+    }
     await client.query("COMMIT");
     res.json(await chargerReception(req.user.tenantId, id));
   } catch (err) {
@@ -377,10 +452,88 @@ router.delete("/:id", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Couts d'approche
+// ---------------------------------------------------------------------------
+
+// Estimation de l'assurance et des droits et taxes de douane avec les
+// parametres du tenant (taux du dossier de calcul). Rien n'est enregistre :
+// l'utilisateur reprend ou corrige les montants proposes.
+router.post("/estimer-couts-approche", async (req, res) => {
+  const total = Number(req.body.total_achat_xof);
+  const fret = req.body.fret_xof === undefined || req.body.fret_xof === "" ? 0 : Number(req.body.fret_xof);
+  if (!Number.isFinite(total) || total < 0 || !Number.isFinite(fret) || fret < 0) {
+    return res.status(400).json({ error: t(req, "RECEPTION_COUT_INVALID") });
+  }
+  try {
+    const parametres = await chargerParametres(req.user.tenantId);
+    res.json(estimerAssuranceEtDouane({ totalAchatXof: total, fretXof: fret, incoterm: req.body.incoterm }, parametres));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RECEPTION_UPDATE_ERROR") });
+  }
+});
+
+// Remplace les couts d'approche d'une reception BROUILLON ou VALIDEE (la facture
+// du transitaire arrive souvent apres la reception). Sur une reception validee,
+// le cout de revient est recalcule : mouvements d'entree, cout fige des lignes
+// et cout de l'article (si cette reception en est toujours la derniere source).
+router.put("/:id/couts-approche", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "RECEPTION_NOT_FOUND") });
+  const netCouts = nettoyerCouts(req.body.couts_approche);
+  if (netCouts.erreur) return res.status(400).json({ error: t(req, netCouts.erreur) });
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const rec = (
+      await client.query(`SELECT * FROM reception_marchandise WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [id, req.user.tenantId])
+    ).rows[0];
+    if (!rec) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: t(req, "RECEPTION_NOT_FOUND") });
+    }
+    if (rec.statut === "ANNULEE") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "RECEPTION_NON_MODIFIABLE") });
+    }
+    await remplacerCouts(client, req.user.tenantId, id, netCouts.couts);
+    if (rec.statut === "VALIDEE") {
+      const fournisseur = (await client.query(`SELECT nom FROM fournisseur WHERE id = $1`, [rec.fournisseur_id])).rows[0];
+      const label = libelleSource(rec, fournisseur.nom);
+      const lignes = (await client.query(`SELECT * FROM reception_ligne WHERE reception_id = $1 ORDER BY ordre ASC`, [id])).rows;
+      const repartition = repartirCouts(lignes, await lireCouts(client, id), Number(rec.cours_devise));
+      for (const [i, l] of lignes.entries()) {
+        const cout = repartition.lignes[i].cout_revient_unitaire_xof;
+        await client.query(`UPDATE reception_ligne SET cout_revient_unitaire_xof = $1 WHERE id = $2`, [cout, l.id]);
+        if (!l.produit_id) continue;
+        await client.query(
+          `UPDATE mouvement_stock SET cout_unitaire_xof = $1
+           WHERE tenant_id = $2 AND origine_type = 'RECEPTION' AND origine_id = $3 AND type_mouvement = 'ENTREE' AND produit_id = $4`,
+          [cout, req.user.tenantId, id, l.produit_id]
+        );
+        await client.query(
+          `UPDATE produit SET cout_revient_unitaire_xof = $1, date_maj = now()
+           WHERE id = $2 AND tenant_id = $3 AND source_libelle = $4`,
+          [cout, l.produit_id, req.user.tenantId, label]
+        );
+      }
+    }
+    await client.query("COMMIT");
+    res.json(await chargerReception(req.user.tenantId, id));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: t(req, "RECEPTION_UPDATE_ERROR") });
+  } finally {
+    client.release();
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Validation : cree/rapproche les articles, memorise la correspondance de
 // references et alimente le stock. Le cout de revient de l'article devient le
-// cout de CETTE reception (dernier cout ; les couts d'approche - transport,
-// douane, assurance selon l'incoterm - s'ajouteront au lot suivant).
+// cout de CETTE reception (dernier cout) : prix d'achat converti en XOF + part
+// des couts d'approche (transport, assurance, douane, transit...).
 // ---------------------------------------------------------------------------
 router.post("/:id/valider", async (req, res) => {
   const { id } = req.params;
@@ -408,11 +561,15 @@ router.post("/:id/valider", async (req, res) => {
     const parametres = await chargerParametres(req.user.tenantId);
     const margeDefaut = Number(parametres.margeCibleDefaut) || 0;
     const cours = Number(rec.cours_devise);
-    const sourceLibelle = `${rec.numero} · ${fournisseur.nom}`.slice(0, 300);
+    const sourceLibelle = libelleSource(rec, fournisseur.nom);
     let nouveaux = 0;
+    // Cout de revient = prix d'achat + part des couts d'approche (transport,
+    // assurance, douane, transit...) : c'est lui qui devient le cout de l'article.
+    const repartition = repartirCouts(lignes, await lireCouts(client, id), cours);
 
-    for (const l of lignes) {
-      const coutUnitaire = arr2(Number(l.prix_unitaire_devise) * cours);
+    for (const [indexLigne, l] of lignes.entries()) {
+      const coutUnitaire = repartition.lignes[indexLigne].cout_revient_unitaire_xof;
+      await client.query(`UPDATE reception_ligne SET cout_revient_unitaire_xof = $1 WHERE id = $2`, [coutUnitaire, l.id]);
       let produitId = null;
 
       if (l.produit_id) {
