@@ -15,32 +15,84 @@ import { api, clearToken, clearUtilisateurCourant, estAdmin, getUtilisateurCoura
 // jamais restreints par role). adminOnly reste un affichage separe (roles /
 // utilisateurs / RH personnel), independant du systeme de permissions par
 // module.
+// Barre laterale a deux niveaux maximum (groupe -> module), demande de Steeve
+// du 05/10/2026 (proposition A, "par metier") : 17 entrees a plat remplacees
+// par 2 acces directs + 5 groupes depliables (un seul ouvert a la fois, celui
+// de la page en cours s'ouvre tout seul). Les onglets internes de chaque
+// module (ex les 7 de Marche, les 9 de Comptabilite) restent dans les pages,
+// ils ne sont JAMAIS dupliques ici. Les regles d'acces de chaque entree sont
+// inchangees (voir itemVisible) ; un groupe disparait si aucune de ses
+// entrees n'est visible. `alsoActive` : sous-pages d'un module qui n'ont pas
+// d'entree propre mais doivent garder le bon module surligne.
 const NAV_ITEMS = [
   { href: "/dashboard", key: "navDashboard", tableauDeBordOnly: true },
   { href: "/mes-taches", key: "navMyTasks" },
-  { href: "/financement", key: "navFinancing", moduleKey: "financement" },
-  { href: "/logistique", key: "navLogistics", moduleKey: "logistique" },
-  { href: "/fournisseurs", key: "navSuppliers", moduleKey: "fournisseurs" },
-  { href: "/courriers", key: "navLetters", moduleKey: "courriers" },
-  { href: "/parc-auto", key: "navParcAuto", moduleKey: "parc-auto" },
-  { href: "/marches", key: "navMarches", moduleKey: "marches" },
-  { href: "/dossiers", key: "navDossiers", moduleKey: "dossiers" },
-  // "Dossier de calcul" (prix de revient et marge) est rattache soit a un
-  // dossier d'AO soit a une consultation restreinte (jamais les deux) - donc
-  // visible des qu'on a l'un OU l'autre des deux modules correspondants,
-  // meme regle d'acces que le gate OR dans routes/calculPrix.js cote
-  // backend (moduleKeyAny, distinct de moduleKey qui exige une egalite
-  // exacte a une seule cle).
-  { href: "/calcul-prix", key: "navCalculPrix", moduleKeyAny: ["marches", "dossiers"] },
-  // Comptabilite : cle stricte (ni tableau de bord ni validateur universel seul) - voir routes/comptabilite.js.
-  { href: "/comptabilite", key: "navComptabilite", moduleKeyStrictAny: ["comptabilite", "comptabilite-validation"] },
-  { href: "/rh/demandes", key: "navDemandesRH" },
-  { href: "/rh/fiches-temps", key: "navFichesTemps" },
-  { href: "/rh/personnel", key: "navRH", moduleKey: "rh" },
-  { href: "/roles", key: "navRoles", adminOnly: true },
-  { href: "/utilisateurs", key: "navUsers", adminOnly: true },
-  { href: "/parametres/entete", key: "navSettings" },
+  {
+    id: "marches-ventes",
+    key: "navGroupMarchesVentes",
+    items: [
+      { href: "/marches", key: "navMarches", moduleKey: "marches" },
+      { href: "/dossiers", key: "navDossiers", moduleKey: "dossiers" },
+      // "Dossier de calcul" (prix de revient et marge) est rattache soit a un
+      // dossier d'AO soit a une consultation restreinte (jamais les deux) -
+      // donc visible des qu'on a l'un OU l'autre des deux modules
+      // correspondants, meme regle d'acces que le gate OR dans
+      // routes/calculPrix.js cote backend (moduleKeyAny, distinct de
+      // moduleKey qui exige une egalite exacte a une seule cle).
+      { href: "/calcul-prix", key: "navCalculPrix", moduleKeyAny: ["marches", "dossiers"] },
+      { href: "/courriers", key: "navLetters", moduleKey: "courriers" },
+    ],
+  },
+  {
+    id: "finance",
+    key: "navGroupFinance",
+    items: [
+      { href: "/financement", key: "navFinancing", moduleKey: "financement" },
+      // Comptabilite : cle stricte (ni tableau de bord ni validateur universel seul) - voir routes/comptabilite.js.
+      { href: "/comptabilite", key: "navComptabilite", moduleKeyStrictAny: ["comptabilite", "comptabilite-validation"] },
+    ],
+  },
+  {
+    id: "achats-moyens",
+    key: "navGroupAchatsMoyens",
+    items: [
+      { href: "/fournisseurs", key: "navSuppliers", moduleKey: "fournisseurs" },
+      { href: "/logistique", key: "navLogistics", moduleKey: "logistique" },
+      { href: "/parc-auto", key: "navParcAuto", moduleKey: "parc-auto" },
+    ],
+  },
+  {
+    id: "rh",
+    key: "navGroupRH",
+    items: [
+      { href: "/rh/demandes", key: "navDemandesRH" },
+      { href: "/rh/fiches-temps", key: "navFichesTemps" },
+      {
+        href: "/rh/personnel",
+        key: "navPersonnelRH",
+        moduleKey: "rh",
+        alsoActive: ["/rh/circuit-approbation", "/rh/planning-conges", "/rh/statistiques"],
+      },
+    ],
+  },
+  {
+    id: "administration",
+    key: "navGroupAdmin",
+    items: [
+      { href: "/roles", key: "navRoles", adminOnly: true },
+      { href: "/utilisateurs", key: "navUsers", adminOnly: true },
+      { href: "/parametres/entete", key: "navSettings" },
+    ],
+  },
 ];
+
+// Une entree est "active" sur son href exact, sur ses sous-pages (ex
+// "/marches/consultation-restreinte/devis" garde "Marche" actif) ou sur l'une
+// de ses sous-pages declarees dans alsoActive.
+function entreeActive(item, pathname) {
+  const prefixes = [item.href, ...(item.alsoActive || [])];
+  return prefixes.some((h) => pathname === h || pathname.startsWith(`${h}/`));
+}
 
 /**
  * Coquille commune a toutes les pages authentifiees : barre laterale de
@@ -89,7 +141,7 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
   // la connexion, le backend renverra 403 de toute facon a la moindre
   // requete (voir requireRole cote backend) - ce filtre est un confort
   // d'affichage, pas un controle d'acces.
-  const navItems = NAV_ITEMS.filter((item) => {
+  function itemVisible(item) {
     if (item.adminOnly) return estAdminConnecte;
     if (item.tableauDeBordOnly) return !!permissions?.tableauDeBord;
     if (item.moduleKey) {
@@ -120,7 +172,21 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
       return item.moduleKeyAny.some((m) => (permissions.modules || []).includes(m));
     }
     return true;
-  });
+  }
+
+  // Elements du menu a afficher : acces directs visibles + groupes dont au
+  // moins une entree est visible (la liste d'entrees du groupe est deja filtree).
+  const navItems = NAV_ITEMS.map((entry) =>
+    entry.items ? { ...entry, items: entry.items.filter(itemVisible) } : entry
+  ).filter((entry) => (entry.items ? entry.items.length > 0 : itemVisible(entry)));
+
+  // Un seul groupe ouvert a la fois : celui de la page en cours par defaut
+  // (et a chaque changement de page), sinon celui choisi par un clic.
+  const groupeActif = NAV_ITEMS.find((e) => e.items && e.items.some((i) => entreeActive(i, pathname)))?.id || null;
+  const [groupeOuvert, setGroupeOuvert] = useState(groupeActif);
+  useEffect(() => {
+    if (groupeActif) setGroupeOuvert(groupeActif);
+  }, [groupeActif]);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -144,33 +210,56 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
             constate et corrige le 04/09/2026, apparu avec l'ajout de
             l'entree de navigation Ventes qui a fait deborder la liste). */}
         <nav style={{ padding: "8px 12px", flex: "1 1 auto", minHeight: 0, overflowY: "auto" }}>
-          {navItems.map((item) => {
-            // Egalite stricte ou prefixe (pour les modules a plusieurs
-            // sous-pages, ex "/marches/consultation-restreinte/devis" doit
-            // garder l'entree "Marche" active) - avant la fusion
-            // Ventes/Concurrence sous "Marche" (04/09/2026), seule l'egalite
-            // stricte etait utilisee et les sous-pages ne mettaient rien en
-            // surbrillance dans la barre laterale (la sous-navigation en
-            // haut de page suffisait pour ce cas precis, mais ne s'applique
-            // pas a l'ecran de choix /marches lui-meme).
-            const actif = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          {navItems.map((entry) => {
+            if (!entry.items) return <NavLien key={entry.href} item={entry} actif={entreeActive(entry, pathname)} t={t} />;
+            const ouvert = groupeOuvert === entry.id;
+            const contientActif = entry.items.some((i) => entreeActive(i, pathname));
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                style={{
-                  display: "block",
-                  padding: "9px 12px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: actif ? 700 : 500,
-                  color: actif ? "#fff" : "rgba(255,255,255,0.65)",
-                  background: actif ? "rgba(255,255,255,0.14)" : "transparent",
-                  marginBottom: 2,
-                }}
-              >
-                {t(item.key)}
-              </Link>
+              <div key={entry.id} style={{ marginTop: 6 }}>
+                <button
+                  type="button"
+                  onClick={() => setGroupeOuvert(ouvert ? null : entry.id)}
+                  aria-expanded={ouvert}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "9px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "transparent",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: 13,
+                    fontWeight: contientActif ? 700 : 600,
+                    color: contientActif ? "#fff" : "rgba(255,255,255,0.85)",
+                    textAlign: "left",
+                  }}
+                >
+                  <span>{t(entry.key)}</span>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRight: "1.5px solid rgba(255,255,255,0.7)",
+                      borderBottom: "1.5px solid rgba(255,255,255,0.7)",
+                      transform: ouvert ? "rotate(45deg)" : "rotate(-45deg)",
+                      transition: "transform 0.15s",
+                      marginRight: 3,
+                      flexShrink: 0,
+                    }}
+                  />
+                </button>
+                {ouvert && (
+                  <div style={{ marginLeft: 18, paddingLeft: 6, borderLeft: "1px solid rgba(255,255,255,0.14)" }}>
+                    {entry.items.map((item) => (
+                      <NavLien key={item.href} item={item} actif={entreeActive(item, pathname)} t={t} sousMenu />
+                    ))}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
@@ -261,6 +350,27 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
         </div>
       </main>
     </div>
+  );
+}
+
+// Lien de navigation (acces direct ou entree de sous-menu).
+function NavLien({ item, actif, t, sousMenu }) {
+  return (
+    <Link
+      href={item.href}
+      style={{
+        display: "block",
+        padding: sousMenu ? "7px 12px" : "9px 12px",
+        borderRadius: 8,
+        fontSize: sousMenu ? 12.5 : 13,
+        fontWeight: actif ? 700 : 500,
+        color: actif ? "#fff" : "rgba(255,255,255,0.65)",
+        background: actif ? "rgba(255,255,255,0.14)" : "transparent",
+        marginBottom: 2,
+      }}
+    >
+      {t(item.key)}
+    </Link>
   );
 }
 
