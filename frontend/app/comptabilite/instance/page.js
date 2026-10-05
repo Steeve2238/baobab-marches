@@ -176,6 +176,7 @@ export default function EcrituresInstancePage() {
           <option value="">{t("comptaInstanceTousTypes")}</option>
           <option value="FACTURE">{t("comptaRoleFACTURE")}</option>
           <option value="ENCAISSEMENT">{t("comptaRoleENCAISSEMENT")}</option>
+          <option value="REGLEMENT">{t("comptaRoleREGLEMENT")}</option>
           <option value="ANNULATION">{t("comptaRoleANNULATION")}</option>
         </select>
         {valid && (

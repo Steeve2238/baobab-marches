@@ -131,8 +131,9 @@ async function initialiserComptabilite(client, tenantId, utilisateurId, options 
     await client.query(
       `INSERT INTO compta_parametre (tenant_id, longueur_compte, date_debut_comptabilite,
          compte_vente_defaut, compte_client_collectif, compte_fournisseur_collectif,
-         compte_acompte_client, compte_acompte_fournisseur, compte_tva_collectee)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+         compte_acompte_client, compte_acompte_fournisseur, compte_tva_collectee,
+         compte_tva_recuperable, compte_achat_defaut)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         tenantId,
         longueur,
@@ -143,6 +144,8 @@ async function initialiserComptabilite(client, tenantId, utilisateurId, options 
         completerNumero("4191", longueur),
         completerNumero("4091", longueur),
         completerNumero("4431", longueur),
+        completerNumero("4452", longueur),
+        completerNumero("6011", longueur),
       ]
     );
     parametre = await getParametre(client, tenantId);
@@ -227,6 +230,8 @@ const CHAMPS_PARAMETRE_COMPTES = [
   "compte_acompte_client",
   "compte_acompte_fournisseur",
   "compte_tva_collectee",
+  "compte_tva_recuperable",
+  "compte_achat_defaut",
 ];
 
 async function modifierParametre(client, tenantId, utilisateurId, patch) {

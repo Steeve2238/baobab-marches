@@ -37,7 +37,7 @@ function EcrituresContenu() {
   const locale = t("dateLocale");
   const { statut } = useComptaStatut();
   const recherche = useSearchParams();
-  const [filtres, setFiltres] = useState({ statut: recherche.get("statut") || "", journal_id: "", exercice_id: "", q: "", date_debut: "", date_fin: "", compte_numero: "" });
+  const [filtres, setFiltres] = useState({ statut: recherche.get("statut") || "", journal_id: recherche.get("journal_id") || "", exercice_id: "", q: "", date_debut: "", date_fin: "", compte_numero: "" });
   const [journaux, setJournaux] = useState([]);
   const [exercices, setExercices] = useState([]);
   const [donnees, setDonnees] = useState({ total: 0, ecritures: [] });

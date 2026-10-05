@@ -7,6 +7,7 @@ const rapports = require("../services/comptaRapports");
 const exportsCompta = require("../services/comptaExports");
 const ventesCompta = require("../services/comptaVentes");
 const importCompta = require("../services/comptaImport");
+const achatsCompta = require("../services/comptaAchats");
 const multer = require("multer");
 
 const { ComptaError, avecTransaction } = compta;
@@ -695,6 +696,124 @@ router.post(
   blockLectureSeule,
   gerer(async (req, res) => {
     res.json(await avecTransaction((client) => importCompta.annulerLot(client, tenant(req), userId(req), req.params.id)));
+  })
+);
+
+
+// ----------------------------------------------------------------------------
+// Achats : fournisseurs, factures fournisseurs, reglements (phase 3A)
+// ----------------------------------------------------------------------------
+
+router.get(
+  "/achats/fournisseurs",
+  gerer(async (req, res) => {
+    res.json(await achatsCompta.listerFournisseurs(db, tenant(req)));
+  })
+);
+
+router.post(
+  "/achats/fournisseurs",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const f = await avecTransaction((client) => achatsCompta.creerFournisseur(client, tenant(req), userId(req), req.body || {}));
+    res.status(201).json(f);
+  })
+);
+
+router.get(
+  "/achats/factures",
+  gerer(async (req, res) => {
+    const { q, tiers_id, etat, limit, offset } = req.query;
+    res.json(await achatsCompta.listerFacturesFournisseur(db, tenant(req), { q, tiers_id, etat, limit, offset }));
+  })
+);
+
+router.post(
+  "/achats/factures",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const f = await avecTransaction((client) => achatsCompta.creerFactureFournisseur(client, tenant(req), userId(req), req.body || {}));
+    res.status(201).json(f);
+  })
+);
+
+router.get(
+  "/achats/factures/:id",
+  gerer(async (req, res) => {
+    res.json(await achatsCompta.lireFactureFournisseur(db, tenant(req), req.params.id));
+  })
+);
+
+router.post(
+  "/achats/factures/:id/annuler",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => achatsCompta.annulerFactureFournisseur(client, tenant(req), userId(req), req.params.id)));
+  })
+);
+
+router.get(
+  "/achats/reglements",
+  gerer(async (req, res) => {
+    const { q, tiers_id, limit, offset } = req.query;
+    res.json(await achatsCompta.listerReglementsFournisseur(db, tenant(req), { q, tiers_id, limit, offset }));
+  })
+);
+
+router.post(
+  "/achats/reglements",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const r = await avecTransaction((client) => achatsCompta.creerReglementFournisseur(client, tenant(req), userId(req), req.body || {}));
+    res.status(201).json(r);
+  })
+);
+
+router.get(
+  "/achats/reglements/:id",
+  gerer(async (req, res) => {
+    res.json(await achatsCompta.lireReglementFournisseur(db, tenant(req), req.params.id));
+  })
+);
+
+router.post(
+  "/achats/reglements/:id/annuler",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => achatsCompta.annulerReglementFournisseur(client, tenant(req), userId(req), req.params.id)));
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Tresorerie : banques, caisses, mouvements (phase 3A)
+// ----------------------------------------------------------------------------
+
+router.get(
+  "/tresorerie/comptes",
+  gerer(async (req, res) => {
+    res.json(await achatsCompta.listerComptesTresorerie(db, tenant(req)));
+  })
+);
+
+// Ouvrir un compte bancaire / une caisse modifie le plan comptable et les journaux : niveau "validation".
+router.post(
+  "/tresorerie/comptes",
+  exigerValidation,
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const c = await avecTransaction((client) => achatsCompta.creerCompteTresorerie(client, tenant(req), userId(req), req.body || {}));
+    res.status(201).json(c);
+  })
+);
+
+router.post(
+  "/tresorerie/mouvements",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const e = await avecTransaction((client) =>
+      achatsCompta.creerMouvementTresorerie(client, tenant(req), userId(req), req.body || {}, { peutValider: aDroitValidation(req) })
+    );
+    res.status(201).json(e);
   })
 );
 

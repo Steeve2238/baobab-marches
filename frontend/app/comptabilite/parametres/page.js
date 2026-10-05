@@ -11,6 +11,8 @@ const TYPES_JOURNAL = ["VENTES", "ACHATS", "BANQUE", "CAISSE", "OPERATIONS_DIVER
 const COMPTES_PARAM = [
   { cle: "compte_vente_defaut", label: "comptaParamVenteDefaut" },
   { cle: "compte_tva_collectee", label: "comptaParamTvaCollectee" },
+  { cle: "compte_tva_recuperable", label: "comptaParamTvaRecuperable" },
+  { cle: "compte_achat_defaut", label: "comptaParamAchatDefaut" },
   { cle: "compte_client_collectif", label: "comptaParamClientCollectif" },
   { cle: "compte_fournisseur_collectif", label: "comptaParamFournisseurCollectif" },
   { cle: "compte_acompte_client", label: "comptaParamAcompteClient" },
