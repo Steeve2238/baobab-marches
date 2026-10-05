@@ -53,3 +53,34 @@ export function totauxPrevisualises(lignes, tauxTva, pourcentageRemise) {
   const tva = Math.round(htNet * ((Number(tauxTva) || 0) / 100) * 100) / 100;
   return { totalHt, montantRemise, htNet, tva, totalTtc: Math.round((htNet + tva) * 100) / 100, nbNonChiffrees };
 }
+
+// --- Catalogue produits (05/10/2026) ---------------------------------------
+// Prix de vente unitaire = cout de revient x (1 + marge), arrondi au multiple
+// de 100 superieur (meme regle que le serveur, services/produitsCatalogue.js).
+// marge = fraction (0.25 = 25 %).
+export function prixVenteDepuisCout(cout, marge) {
+  const c = Number(cout) || 0;
+  const m = Number(marge) || 0;
+  if (c <= 0) return 0;
+  return Math.ceil(Math.round(c * (1 + m) * 100) / 100 / 100) * 100;
+}
+
+// Champs a appliquer a une ligne de devis quand on choisit un produit.
+export function champsLigneDepuisProduit(produit) {
+  return {
+    designation: produit.designation,
+    unite: produit.unite || "U",
+    prix_unitaire_ht: String(prixVenteDepuisCout(produit.cout_revient_unitaire_xof, produit.marge_pct) || ""),
+    produit_id: produit.id,
+    cout_revient_unitaire_ht: Number(produit.cout_revient_unitaire_xof),
+  };
+}
+
+// Marge effective d'une ligne liee a un produit (fraction), ou null si le prix
+// n'est pas un nombre ou si le cout est inconnu.
+export function margeEffectiveLigne(ligne) {
+  const a = analyserSaisiePrix(ligne.prix_unitaire_ht);
+  const cout = Number(ligne.cout_revient_unitaire_ht);
+  if (!a.chiffre || !(cout > 0)) return null;
+  return a.valeur / cout - 1;
+}

@@ -584,6 +584,26 @@ export const api = {
   getTransitairesCalcul: () => request("/calcul-prix/transitaires"),
   createTransitaireCalcul: (data) =>
     request("/calcul-prix/transitaires", { method: "POST", body: JSON.stringify(data) }),
+  // Parents possibles d'un nouveau dossier de calcul (AO / consultations).
+  getParentsDossierCalcul: () => request("/calcul-prix/parents"),
+
+  // Catalogue "Produits" (base de calcul globale, 05/10/2026) : cout de
+  // revient + marge par produit, alimente depuis les offres retenues des
+  // dossiers de calcul ou saisi a la main, propose dans les devis.
+  getProduits: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/produits${query ? `?${query}` : ""}`);
+  },
+  createProduit: (data) => request("/produits", { method: "POST", body: JSON.stringify(data) }),
+  patchProduit: (id, data) => request(`/produits/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerProduit: (id) => request(`/produits/${id}`, { method: "DELETE" }),
+  actualiserProduit: (id) => request(`/produits/${id}/actualiser`, { method: "POST" }),
+  getProduitsCandidats: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/produits/candidats${query ? `?${query}` : ""}`);
+  },
+  importerProduits: (offreIds) => request("/produits/importer", { method: "POST", body: JSON.stringify({ offre_ids: offreIds }) }),
+
   // --- Comptabilite SYSCOHADA (chantier E, phase 1 - 04/10/2026) ---
   comptaStatut: () => request("/comptabilite/statut"),
   comptaInitialiser: (data) => request("/comptabilite/initialiser", { method: "POST", body: JSON.stringify(data || {}) }),

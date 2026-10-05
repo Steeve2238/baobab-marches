@@ -5,6 +5,7 @@ const { requireAuth, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { assurerTiersPourFournisseurSilencieux } = require("../services/comptaService");
 const { calculerOffre } = require("../services/calculPrixEngine");
+const { chargerParametres } = require("../services/produitsCatalogue");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -124,14 +125,6 @@ const SELECT_DOSSIERS_CALCUL = `
   LEFT JOIN client_commercial cl ON cl.id = cons.client_commercial_id
 `;
 
-async function chargerParametres(tenantId) {
-  const result = await db.query(`SELECT parametres_calcul_prix_json, taux_tva_pourcentage FROM tenant WHERE id = $1`, [
-    tenantId,
-  ]);
-  const row = result.rows[0];
-  return { ...row.parametres_calcul_prix_json, tauxTvaVente: Number(row.taux_tva_pourcentage) / 100 };
-}
-
 // Recharge une offre avec ses noms de partenaires + ses colonnes calculees,
 // pour repondre systematiquement avec le meme format apres creation/MAJ.
 async function rechargerOffre(offreId, tenantId) {
@@ -151,6 +144,37 @@ async function rechargerOffre(offreId, tenantId) {
 // ----------------------------------------------------------------------------
 // Dossiers de calcul
 // ----------------------------------------------------------------------------
+
+// GET /api/calcul-prix/parents : dossiers d'AO et consultations auxquels on
+// peut rattacher un nouveau dossier de calcul (formulaire de creation depuis
+// la page "Calcul de prix"). Chaque liste n'est renvoyee que si l'utilisateur
+// a le module correspondant ("dossiers" pour les AO, "marches" pour les
+// consultations) ; admin et tableau de bord voient les deux.
+router.get("/parents", async (req, res) => {
+  const permissions = req.user.permissions || {};
+  const tout = !!permissions.admin || !!permissions.tableauDeBord;
+  const modules = permissions.modules || [];
+  try {
+    const dossiers = tout || modules.includes("dossiers")
+      ? (await db.query(
+          `SELECT id, reference_externe, intitule FROM dossier_ao WHERE tenant_id = $1 ORDER BY date_creation DESC LIMIT 300`,
+          [req.user.tenantId]
+        )).rows
+      : [];
+    const consultations = tout || modules.includes("marches")
+      ? (await db.query(
+          `SELECT cons.id, cons.objet, cl.nom AS client_nom, cons.date_reception
+           FROM consultation cons LEFT JOIN client_commercial cl ON cl.id = cons.client_commercial_id
+           WHERE cons.tenant_id = $1 ORDER BY cons.date_creation DESC LIMIT 300`,
+          [req.user.tenantId]
+        )).rows
+      : [];
+    res.json({ dossiers_ao: dossiers, consultations });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "CALCUL_DOSSIER_FETCH_ERROR") });
+  }
+});
 
 // GET /api/calcul-prix/dossiers?dossier_ao_id=&consultation_id=
 router.get("/dossiers", async (req, res) => {

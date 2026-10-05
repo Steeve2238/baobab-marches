@@ -40,6 +40,8 @@ const NAV_ITEMS = [
       // routes/calculPrix.js cote backend (moduleKeyAny, distinct de
       // moduleKey qui exige une egalite exacte a une seule cle).
       { href: "/calcul-prix", key: "navCalculPrix", moduleKeyAny: ["marches", "dossiers"] },
+      // Catalogue produits (base de calcul globale) : meme regle d'acces que le dossier de calcul.
+      { href: "/produits", key: "navProduits", moduleKeyAny: ["marches", "dossiers"] },
       { href: "/courriers", key: "navLetters", moduleKey: "courriers" },
     ],
   },

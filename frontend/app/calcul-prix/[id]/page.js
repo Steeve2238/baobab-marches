@@ -44,6 +44,7 @@ export default function CalculPrixDetailPage() {
   const [transitaires, setTransitaires] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
+  const [infoCatalogue, setInfoCatalogue] = useState("");
 
   const [formArticleOuvert, setFormArticleOuvert] = useState(false);
   const [libelleArticle, setLibelleArticle] = useState("");
@@ -277,6 +278,26 @@ export default function CalculPrixDetailPage() {
 
   const nombre = (n) => (n != null ? Number(n).toLocaleString(dict.dateLocale, { maximumFractionDigits: 2 }) : "—");
   const pourcentage = (n) => (n != null ? `${(Number(n) * 100).toLocaleString(dict.dateLocale, { maximumFractionDigits: 2 })}%` : "—");
+
+  // Ajoute au catalogue produits (base de calcul globale, 05/10/2026) les
+  // offres retenues de ce dossier : cout de revient unitaire + marge cible,
+  // ensuite proposes dans les devis.
+  async function ajouterAuCatalogue() {
+    setInfoCatalogue("");
+    setErreur("");
+    try {
+      const candidats = await api.getProduitsCandidats({ dossier_calcul_id: dossier.id });
+      const ids = candidats.filter((c) => !c.deja_importe).map((c) => c.offre_id);
+      if (candidats.length === 0) {
+        setInfoCatalogue(t("calcPrixAjouterCatalogueAucune"));
+        return;
+      }
+      const r = ids.length > 0 ? await api.importerProduits(ids) : { crees: 0, ignores: candidats.length };
+      setInfoCatalogue(t("calcPrixAjouterCatalogueOk").replace("{crees}", r.crees).replace("{ignores}", r.ignores));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
 
   return (
     <AppShell backHref="/calcul-prix" backLabelKey="backToCalculPrix">
@@ -540,7 +561,18 @@ export default function CalculPrixDetailPage() {
       {/* ---------------- SYNTHESE PAR ARTICLE ---------------- */}
       {dossier.articles.length > 0 && (
         <section>
-          <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 12 }}>{t("calcPrixSyntheseSection")}</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 12 }}>
+            <h2 style={{ fontSize: 15.5, color: "var(--petrol)", margin: 0 }}>{t("calcPrixSyntheseSection")}</h2>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              onClick={ajouterAuCatalogue}
+              style={{ background: "transparent", color: "var(--petrol)", border: "1px solid var(--line)", borderRadius: 8, padding: "7px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+            >
+              {t("calcPrixAjouterCatalogue")}
+            </button>
+          </div>
+          {infoCatalogue && <p style={{ fontSize: 12.5, color: "var(--vert)", marginBottom: 10 }}>{infoCatalogue}</p>}
           <div className="card" style={{ overflowX: "auto", padding: 0 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 760 }}>
               <thead>

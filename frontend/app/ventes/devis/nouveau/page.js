@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import LigneProduitOutils from "../../../../lib/components/LigneProduitOutils";
 import { MENTIONS_PRIX_SUGGEREES, analyserSaisiePrix, montantLigneSaisie, totauxPrevisualises } from "../../../../lib/prixLigne";
 
 const LIGNE_VIDE = { designation: "", unite: "U", quantite: 1, prix_unitaire_ht: "" };
@@ -70,6 +71,8 @@ function NouveauDevisFormulaire() {
           unite: l.unite,
           quantite: Number(l.quantite),
           prix_unitaire_ht: String(l.prix_unitaire_ht ?? "").trim(),
+          produit_id: l.produit_id || undefined,
+          cout_revient_unitaire_ht: l.produit_id ? l.cout_revient_unitaire_ht : undefined,
         })),
       });
       router.push(`/ventes/devis/${nouveau.id}`);
@@ -160,6 +163,7 @@ function NouveauDevisFormulaire() {
                       onChange={(e) => majLigne(index, "designation", e.target.value)}
                       style={inputStyleCompact}
                     />
+<LigneProduitOutils ligne={ligne} onPatch={(champs) => Object.entries(champs).forEach(([k, v]) => majLigne(index, k, v))} />
                   </td>
                   <td style={{ padding: "4px 6px" }}>
                     <input value={ligne.unite} onChange={(e) => majLigne(index, "unite", e.target.value)} style={inputStyleCompact} />

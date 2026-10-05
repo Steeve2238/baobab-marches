@@ -210,6 +210,9 @@ export default function ConsultationDetailPage() {
     <AppShell backHref="/ventes/consultations" backLabelKey="backToConsultations">
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 19, color: "var(--petrol)" }}>{consultation.objet}</h1>
+        <a href="#dossier-calcul" style={{ fontSize: 12, color: "var(--petrol)", fontWeight: 600, textDecoration: "underline" }}>
+          {t("calcPrixSectionTitle")} ↓
+        </a>
         <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
           {consultation.client_nom}
           {" · "}
@@ -322,7 +325,7 @@ export default function ConsultationDetailPage() {
       </section>
 
       {/* ---------------- DOSSIER DE CALCUL ---------------- */}
-      <section style={{ marginBottom: 30 }}>
+      <section id="dossier-calcul" style={{ marginBottom: 30 }}>
         <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 4 }}>{t("calcPrixSectionTitle")}</h2>
         <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 12 }}>{t("calcPrixSectionDescription")}</p>
         <div className="card">

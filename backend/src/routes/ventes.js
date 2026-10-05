@@ -194,6 +194,34 @@ function normaliserMentionPrix(brut) {
   return (texte || MENTION_PRIX_DEFAUT).slice(0, MENTION_PRIX_MAX);
 }
 
+// Lien optionnel d'une ligne de devis avec le catalogue Produits (05/10/2026) :
+// produit_id (uuid) + cout de revient unitaire au moment du chiffrage. Valeurs
+// non conformes ignorees (la ligne reste valide, sans lien).
+const UUID_LIGNE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function lienProduitLigne(brut) {
+  const produitId = typeof brut.produit_id === "string" && UUID_LIGNE_RE.test(brut.produit_id) ? brut.produit_id : null;
+  const cout = Number(brut.cout_revient_unitaire_ht);
+  return {
+    produit_id: produitId,
+    cout_revient_unitaire_ht: produitId && Number.isFinite(cout) && cout >= 0 ? Math.round(cout * 100) / 100 : null,
+  };
+}
+
+// Ne conserve que les produit_id appartenant au tenant (jamais fait confiance
+// a l'identifiant envoye par le frontend).
+async function verifierProduitsLignes(queryable, tenantId, lignes) {
+  const ids = [...new Set(lignes.map((l) => l.produit_id).filter(Boolean))];
+  if (ids.length === 0) return;
+  const r = await queryable.query(`SELECT id FROM produit WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [tenantId, ids]);
+  const valides = new Set(r.rows.map((x) => x.id));
+  for (const l of lignes) {
+    if (l.produit_id && !valides.has(l.produit_id)) {
+      l.produit_id = null;
+      l.cout_revient_unitaire_ht = null;
+    }
+  }
+}
+
 function calculerLignesEtTotaux(lignesBrutes, tauxTva, pourcentageRemiseBrut) {
   if (!Array.isArray(lignesBrutes) || lignesBrutes.length === 0) {
     return { erreur: "VIDE" };
@@ -218,6 +246,7 @@ function calculerLignesEtTotaux(lignesBrutes, tauxTva, pourcentageRemiseBrut) {
         montant_ht: 0,
         non_chiffre: true,
         mention_prix: prix.mention,
+        ...lienProduitLigne(brut),
       });
       continue;
     }
@@ -230,6 +259,7 @@ function calculerLignesEtTotaux(lignesBrutes, tauxTva, pourcentageRemiseBrut) {
       montant_ht: montantHt,
       non_chiffre: false,
       mention_prix: null,
+      ...lienProduitLigne(brut),
     });
     totalHt += montantHt;
   }
@@ -301,7 +331,8 @@ function normaliserStatutImport(brut) {
 
 async function chargerLignesDevis(devisId) {
   const result = await db.query(
-    `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix
+    `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix,
+            produit_id, cout_revient_unitaire_ht
      FROM devis_ligne WHERE devis_id = $1 ORDER BY ordre ASC`,
     [devisId]
   );
@@ -1044,12 +1075,15 @@ router.post("/devis", async (req, res) => {
     );
     const devis = devisResult.rows[0];
 
+    await verifierProduitsLignes(client, req.user.tenantId, calcul.lignes);
     let ordre = 0;
     for (const ligne of calcul.lignes) {
       await client.query(
-        `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [uuidv4(), devis.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre, ligne.mention_prix]
+        `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix,
+                                  produit_id, cout_revient_unitaire_ht)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [uuidv4(), devis.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre, ligne.mention_prix,
+         ligne.produit_id, ligne.cout_revient_unitaire_ht]
       );
     }
 
@@ -1151,13 +1185,16 @@ router.patch("/devis/:id", async (req, res) => {
       }
 
       if (lignes) {
+        await verifierProduitsLignes(client, req.user.tenantId, calcul.lignes);
         await client.query(`DELETE FROM devis_ligne WHERE devis_id = $1`, [id]);
         let ordre = 0;
         for (const ligne of calcul.lignes) {
           await client.query(
-            `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-            [uuidv4(), id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre, ligne.mention_prix]
+            `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix,
+                                      produit_id, cout_revient_unitaire_ht)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+            [uuidv4(), id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre, ligne.mention_prix,
+             ligne.produit_id, ligne.cout_revient_unitaire_ht]
           );
         }
       }

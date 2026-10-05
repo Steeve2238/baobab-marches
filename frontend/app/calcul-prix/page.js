@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import AppShell from "../../lib/components/AppShell";
@@ -16,7 +17,17 @@ import AppShell from "../../lib/components/AppShell";
 // consultation d'origine.
 export default function CalculPrixListePage() {
   const { t, dict } = useLangue();
+  const router = useRouter();
   const [dossiers, setDossiers] = useState([]);
+  // Creation d'un dossier de calcul depuis cette page (05/10/2026) : choix du
+  // rattachement (AO ou consultation restreinte), jusque-la possible seulement
+  // depuis la fiche du dossier ou de la consultation.
+  const [formOuvert, setFormOuvert] = useState(false);
+  const [parents, setParents] = useState(null);
+  const [typeParent, setTypeParent] = useState("consultation");
+  const [parentId, setParentId] = useState("");
+  const [nomNouveau, setNomNouveau] = useState("");
+  const [creation, setCreation] = useState(false);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
 
@@ -28,9 +39,111 @@ export default function CalculPrixListePage() {
       .finally(() => setChargement(false));
   }, [t]);
 
+  async function ouvrirFormulaire() {
+    setFormOuvert(true);
+    setErreur("");
+    if (!parents) {
+      try {
+        const p = await api.getParentsDossierCalcul();
+        setParents(p);
+        if (p.consultations.length === 0 && p.dossiers_ao.length > 0) setTypeParent("ao");
+      } catch (err) {
+        setErreur(err.message);
+      }
+    }
+  }
+
+  async function creer(e) {
+    e.preventDefault();
+    if (!parentId) {
+      setErreur(t("calcPrixParentRequis"));
+      return;
+    }
+    setCreation(true);
+    setErreur("");
+    try {
+      const cree = await api.createDossierCalcul({
+        nom: nomNouveau,
+        ...(typeParent === "ao" ? { dossier_ao_id: parentId } : { consultation_id: parentId }),
+      });
+      router.push(`/calcul-prix/${cree.id}`);
+    } catch (err) {
+      setErreur(err.message);
+      setCreation(false);
+    }
+  }
+
+  const options = parents ? (typeParent === "ao" ? parents.dossiers_ao : parents.consultations) : [];
+
   return (
     <AppShell title={t("calcPrixListTitle")}>
-      <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 16 }}>{t("calcPrixListSubtitle")}</p>
+      <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 12 }}>{t("calcPrixListSubtitle")}</p>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
+        <button type="button" onClick={ouvrirFormulaire} style={boutonPrincipalStyle}>
+          {t("calcPrixNouveauBouton")}
+        </button>
+        <Link href="/produits" style={{ ...boutonSecondaireStyle, textDecoration: "none" }}>
+          {t("calcPrixLienProduits")}
+        </Link>
+      </div>
+
+      {formOuvert && (
+        <form onSubmit={creer} className="card" style={{ marginBottom: 16 }}>
+          <h2 style={{ fontSize: 14.5, color: "var(--petrol)", marginBottom: 12 }}>{t("calcPrixNouveauTitre")}</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <div>
+              <label style={labelStyle}>{t("calcPrixRattacherA")}</label>
+              <select
+                value={typeParent}
+                onChange={(e) => {
+                  setTypeParent(e.target.value);
+                  setParentId("");
+                }}
+                style={inputStyle}
+              >
+                <option value="consultation">{t("calcPrixChoixConsultation")}</option>
+                <option value="ao">{t("calcPrixChoixAo")}</option>
+              </select>
+            </div>
+            <div style={{ gridColumn: "span 2" }}>
+              <label style={labelStyle}>&nbsp;</label>
+              <select required value={parentId} onChange={(e) => setParentId(e.target.value)} style={inputStyle}>
+                <option value="">{t("calcPrixChoisirParent")}</option>
+                {typeParent === "ao"
+                  ? options.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.reference_externe ? `${d.reference_externe} — ` : ""}
+                        {d.intitule}
+                      </option>
+                    ))
+                  : options.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.client_nom ? `${c.client_nom} — ` : ""}
+                        {c.objet}
+                      </option>
+                    ))}
+              </select>
+              {parents && options.length === 0 && (
+                <p style={{ fontSize: 11.5, color: "var(--brique)", margin: "4px 0 0" }}>{t("calcPrixAucunParent")}</p>
+              )}
+            </div>
+            <div>
+              <label style={labelStyle}>{t("calcPrixNomLabel")}</label>
+              <input required value={nomNouveau} onChange={(e) => setNomNouveau(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+          <p style={{ fontSize: 11.5, color: "var(--sub)", margin: "8px 0 0" }}>{t("calcPrixAideConsultation")}</p>
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button type="submit" disabled={creation} style={boutonPrincipalStyle}>
+              {creation ? t("calcPrixCreating") : t("calcPrixCreerOuvrir")}
+            </button>
+            <button type="button" onClick={() => setFormOuvert(false)} style={boutonSecondaireStyle}>
+              {t("cancel")}
+            </button>
+          </div>
+        </form>
+      )}
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
@@ -96,3 +209,8 @@ const thStyle = {
   whiteSpace: "nowrap",
 };
 const tdStyle = { padding: "8px 10px", textAlign: "center", verticalAlign: "top" };
+
+const labelStyle = { fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 5 };
+const inputStyle = { width: "100%", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" };
+const boutonPrincipalStyle = { background: "var(--petrol)", color: "#fff", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" };
+const boutonSecondaireStyle = { background: "transparent", color: "var(--petrol)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" };

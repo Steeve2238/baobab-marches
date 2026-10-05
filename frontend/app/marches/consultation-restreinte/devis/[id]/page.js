@@ -7,6 +7,7 @@ import { api } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import { estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import AppShell from "../../../../../lib/components/AppShell";
+import LigneProduitOutils from "../../../../../lib/components/LigneProduitOutils";
 import MontantLettresBloc, { AvertissementTotalPartiel } from "../../../../../lib/components/MontantLettresBloc";
 import { MENTIONS_PRIX_SUGGEREES, analyserSaisiePrix, ligneApiNonChiffree, mentionLigneApi, montantLigneSaisie } from "../../../../../lib/prixLigne";
 
@@ -207,6 +208,8 @@ export default function DevisDetailPage() {
           quantite: Number(l.quantite),
           // Nombre OU mention texte (NC...) : le serveur tranche et recalcule.
           prix_unitaire_ht: String(l.prix_unitaire_ht ?? "").trim(),
+          produit_id: l.produit_id || undefined,
+          cout_revient_unitaire_ht: l.produit_id ? l.cout_revient_unitaire_ht : undefined,
         })),
       });
       setFormOuvert(false);
@@ -538,6 +541,7 @@ export default function DevisDetailPage() {
                     <tr key={index}>
                       <td style={{ padding: "4px 6px" }}>
                         <input required value={ligne.designation} onChange={(e) => majLigneEdition(index, "designation", e.target.value)} style={inputStyleCompact} />
+<LigneProduitOutils ligne={ligne} onPatch={(champs) => Object.entries(champs).forEach(([k, v]) => majLigneEdition(index, k, v))} />
                       </td>
                       <td style={{ padding: "4px 6px" }}>
                         <input value={ligne.unite} onChange={(e) => majLigneEdition(index, "unite", e.target.value)} style={inputStyleCompact} />
