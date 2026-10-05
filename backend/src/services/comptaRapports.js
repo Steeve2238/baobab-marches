@@ -302,4 +302,4 @@ async function balanceGenerale(client, tenantId, options = {}) {
   };
 }
 
-module.exports = { grandLivre, balanceGenerale, RapportError };
+module.exports = { grandLivre, balanceGenerale, RapportError, resoudrePeriode, statutsInclus };

@@ -220,7 +220,9 @@ async function genererEcritureEncaissement(client, tenantId, utilisateurId, fact
   const numeroTreso = journal.compte_tresorerie || compta.completerNumero(especes ? "5711" : "5211", parametre.longueur_compte);
 
   const tiers = await compta.assurerTiersClient(client, tenantId, { id: facture.client_commercial_id, nom: facture.client_nom });
-  const netC = versCentimes(facture.montant_net_a_payer);
+  // Encaissements deja saisis dans la comptabilite (reglements clients partiels) : seul le reste est encaisse ici.
+  const netC = versCentimes(facture.montant_net_a_payer) - versCentimes(facture.montant_encaisse);
+  if (netC <= 0) return { statut: "IGNOREE", raison: "DEJA_ENCAISSEE" };
   const lignes = [
     { compte_id: await idCompte(client, tenantId, numeroTreso), tiers_id: null, libelle: `Encaissement facture ${facture.numero}`, debit_c: netC, credit_c: 0, date_echeance: null, compte_modifiable: "TRESORERIE" },
     { compte_id: await idCompte(client, tenantId, tiers.compte_collectif), tiers_id: tiers.id, libelle: `Reglement facture ${facture.numero}`, debit_c: 0, credit_c: netC, date_echeance: null },
@@ -326,7 +328,7 @@ async function rattraperVentes(tenantId, utilisateurId, { depuis } = {}) {
         if (f.statut === "PAYEE" && a.statut !== "IGNOREE") {
           const b = await genererEcritureEncaissement(client, tenantId, utilisateurId, f.id);
           if (b.statut === "CREEE") resume.encaissements++;
-          else if (b.statut === "IGNOREE") resume.ignorees.push({ numero: f.numero, raison: b.raison });
+          else if (b.statut === "IGNOREE" && b.raison !== "DEJA_ENCAISSEE") resume.ignorees.push({ numero: f.numero, raison: b.raison });
         }
       });
     } catch (err) {
@@ -343,7 +345,7 @@ async function compterFacturesSansEcriture(client, tenantId) {
     `SELECT
        COUNT(*) FILTER (WHERE x.id IS NOT NULL AND e.id IS NULL)::int AS a_generer,
        COUNT(*) FILTER (WHERE x.id IS NULL AND e.id IS NULL)::int AS hors_exercice,
-       COUNT(*) FILTER (WHERE x.id IS NOT NULL AND f.statut = 'PAYEE' AND p.id IS NULL)::int AS encaissements_a_generer
+       COUNT(*) FILTER (WHERE x.id IS NOT NULL AND f.statut = 'PAYEE' AND p.id IS NULL AND f.montant_net_a_payer > f.montant_encaisse)::int AS encaissements_a_generer
      FROM facture_vente f
      LEFT JOIN exercice_comptable x ON x.tenant_id = f.tenant_id AND f.date_facture BETWEEN x.date_debut AND x.date_fin
      LEFT JOIN ecriture_comptable e ON e.tenant_id = f.tenant_id AND e.origine = 'FACTURE_VENTE' AND e.origine_id = f.id AND e.origine_role = 'FACTURE'

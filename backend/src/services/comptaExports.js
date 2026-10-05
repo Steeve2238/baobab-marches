@@ -550,4 +550,4 @@ async function grandLivrePdf(data, entreprise) {
   return fini;
 }
 
-module.exports = { balanceXlsx, grandLivreXlsx, balancePdf, grandLivrePdf, fmt };
+module.exports = { balanceXlsx, grandLivreXlsx, balancePdf, grandLivrePdf, fmt, nouveauPdf, tronquer, cadreEntete, maintenantTirage, dateJJMMAAbarre, feuilleAvecLargeurs, formaterNombres };

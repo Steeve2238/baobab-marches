@@ -1664,6 +1664,14 @@ router.patch("/factures/:id/marquer-payee", async (req, res) => {
 router.patch("/factures/:id/annuler", async (req, res) => {
   const { id } = req.params;
   try {
+    // Facture deja encaissee en partie (reglements clients de la comptabilite) : annuler d'abord ces reglements.
+    const partiel = await db.query(
+      `SELECT 1 FROM facture_vente WHERE id = $1 AND tenant_id = $2 AND montant_encaisse > 0`,
+      [id, req.user.tenantId]
+    );
+    if (partiel.rows.length > 0) {
+      return res.status(409).json({ error: t(req, "VENTE_FACTURE_ENCAISSEMENT_PARTIEL") });
+    }
     const result = await db.query(
       `UPDATE facture_vente SET statut = 'ANNULEE'
        WHERE id = $1 AND tenant_id = $2 AND statut = 'IMPAYEE' RETURNING *`,

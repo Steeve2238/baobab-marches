@@ -8,6 +8,9 @@ const exportsCompta = require("../services/comptaExports");
 const ventesCompta = require("../services/comptaVentes");
 const importCompta = require("../services/comptaImport");
 const achatsCompta = require("../services/comptaAchats");
+const encaissementsCompta = require("../services/comptaEncaissements");
+const tiersCompta = require("../services/comptaTiers");
+const exportsTiers = require("../services/comptaExportsTiers");
 const multer = require("multer");
 
 const { ComptaError, avecTransaction } = compta;
@@ -61,7 +64,7 @@ function gerer(fn, cleErreurServeur = "COMPTA_SERVER_ERROR") {
     try {
       await fn(req, res);
     } catch (err) {
-      if (err instanceof ComptaError || err instanceof rapports.RapportError) {
+      if (err instanceof ComptaError || err instanceof rapports.RapportError || err instanceof tiersCompta.RapportError) {
         return res.status(err.status || 400).json({ error: messageErreur(req, err), code: err.code });
       }
       if (err && err.code === "23505") {
@@ -814,6 +817,143 @@ router.post(
       achatsCompta.creerMouvementTresorerie(client, tenant(req), userId(req), req.body || {}, { peutValider: aDroitValidation(req) })
     );
     res.status(201).json(e);
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Encaissements clients (phase 3B)
+// ----------------------------------------------------------------------------
+
+router.get(
+  "/encaissements/clients",
+  gerer(async (req, res) => {
+    res.json(await encaissementsCompta.listerClientsAEncaisser(db, tenant(req)));
+  })
+);
+
+router.get(
+  "/encaissements/factures",
+  gerer(async (req, res) => {
+    res.json(await encaissementsCompta.facturesOuvertesClient(db, tenant(req), req.query.tiers_id));
+  })
+);
+
+router.get(
+  "/encaissements/reglements",
+  gerer(async (req, res) => {
+    const { q, tiers_id, limit, offset } = req.query;
+    res.json(await encaissementsCompta.listerReglementsClient(db, tenant(req), { q, tiers_id, limit, offset }));
+  })
+);
+
+router.post(
+  "/encaissements/reglements",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const r = await avecTransaction((client) => encaissementsCompta.creerReglementClient(client, tenant(req), userId(req), req.body || {}));
+    res.status(201).json(r);
+  })
+);
+
+router.get(
+  "/encaissements/reglements/:id",
+  gerer(async (req, res) => {
+    res.json(await encaissementsCompta.lireReglementClient(db, tenant(req), req.params.id));
+  })
+);
+
+router.post(
+  "/encaissements/reglements/:id/annuler",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => encaissementsCompta.annulerReglementClient(client, tenant(req), userId(req), req.params.id)));
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Lettrage (phase 3B)
+// ----------------------------------------------------------------------------
+
+router.get(
+  "/lettrage/lignes",
+  gerer(async (req, res) => {
+    const { tiers_id, etat, limit } = req.query;
+    res.json(await tiersCompta.lignesPourLettrage(db, tenant(req), { tiers_id, etat, limit: Math.min(Number(limit) || 500, 2000) }));
+  })
+);
+
+router.post(
+  "/lettrage/lettrer",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => tiersCompta.lettrer(client, tenant(req), userId(req), req.body?.ligne_ids)));
+  })
+);
+
+router.post(
+  "/lettrage/delettrer",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => tiersCompta.delettrer(client, tenant(req), userId(req), req.body?.code)));
+  })
+);
+
+router.post(
+  "/lettrage/automatique",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => tiersCompta.lettrageAutomatique(client, tenant(req), userId(req))));
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Balances des tiers et balance agee (phase 3B)
+// ----------------------------------------------------------------------------
+
+const optionsTiers = (req) => ({ ...optionsRapport(req), type: String(req.query.type || "CLIENT").toUpperCase() });
+const optionsAgee = (req) => ({
+  type: String(req.query.type || "CLIENT").toUpperCase(),
+  date_arrete: req.query.date_arrete || undefined,
+  mode: String(req.query.mode || "ECHEANCE").toUpperCase(),
+  inclure_instance: vrai(req.query.inclure_instance),
+  tiers_id: req.query.tiers_id || undefined,
+  tri: String(req.query.tri || "TOTAL").toUpperCase(),
+});
+
+router.get(
+  "/balance-tiers",
+  gerer(async (req, res) => {
+    res.json(await tiersCompta.balanceTiers(db, tenant(req), optionsTiers(req)));
+  })
+);
+
+router.get(
+  "/balance-tiers/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await tiersCompta.balanceTiers(db, tenant(req), optionsTiers(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await exportsTiers.balanceTiersPdf(data, entreprise) : exportsTiers.balanceTiersXlsx(data, entreprise);
+    envoyerFichier(res, buffer, nomFichier(`balance_${data.type === "CLIENT" ? "clients" : "fournisseurs"}`, data, format), format);
+  })
+);
+
+router.get(
+  "/balance-agee",
+  gerer(async (req, res) => {
+    res.json(await tiersCompta.balanceAgee(db, tenant(req), optionsAgee(req)));
+  })
+);
+
+router.get(
+  "/balance-agee/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await tiersCompta.balanceAgee(db, tenant(req), optionsAgee(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await exportsTiers.balanceAgeePdf(data, entreprise) : exportsTiers.balanceAgeeXlsx(data, entreprise);
+    const base = `balance_agee_${data.type === "CLIENT" ? "clients" : "fournisseurs"}_${data.date_arrete}`;
+    envoyerFichier(res, buffer, `${base}.${format}`, format);
   })
 );
 

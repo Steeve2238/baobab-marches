@@ -260,6 +260,12 @@ export default function FactureVenteDetailPage() {
           montant={facture.type_facturation && facture.type_facturation !== "INTEGRALE" ? facture.montant_net_a_payer : facture.total_ttc}
         />
 
+        {facture.statut === "IMPAYEE" && Number(facture.montant_encaisse) > 0 && (
+          <div className="no-print" style={{ marginTop: 14, fontSize: 12, color: "var(--ocre)", fontWeight: 600 }}>
+            {t("comptaVenteDejaEncaisse")} {Number(facture.montant_encaisse).toLocaleString()} XOF · {t("comptaVenteResteAPayer")} {(Number(facture.montant_net_a_payer) - Number(facture.montant_encaisse)).toLocaleString()} XOF
+          </div>
+        )}
+
         {facture.statut === "PAYEE" && (
           <div className="no-print" style={{ marginTop: 14, fontSize: 11.5, color: "var(--sub)" }}>
             {t("saPaidOn")} {new Date(facture.date_paiement).toLocaleDateString()}

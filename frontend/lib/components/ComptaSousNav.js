@@ -14,7 +14,10 @@ const ONGLETS = [
   { href: "/comptabilite/tresorerie", key: "comptaNavTresorerie" },
   { href: "/comptabilite/ecritures", key: "comptaNavEcritures" },
   { href: "/comptabilite/grand-livre", key: "comptaNavGrandLivre" },
+  { href: "/comptabilite/lettrage", key: "comptaNavLettrage" },
   { href: "/comptabilite/balance", key: "comptaNavBalance" },
+  { href: "/comptabilite/balances-tiers", key: "comptaNavBalancesTiers" },
+  { href: "/comptabilite/balance-agee", key: "comptaNavBalanceAgee" },
   { href: "/comptabilite/plan", key: "comptaNavPlan" },
   { href: "/comptabilite/tiers", key: "comptaNavTiers" },
   { href: "/comptabilite/importer", key: "comptaNavImporter" },
@@ -29,7 +32,7 @@ export default function ComptaSousNav() {
   return (
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", borderBottom: "1px solid var(--line)", paddingBottom: 12 }}>
       {ONGLETS.map((o) => {
-        const actif = o.exact ? pathname === o.href : pathname.startsWith(o.href);
+        const actif = o.exact ? pathname === o.href : (pathname === o.href || pathname.startsWith(o.href + "/"));
         return (
           <Link
             key={o.href}
