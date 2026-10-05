@@ -229,13 +229,20 @@ export default function RolesPage() {
 // il recoit juste form/setForm (React setState classique, meme forme dans
 // les deux cas).
 function PerimetreEditor({ form, setForm, t }) {
+  // Module Comptabilite vendu en option (migration 032) : ses deux perimetres ne
+  // sont proposes que si le Super Admin l'a active pour cette entreprise.
+  const [comptaActive, setComptaActive] = useState(false);
+  useEffect(() => {
+    api.getPermissions().then((p) => setComptaActive(!!p?.comptabiliteActive)).catch(() => setComptaActive(false));
+  }, []);
+  const modulesProposes = MODULES_DISPONIBLES.filter((m) => comptaActive || !m.key.startsWith("comptabilite"));
   return (
     <fieldset style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", marginTop: 12 }}>
       <legend style={{ fontSize: 11.5, fontWeight: 600, padding: "0 4px" }}>{t("rolePerimetreLegend")}</legend>
 
       <div style={{ fontSize: 11, color: "var(--sub)", marginBottom: 6 }}>{t("roleModulesLabel")}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 6, marginBottom: 10 }}>
-        {MODULES_DISPONIBLES.map((m) => (
+        {modulesProposes.map((m) => (
           <label key={m.key} style={checkboxLabelStyle}>
             <input
               type="checkbox"

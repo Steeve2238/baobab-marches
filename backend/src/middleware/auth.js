@@ -36,8 +36,9 @@ async function requireAuth(req, res, next) {
 
   try {
     const userResult = await db.query(
-      `SELECT u.id, u.tenant_id, u.email, u.actif
+      `SELECT u.id, u.tenant_id, u.email, u.actif, te.module_comptabilite_actif
        FROM utilisateur u
+       JOIN tenant te ON te.id = u.tenant_id
        WHERE u.id = $1`,
       [payload.sub]
     );
@@ -67,6 +68,8 @@ async function requireAuth(req, res, next) {
     let permissions;
     if (roles.includes("ADMIN")) {
       permissions = { admin: true, modules: null, tableauDeBord: true, lectureSeule: false, validateurUniversel: true };
+      // Module Comptabilite vendu en option (migration 032) : le verrou du
+      // client prime sur TOUT, ADMIN compris - voir exigerModuleComptabiliteActif.
     } else {
       const modules = new Set();
       let tableauDeBord = false;
@@ -87,6 +90,8 @@ async function requireAuth(req, res, next) {
         validateurUniversel,
       };
     }
+
+    permissions.comptabiliteActive = !!user.module_comptabilite_actif;
 
     req.user = {
       sub: user.id,
@@ -214,6 +219,18 @@ function requireModuleAny(...moduleKeys) {
 }
 
 /**
+ * Module Comptabilite vendu en option (migration 032, 05/10/2026) : refuse
+ * toute requete tant que le Super Admin n'a pas active le module pour ce
+ * client - y compris pour un ADMIN du client et y compris en simple
+ * consultation (decision de Steeve : acces totalement bloque). A poser apres
+ * requireAuth, AVANT requireModuleAny.
+ */
+function exigerModuleComptabiliteActif(req, res, next) {
+  if (req.user?.permissions?.comptabiliteActive) return next();
+  return res.status(403).json({ error: t(req, "COMPTA_MODULE_VERROUILLE"), code: "MODULE_VERROUILLE" });
+}
+
+/**
  * Bloque toute methode d'ecriture (tout sauf GET) pour un utilisateur dont
  * TOUS les roles sont marques "lecture seule" (cas du Directeur General,
  * qui doit pouvoir tout consulter mais ne jamais rien modifier). ADMIN n'est
@@ -286,6 +303,7 @@ module.exports = {
   requireRoleOuValidateurUniversel,
   requireModule,
   requireModuleAny,
+  exigerModuleComptabiliteActif,
   blockLectureSeule,
   requireSuperAdmin,
 };

@@ -23,6 +23,7 @@ export default function SuperAdminClientDetailPage() {
   const [chargement, setChargement] = useState(true);
   const [formuleSelectionnee, setFormuleSelectionnee] = useState("");
   const [modePaiementFacture, setModePaiementFacture] = useState({});
+  const [prixCompta, setPrixCompta] = useState("");
 
   function charger() {
     Promise.all([
@@ -33,6 +34,7 @@ export default function SuperAdminClientDetailPage() {
       .then(([clientData, formulesData, facturesData]) => {
         setClient(clientData);
         setFormuleSelectionnee(clientData.formule_abonnement_id || "");
+        setPrixCompta(String(Number(clientData.module_comptabilite_prix_mensuel_xof || 0)));
         setFormules(formulesData);
         setFactures(facturesData);
       })
@@ -76,6 +78,36 @@ export default function SuperAdminClientDetailPage() {
         secteur_activite: client.secteur_activite,
         pays: client.pays,
         formule_abonnement_id: formuleSelectionnee || null,
+      });
+      setClient((prev) => ({ ...prev, ...maj }));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  // Module Comptabilite vendu en option (migration 032) : activer / verrouiller
+  // et fixer le supplement mensuel. Verrouiller ne supprime aucune donnee.
+  async function handleModuleCompta(actif) {
+    if (!actif && typeof window !== "undefined" && !window.confirm(t("saModuleComptaLockConfirm"))) return;
+    setErreur("");
+    try {
+      const maj = await superAdminApi.patchModuleComptabilite(client.id, {
+        actif,
+        prix_mensuel_xof: prixCompta === "" ? 0 : Number(prixCompta),
+      });
+      setClient((prev) => ({ ...prev, ...maj }));
+      setPrixCompta(String(Number(maj.module_comptabilite_prix_mensuel_xof || 0)));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  async function handleEnregistrerPrixCompta() {
+    setErreur("");
+    try {
+      const maj = await superAdminApi.patchModuleComptabilite(client.id, {
+        actif: !!client.module_comptabilite_actif,
+        prix_mensuel_xof: prixCompta === "" ? 0 : Number(prixCompta),
       });
       setClient((prev) => ({ ...prev, ...maj }));
     } catch (err) {
@@ -207,6 +239,60 @@ export default function SuperAdminClientDetailPage() {
         </button>
       </div>
 
+      <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)" }}>{t("saModuleComptaSection")}</h3>
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              padding: "3px 8px",
+              borderRadius: 20,
+              color: client.module_comptabilite_actif ? "#2E7D5B" : "var(--brique)",
+              background: client.module_comptabilite_actif ? "rgba(46,125,91,0.12)" : "rgba(196,74,58,0.1)",
+            }}
+          >
+            {client.module_comptabilite_actif ? t("saModuleComptaActive") : t("saModuleComptaVerrouille")}
+          </span>
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 0, marginBottom: 12 }}>{t("saModuleComptaDescription")}</p>
+        <label style={{ fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 5 }}>{t("saModuleComptaPrixLabel")}</label>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={prixCompta}
+          onChange={(e) => setPrixCompta(e.target.value)}
+          style={{ ...inputStyle, maxWidth: 200 }}
+        />
+        <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 6, marginBottom: 0 }}>{t("saModuleComptaFacturationAide")}</p>
+        {client.module_comptabilite_actif && client.module_comptabilite_date_activation && (
+          <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4, marginBottom: 0 }}>
+            {t("saModuleComptaSince")} {new Date(client.module_comptabilite_date_activation).toLocaleDateString()}
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          {client.module_comptabilite_actif ? (
+            <>
+              <button
+                onClick={handleEnregistrerPrixCompta}
+                disabled={prixCompta === String(Number(client.module_comptabilite_prix_mensuel_xof || 0))}
+                style={boutonSecondaireStyle}
+              >
+                {t("saModuleComptaSavePrixButton")}
+              </button>
+              <button onClick={() => handleModuleCompta(false)} style={boutonDangerStyle}>
+                {t("saModuleComptaLockButton")}
+              </button>
+            </>
+          ) : (
+            <button onClick={() => handleModuleCompta(true)} style={boutonPrincipalStyle}>
+              {t("saModuleComptaActivateButton")}
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 12 }}>
           {t("saUsersSection")} ({client.nombre_utilisateurs_actifs}/{client.nombre_utilisateurs})
@@ -328,6 +414,16 @@ const inputStyle = {
   borderRadius: 8,
   fontSize: 13,
   fontFamily: "inherit",
+};
+const boutonPrincipalStyle = {
+  background: "var(--petrol)",
+  color: "#fff",
+  border: "none",
+  borderRadius: 8,
+  padding: "8px 16px",
+  fontSize: 12,
+  fontWeight: 600,
+  whiteSpace: "nowrap",
 };
 const boutonSecondaireStyle = {
   background: "transparent",

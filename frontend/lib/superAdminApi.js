@@ -122,6 +122,8 @@ export const superAdminApi = {
     request(`/super-admin/clients/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   suspendreClient: (id) => request(`/super-admin/clients/${id}/suspendre`, { method: "PATCH" }),
   reactiverClient: (id) => request(`/super-admin/clients/${id}/reactiver`, { method: "PATCH" }),
+  patchModuleComptabilite: (id, data) =>
+    request(`/super-admin/clients/${id}/module-comptabilite`, { method: "PATCH", body: JSON.stringify(data) }),
 
   getFormules: () => request("/super-admin/formules"),
   createFormule: (data) => request("/super-admin/formules", { method: "POST", body: JSON.stringify(data) }),

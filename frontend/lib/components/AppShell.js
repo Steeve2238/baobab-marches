@@ -49,7 +49,9 @@ const NAV_ITEMS = [
     items: [
       { href: "/financement", key: "navFinancing", moduleKey: "financement" },
       // Comptabilite : cle stricte (ni tableau de bord ni validateur universel seul) - voir routes/comptabilite.js.
-      { href: "/comptabilite", key: "navComptabilite", moduleKeyStrictAny: ["comptabilite", "comptabilite-validation"] },
+      // requiresFlag : module vendu en option (migration 032), verrouille par defaut -
+      // masque tant que le Super Admin ne l'a pas active pour ce client (meme pour un ADMIN).
+      { href: "/comptabilite", key: "navComptabilite", moduleKeyStrictAny: ["comptabilite", "comptabilite-validation"], requiresFlag: "comptabiliteActive" },
     ],
   },
   {
@@ -142,6 +144,7 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
   // requete (voir requireRole cote backend) - ce filtre est un confort
   // d'affichage, pas un controle d'acces.
   function itemVisible(item) {
+    if (item.requiresFlag && !permissions?.[item.requiresFlag]) return false;
     if (item.adminOnly) return estAdminConnecte;
     if (item.tableauDeBordOnly) return !!permissions?.tableauDeBord;
     if (item.moduleKey) {

@@ -520,8 +520,11 @@ async function supprimerRegle(client, tenantId, utilisateurId, id) {
 // Appels "silencieux" depuis les routes de ventes
 // ----------------------------------------------------------------------------
 
-async function silencieux(libelle, fn) {
+async function silencieux(tenantId, libelle, fn) {
   try {
+    // Module vendu en option (migration 032) : rien n'est genere tant que le
+    // Super Admin ne l'a pas active pour ce client.
+    if (!(await compta.moduleComptabiliteActif(tenantId))) return null;
     return await compta.avecTransaction(fn);
   } catch (err) {
     console.error(`Comptabilite : ${libelle} impossible`, err.message);
@@ -530,13 +533,13 @@ async function silencieux(libelle, fn) {
 }
 
 const apresGenerationFacture = (tenantId, utilisateurId, factureId) =>
-  silencieux("ecriture de facture", (client) => genererEcritureFacture(client, tenantId, utilisateurId, factureId));
+  silencieux(tenantId, "ecriture de facture", (client) => genererEcritureFacture(client, tenantId, utilisateurId, factureId));
 const apresPaiementFacture = (tenantId, utilisateurId, factureId) =>
-  silencieux("ecriture d'encaissement", (client) => genererEcritureEncaissement(client, tenantId, utilisateurId, factureId));
+  silencieux(tenantId, "ecriture d'encaissement", (client) => genererEcritureEncaissement(client, tenantId, utilisateurId, factureId));
 const apresAnnulationFacture = (tenantId, utilisateurId, factureId) =>
-  silencieux("annulation d'ecriture", (client) => genererAnnulationFacture(client, tenantId, utilisateurId, factureId));
+  silencieux(tenantId, "annulation d'ecriture", (client) => genererAnnulationFacture(client, tenantId, utilisateurId, factureId));
 const apresModificationFacture = (tenantId, factureId) =>
-  silencieux("mise a jour de l'echeance", (client) => synchroniserEcheance(client, tenantId, factureId));
+  silencieux(tenantId, "mise a jour de l'echeance", (client) => synchroniserEcheance(client, tenantId, factureId));
 
 module.exports = {
   genererEcritureFacture,

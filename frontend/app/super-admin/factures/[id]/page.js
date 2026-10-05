@@ -120,6 +120,12 @@ export default function SuperAdminFactureDetailPage() {
         "saInvoiceLinePeriodLabel"
       )} ${facture.periode}`;
 
+  // Module Comptabilite (migration 032) : le supplement mensuel est fige sur la
+  // facture ; la ligne de formule se lit alors HORS supplement, et le module
+  // apparait sur sa propre ligne (montant_xof reste le total facture).
+  const supplementCompta = Number(facture.supplement_comptabilite_xof) || 0;
+  const montantFormule = Number(facture.montant_xof) - supplementCompta;
+
   const piedDePage = [
     entete?.rccm ? `RCCM ${entete.rccm}` : null,
     entete?.ninea ? `NINEA ${entete.ninea}` : null,
@@ -215,12 +221,28 @@ export default function SuperAdminFactureDetailPage() {
                 1
               </td>
               <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
-                {Number(facture.montant_xof).toLocaleString()}
+                {montantFormule.toLocaleString()}
               </td>
               <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
-                {Number(facture.montant_xof).toLocaleString()}
+                {montantFormule.toLocaleString()}
               </td>
             </tr>
+            {supplementCompta > 0 && (
+              <tr style={{ borderBottom: "1px solid var(--line-soft)" }}>
+                <td style={{ padding: "6px 4px", fontSize: 12.5 }}>
+                  {t("saInvoiceLineComptaModule")} — {t("saInvoiceLineSupplementWord")} — {t("saInvoiceLinePeriodLabel")} {facture.periode}
+                </td>
+                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                  1
+                </td>
+                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                  {supplementCompta.toLocaleString()}
+                </td>
+                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                  {supplementCompta.toLocaleString()}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
 

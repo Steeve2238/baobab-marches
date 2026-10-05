@@ -1,6 +1,6 @@
 const express = require("express");
 const db = require("../db");
-const { requireAuth, requireModuleAny, blockLectureSeule } = require("../middleware/auth");
+const { requireAuth, requireModuleAny, blockLectureSeule, exigerModuleComptabiliteActif } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const compta = require("../services/comptaService");
 const rapports = require("../services/comptaRapports");
@@ -13,6 +13,8 @@ const { ComptaError, avecTransaction } = compta;
 
 const router = express.Router();
 router.use(requireAuth);
+// Module vendu en option : verrouille tant que le Super Admin ne l'a pas active (migration 032).
+router.use(exigerModuleComptabiliteActif);
 // Acces au module : "comptabilite" (consultation + saisie) ou
 // "comptabilite-validation" (en plus : validation, extourne, plan comptable,
 // parametres, exercices) - voir migration 028 et ecran Roles. ADMIN a tout.

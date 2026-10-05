@@ -62,6 +62,9 @@ export default function SuperAdminClientsPage() {
                   <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 4 }}>
                     {t("saFormuleLabel")}: {client.formule_nom || t("saNoFormule")} ·{" "}
                     {client.nombre_utilisateurs_actifs}/{client.nombre_utilisateurs} {t("saUsersCount")}
+                    {client.module_comptabilite_actif && (
+                      <span style={{ marginLeft: 8, color: "#2E7D5B", fontWeight: 600 }}>· {t("saModuleComptaSection")}</span>
+                    )}
                   </div>
                 </div>
                 <span

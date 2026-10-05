@@ -648,8 +648,20 @@ async function synchroniserTiers(client, tenantId) {
  * ou au renommage d'un client/fournisseur : ne fait rien si la comptabilite
  * n'est pas initialisee, et ne fait JAMAIS echouer l'operation appelante.
  */
+/**
+ * Module Comptabilite vendu en option (migration 032) : vrai si le Super Admin
+ * l'a active pour ce client. Les automatismes (ecritures de ventes, tiers)
+ * ne font RIEN tant qu'il est verrouille ; le rattrapage des ventes
+ * manquantes se fait a la reactivation (ecran "En instance").
+ */
+async function moduleComptabiliteActif(tenantId) {
+  const r = await db.query(`SELECT module_comptabilite_actif FROM tenant WHERE id = $1`, [tenantId]);
+  return !!r.rows[0]?.module_comptabilite_actif;
+}
+
 async function assurerTiersPourClientSilencieux(tenantId, clientCommercial) {
   try {
+    if (!(await moduleComptabiliteActif(tenantId))) return;
     await avecTransaction(async (client) => {
       const p = await getParametre(client, tenantId);
       if (!p || !p.initialisee) return;
@@ -662,6 +674,7 @@ async function assurerTiersPourClientSilencieux(tenantId, clientCommercial) {
 
 async function assurerTiersPourFournisseurSilencieux(tenantId, fournisseur) {
   try {
+    if (!(await moduleComptabiliteActif(tenantId))) return;
     await avecTransaction(async (client) => {
       const p = await getParametre(client, tenantId);
       if (!p || !p.initialisee) return;
@@ -976,6 +989,7 @@ module.exports = {
   synchroniserTiers,
   assurerTiersClient,
   assurerTiersFournisseur,
+  moduleComptabiliteActif,
   assurerTiersPourClientSilencieux,
   assurerTiersPourFournisseurSilencieux,
   creerBrouillon,

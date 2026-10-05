@@ -374,6 +374,7 @@ router.get("/statistiques", async (req, res) => {
 const SELECT_CLIENT = `
   SELECT te.id, te.raison_sociale, te.secteur_activite, te.pays, te.actif, te.date_creation,
          te.formule_abonnement_id,
+         te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof, te.module_comptabilite_date_activation,
          fa.nom AS formule_nom, fa.prix_mensuel_xof AS formule_prix_mensuel_xof,
          fa.plafond_utilisateurs AS formule_plafond_utilisateurs,
          (SELECT COUNT(*) FROM utilisateur u WHERE u.tenant_id = te.id) AS nombre_utilisateurs,
@@ -544,6 +545,49 @@ router.patch("/clients/:id", async (req, res) => {
   }
 });
 
+// PATCH /api/super-admin/clients/:id/module-comptabilite - active ou verrouille
+// le module Comptabilite (vendu en option, migration 032) et fixe son
+// supplement mensuel. Corps : { actif: boolean, prix_mensuel_xof?: nombre }.
+// Verrouiller ne supprime AUCUNE donnee : seul l'acces est coupe (voir
+// middleware exigerModuleComptabiliteActif) ; le supplement n'est facture que
+// sur les factures d'abonnement generees tant que le module est actif.
+router.patch("/clients/:id/module-comptabilite", async (req, res) => {
+  const { actif, prix_mensuel_xof } = req.body || {};
+  if (typeof actif !== "boolean") {
+    return res.status(400).json({ error: t(req, "SUPER_ADMIN_MODULE_COMPTA_INVALID") });
+  }
+  let prix = null;
+  if (prix_mensuel_xof !== undefined && prix_mensuel_xof !== null && prix_mensuel_xof !== "") {
+    prix = Number(prix_mensuel_xof);
+    if (!Number.isInteger(prix) || prix < 0) {
+      return res.status(400).json({ error: t(req, "SUPER_ADMIN_MODULE_COMPTA_INVALID") });
+    }
+  }
+  try {
+    const existing = await db.query(
+      `SELECT module_comptabilite_actif FROM tenant WHERE id = $1`,
+      [req.params.id]
+    );
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "SUPER_ADMIN_CLIENT_NOT_FOUND") });
+    }
+    const etaitActif = !!existing.rows[0].module_comptabilite_actif;
+    await db.query(
+      `UPDATE tenant SET
+         module_comptabilite_actif = $1,
+         module_comptabilite_prix_mensuel_xof = COALESCE($2, module_comptabilite_prix_mensuel_xof),
+         module_comptabilite_date_activation = CASE WHEN $1 AND NOT $3 THEN now() ELSE module_comptabilite_date_activation END
+       WHERE id = $4`,
+      [actif, prix, etaitActif, req.params.id]
+    );
+    const clientResult = await db.query(`${SELECT_CLIENT} WHERE te.id = $1`, [req.params.id]);
+    res.json(clientResult.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "SUPER_ADMIN_CLIENT_UPDATE_ERROR") });
+  }
+});
+
 // PATCH /api/super-admin/clients/:id/suspendre - bloque immediatement toute
 // connexion pour ce client (voir routes/auth.js, verification tenant.actif),
 // donnees entierement conservees, reversible via /reactiver.
@@ -658,7 +702,7 @@ router.patch("/formules/:id", async (req, res) => {
 
 const SELECT_FACTURE = `
   SELECT f.id, f.tenant_id, f.formule_abonnement_id, f.formule_nom, f.periode, f.montant_xof,
-         f.plafond_utilisateurs_facture,
+         f.plafond_utilisateurs_facture, f.supplement_comptabilite_xof,
          f.type_facture, f.statut, f.date_generation, f.date_paiement, f.mode_paiement, f.notes,
          te.raison_sociale AS client_raison_sociale, te.adresse AS client_adresse
   FROM facture_abonnement f
@@ -731,7 +775,7 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
   try {
     const clientResult = await db.query(
       `SELECT te.id, te.formule_abonnement_id, fa.nom AS formule_nom, fa.prix_mensuel_xof,
-              fa.plafond_utilisateurs
+              fa.plafond_utilisateurs, te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof
        FROM tenant te LEFT JOIN formule_abonnement fa ON fa.id = te.formule_abonnement_id
        WHERE te.id = $1`,
       [req.params.id]
@@ -744,9 +788,12 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
       return res.status(400).json({ error: t(req, "SUPER_ADMIN_CLIENT_SANS_FORMULE") });
     }
 
+    // Module Comptabilite actif : son supplement mensuel s'ajoute a la facture
+    // (fige ici, montant_xof = total formule + supplement).
+    const supplementCompta = client.module_comptabilite_actif ? Number(client.module_comptabilite_prix_mensuel_xof) || 0 : 0;
     const result = await db.query(
-      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture, plafond_utilisateurs_facture)
-       VALUES ($1, $2, $3, $4, $5, $6, 'ABONNEMENT', $7)
+      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture, plafond_utilisateurs_facture, supplement_comptabilite_xof)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ABONNEMENT', $7, $8)
        RETURNING id`,
       [
         uuidv4(),
@@ -754,8 +801,9 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
         client.formule_abonnement_id,
         client.formule_nom,
         periode,
-        client.prix_mensuel_xof,
+        Number(client.prix_mensuel_xof) + supplementCompta,
         client.plafond_utilisateurs ?? null,
+        supplementCompta,
       ]
     );
 
