@@ -50,7 +50,7 @@ async function pdfTableau({ entreprise, titre, sousTitre, periode, colonnes, lig
     if (y + lh > bas - 14) nouvellePage();
     doc.save();
     doc.font(l.gras ? "Helvetica-Bold" : "Helvetica").fontSize(7.5).fillColor("#000");
-    if (l.separateur) doc.moveTo(left - 4, y - 1).lineTo(left + largeur + 4, y - 1).lineWidth(0.5).stroke("#000");
+    if (l.separateur) doc.moveTo(left - 4, y - 2.5).lineTo(left + largeur + 4, y - 2.5).lineWidth(0.5).stroke("#000");
     l.cellules.forEach((v, i) => {
       const c = colonnes[i];
       const texte = typeof v === "number" ? fmt(v, { zero: false }) : String(v ?? "");
@@ -206,6 +206,7 @@ async function grandLivreAnalytiquePdf(data, entreprise) {
 }
 
 module.exports = {
+  pdfTableau,
   balanceAnalytiqueXlsx,
   balanceAnalytiquePdf,
   resultatDossierXlsx,

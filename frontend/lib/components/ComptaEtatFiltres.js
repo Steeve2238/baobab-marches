@@ -11,7 +11,7 @@ import { useComptaStatut, labelStyle, inputStyle, boutonPrincipalStyle, boutonSe
  * plage de comptes, option "inclure les ecritures en instance", boutons
  * Afficher et exports PDF / Excel.
  */
-export default function ComptaEtatFiltres({ etat, filtres, setFiltres, exercices, setExercices, onAfficher, onErreur }) {
+export default function ComptaEtatFiltres({ etat, filtres, setFiltres, exercices, setExercices, onAfficher, onErreur, sansComptes = false, sansDebut = false, libelleFin = null }) {
   const { t } = useLangue();
   const { statut } = useComptaStatut();
   const enInstance = statut?.en_attente?.en_instance || 0;
@@ -66,22 +66,28 @@ export default function ComptaEtatFiltres({ etat, filtres, setFiltres, exercices
             ))}
           </select>
         </div>
+        {!sansDebut && (
+          <div>
+            <label style={labelStyle}>{t("comptaPeriodeDu")}</label>
+            <input type="date" value={filtres.date_debut} onChange={(e) => maj("date_debut", e.target.value)} style={{ ...inputStyle, width: 145 }} />
+          </div>
+        )}
         <div>
-          <label style={labelStyle}>{t("comptaPeriodeDu")}</label>
-          <input type="date" value={filtres.date_debut} onChange={(e) => maj("date_debut", e.target.value)} style={{ ...inputStyle, width: 145 }} />
-        </div>
-        <div>
-          <label style={labelStyle}>{t("comptaPeriodeAu")}</label>
+          <label style={labelStyle}>{libelleFin ? t(libelleFin) : t("comptaPeriodeAu")}</label>
           <input type="date" value={filtres.date_fin} onChange={(e) => maj("date_fin", e.target.value)} style={{ ...inputStyle, width: 145 }} />
         </div>
-        <div>
-          <label style={labelStyle}>{t("comptaCompteDe")}</label>
-          <input value={filtres.compte_de} onChange={(e) => maj("compte_de", e.target.value.replace(/\D/g, ""))} style={{ ...inputStyle, width: 120, fontFamily: "IBM Plex Mono, monospace" }} />
-        </div>
-        <div>
-          <label style={labelStyle}>{t("comptaCompteA")}</label>
-          <input value={filtres.compte_a} onChange={(e) => maj("compte_a", e.target.value.replace(/\D/g, ""))} style={{ ...inputStyle, width: 120, fontFamily: "IBM Plex Mono, monospace" }} />
-        </div>
+        {!sansComptes && (
+          <>
+            <div>
+              <label style={labelStyle}>{t("comptaCompteDe")}</label>
+              <input value={filtres.compte_de} onChange={(e) => maj("compte_de", e.target.value.replace(/\D/g, ""))} style={{ ...inputStyle, width: 120, fontFamily: "IBM Plex Mono, monospace" }} />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("comptaCompteA")}</label>
+              <input value={filtres.compte_a} onChange={(e) => maj("compte_a", e.target.value.replace(/\D/g, ""))} style={{ ...inputStyle, width: 120, fontFamily: "IBM Plex Mono, monospace" }} />
+            </div>
+          </>
+        )}
         <label style={{ fontSize: 12, display: "flex", gap: 6, alignItems: "center", paddingBottom: 8 }}>
           <input type="checkbox" checked={!!filtres.inclure_instance} onChange={(e) => maj("inclure_instance", e.target.checked)} />
           {t("comptaInclureInstance")}

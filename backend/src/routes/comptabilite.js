@@ -13,6 +13,9 @@ const tiersCompta = require("../services/comptaTiers");
 const analytiqueCompta = require("../services/comptaAnalytique");
 const exportsAnalytique = require("../services/comptaExportsAnalytique");
 const exportsTiers = require("../services/comptaExportsTiers");
+const etatsCompta = require("../services/comptaEtats");
+const exportsEtats = require("../services/comptaExportsEtats");
+const immoCompta = require("../services/comptaImmobilisations");
 const multer = require("multer");
 
 const { ComptaError, avecTransaction } = compta;
@@ -1090,6 +1093,164 @@ router.get(
       [tenant(req)]
     );
     res.json(r.rows);
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Etats financiers SYSCOHADA (phase 4) : bilan, compte de resultat
+// ----------------------------------------------------------------------------
+
+router.get(
+  "/etats/bilan",
+  gerer(async (req, res) => {
+    res.json(await etatsCompta.bilan(db, tenant(req), optionsRapport(req)));
+  })
+);
+
+router.get(
+  "/etats/bilan/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await etatsCompta.bilan(db, tenant(req), optionsRapport(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await exportsEtats.bilanPdf(data, entreprise) : exportsEtats.bilanXlsx(data, entreprise);
+    envoyerFichier(res, buffer, nomFichier("bilan", data, format), format);
+  })
+);
+
+router.get(
+  "/etats/resultat",
+  gerer(async (req, res) => {
+    res.json(await etatsCompta.compteResultat(db, tenant(req), optionsRapport(req)));
+  })
+);
+
+router.get(
+  "/etats/resultat/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await etatsCompta.compteResultat(db, tenant(req), optionsRapport(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await exportsEtats.resultatPdf(data, entreprise) : exportsEtats.resultatXlsx(data, entreprise);
+    envoyerFichier(res, buffer, nomFichier("compte_de_resultat", data, format), format);
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Immobilisations et amortissements (phase 4)
+// ----------------------------------------------------------------------------
+
+router.get(
+  "/immobilisations",
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.listerFiches(client, tenant(req), { statut: req.query.statut || undefined, q: req.query.q || undefined })));
+  })
+);
+
+router.get(
+  "/immobilisations/a-immobiliser",
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.listerAImmobiliser(client, tenant(req), { inclure_ignorees: vrai(req.query.inclure_ignorees) })));
+  })
+);
+
+router.post(
+  "/immobilisations/lignes/:ligneId/ignorer",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const ignorer = !(req.body && req.body.ignorer === false);
+    await avecTransaction((client) => immoCompta.ignorerLigne(client, tenant(req), userId(req), req.params.ligneId, ignorer));
+    res.json({ ok: true });
+  })
+);
+
+router.get(
+  "/immobilisations/dotations/apercu",
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.apercuDotations(client, tenant(req), { exercice_id: req.query.exercice_id || undefined })));
+  })
+);
+
+router.post(
+  "/immobilisations/dotations/generer",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.genererDotations(client, tenant(req), userId(req), { exercice_id: (req.body || {}).exercice_id })));
+  })
+);
+
+router.post(
+  "/immobilisations/dotations/annuler",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.annulerDotations(client, tenant(req), userId(req), { exercice_id: (req.body || {}).exercice_id })));
+  })
+);
+
+router.get(
+  "/immobilisations/tableau",
+  gerer(async (req, res) => {
+    res.json(await immoCompta.tableauImmobilisations(db, tenant(req), optionsRapport(req)));
+  })
+);
+
+router.get(
+  "/immobilisations/tableau/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await immoCompta.tableauImmobilisations(db, tenant(req), optionsRapport(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await exportsEtats.immobilisationsPdf(data, entreprise) : exportsEtats.immobilisationsXlsx(data, entreprise);
+    envoyerFichier(res, buffer, nomFichier("tableau_immobilisations", data, format), format);
+  })
+);
+
+router.post(
+  "/immobilisations",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const f = await avecTransaction((client) => immoCompta.creerFiche(client, tenant(req), userId(req), req.body || {}));
+    res.status(201).json(f);
+  })
+);
+
+router.get(
+  "/immobilisations/:id",
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.lireFiche(client, tenant(req), req.params.id)));
+  })
+);
+
+router.patch(
+  "/immobilisations/:id",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.modifierFiche(client, tenant(req), userId(req), req.params.id, req.body || {})));
+  })
+);
+
+router.delete(
+  "/immobilisations/:id",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    await avecTransaction((client) => immoCompta.supprimerFiche(client, tenant(req), userId(req), req.params.id));
+    res.status(204).end();
+  })
+);
+
+router.post(
+  "/immobilisations/:id/sortie",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.sortir(client, tenant(req), userId(req), req.params.id, req.body || {})));
+  })
+);
+
+router.post(
+  "/immobilisations/:id/annuler-sortie",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => immoCompta.annulerSortie(client, tenant(req), userId(req), req.params.id)));
   })
 );
 
