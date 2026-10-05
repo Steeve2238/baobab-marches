@@ -8,6 +8,7 @@ const { assurerTiersPourFournisseurSilencieux } = require("../services/comptaSer
 const { chargerParametres } = require("../services/produitsCatalogue");
 const { enregistrerMouvement, stockProduit, genererReferenceInterne } = require("../services/stockService");
 const { lireFactureExcel } = require("../services/receptionExcel");
+const { derniersAchatsFournisseur, pct } = require("../services/prixFournisseurs");
 const { TYPES_COUT, REPARTITIONS, repartirCouts, avertissementsIncoterm, estimerAssuranceEtDouane } = require("../services/receptionCouts");
 
 const router = express.Router();
@@ -159,6 +160,16 @@ async function fournisseurDuTenant(queryable, tenantId, id) {
   return r.rows.length > 0;
 }
 
+function ecartPrecedent(precedent, prixXof) {
+  if (!precedent) return { prix_precedent_xof: null, prix_precedent_date: null, prix_precedent_numero: null, variation_prix_pct: null };
+  return {
+    prix_precedent_xof: precedent.prix_achat_xof,
+    prix_precedent_date: precedent.date,
+    prix_precedent_numero: precedent.numero,
+    variation_prix_pct: pct(prixXof, precedent.prix_achat_xof),
+  };
+}
+
 async function chargerReception(tenantId, id) {
   if (!UUID_RE.test(String(id))) return null;
   const r = await db.query(
@@ -174,7 +185,7 @@ async function chargerReception(tenantId, id) {
   const lignes = (
     await db.query(
       `SELECT l.*, p.reference AS produit_reference, p.designation AS produit_designation,
-              pm.id AS mapping_produit_id, pp.reference AS mapping_reference, pp.designation AS mapping_designation
+              pm.id AS mapping_produit_id, pp.id AS mapping_article_id, pp.reference AS mapping_reference, pp.designation AS mapping_designation
        FROM reception_ligne l
        LEFT JOIN produit p ON p.id = l.produit_id
        LEFT JOIN produit_reference_fournisseur pm
@@ -194,6 +205,14 @@ async function chargerReception(tenantId, id) {
     poids_unitaire_kg: l.poids_unitaire_kg === null ? null : Number(l.poids_unitaire_kg),
   }));
   const rep = repartirCouts(lignesBase, couts, cours);
+  // Ecart par rapport au dernier achat valide du meme article chez le meme fournisseur.
+  const idsArticles = [...new Set(lignesBase.map((l) => l.produit_id || l.mapping_article_id).filter(Boolean))];
+  const precedents = await derniersAchatsFournisseur(
+    tenantId,
+    reception.fournisseur_id,
+    idsArticles,
+    reception.statut === "BROUILLON" ? null : { date: reception.date_reception, validation: reception.date_validation }
+  );
   let totalDevise = 0;
   const lignesCalculees = lignesBase.map((l, i) => {
     const montantDevise = arr2(l.quantite * l.prix_unitaire_devise);
@@ -206,8 +225,9 @@ async function chargerReception(tenantId, id) {
       cout_approche_xof: rep.lignes[i].cout_approche_xof,
       cout_revient_unitaire_xof: rep.lignes[i].cout_revient_unitaire_xof,
       cout_revient_total_xof: rep.lignes[i].cout_revient_total_xof,
+      ...ecartPrecedent(precedents.get(l.produit_id || l.mapping_article_id), arr2(l.prix_unitaire_devise * cours)),
       article_reconnu: l.mapping_produit_id
-        ? { id: l.mapping_produit_id, reference: l.mapping_reference, designation: l.mapping_designation }
+        ? { id: l.mapping_article_id, reference: l.mapping_reference, designation: l.mapping_designation }
         : null,
     };
   });

@@ -75,6 +75,9 @@ export default function ReceptionEditeur({ id }) {
             produit_id: l.produit_id || "",
             reference_interne: l.reference_interne || "",
             poids_unitaire_kg: l.poids_unitaire_kg ?? "",
+            prix_precedent_xof: l.prix_precedent_xof,
+            prix_precedent_date: l.prix_precedent_date,
+            prix_precedent_numero: l.prix_precedent_numero,
             article_reconnu: l.article_reconnu,
             produit_reference: l.produit_reference,
           }))
@@ -442,6 +445,19 @@ export default function ReceptionEditeur({ id }) {
                     </td>
                     <td style={td}>
                       <input disabled={desactive} inputMode="decimal" value={l.prix_unitaire_devise} onChange={(e) => majLigne(index, "prix_unitaire_devise", e.target.value)} style={inputCompact} />
+                      {l.prix_precedent_xof > 0 && num(l.prix_unitaire_devise) > 0 && (() => {
+                        const ecart = Math.round(((num(l.prix_unitaire_devise) * coursNum - l.prix_precedent_xof) / l.prix_precedent_xof) * 10000) / 100;
+                        const couleur = ecart > 0 ? "var(--brique)" : ecart < 0 ? "var(--vert)" : "var(--sub)";
+                        return (
+                          <div
+                            title={t("receptionsEcartDernier").replace("{pct}", ecart).replace("{prix}", Number(l.prix_precedent_xof).toLocaleString()).replace("{numero}", l.prix_precedent_numero || "")}
+                            style={{ fontSize: 10.5, color: couleur, fontWeight: 600, marginTop: 3, whiteSpace: "nowrap" }}
+                          >
+                            {ecart > 0 ? "▲ +" : ecart < 0 ? "▼ " : "= "}
+                            {ecart} % <span style={{ fontWeight: 400, color: "var(--sub)" }}>/ {Number(l.prix_precedent_xof).toLocaleString()}</span>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="mono" style={{ ...td, textAlign: "right", fontSize: 12.5 }}>{montant.toLocaleString()}</td>
                     <td className="mono" style={{ ...td, textAlign: "right", fontSize: 12.5 }}>{arr2(num(l.prix_unitaire_devise) * coursNum).toLocaleString()}</td>

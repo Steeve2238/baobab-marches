@@ -621,6 +621,19 @@ export const api = {
     formData.append("fichier", fichier);
     return requestUpload("/receptions/importer-excel", formData);
   },
+  getPrixFournisseurs: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/prix-fournisseurs${query ? `?${query}` : ""}`);
+  },
+  getPrixProduit: (id) => request(`/prix-fournisseurs/produit/${id}`),
+  comparerOffreExcel: (fichier, fournisseurId, devise, cours) => {
+    const formData = new FormData();
+    formData.append("fichier", fichier);
+    formData.append("fournisseur_id", fournisseurId);
+    formData.append("devise", devise);
+    formData.append("cours_devise", cours);
+    return requestUpload("/prix-fournisseurs/comparer-excel", formData);
+  },
   getFournisseursReception: () => request("/receptions/fournisseurs"),
   estimerCoutsApprocheReception: (data) => request("/receptions/estimer-couts-approche", { method: "POST", body: JSON.stringify(data) }),
   enregistrerCoutsApprocheReception: (id, couts) => request(`/receptions/${id}/couts-approche`, { method: "PUT", body: JSON.stringify({ couts_approche: couts }) }),

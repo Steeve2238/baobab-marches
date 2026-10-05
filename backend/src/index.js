@@ -25,6 +25,7 @@ const ventesRoutes = require("./routes/ventes");
 const calculPrixRoutes = require("./routes/calculPrix");
 const produitsRoutes = require("./routes/produits");
 const receptionsRoutes = require("./routes/receptions");
+const prixFournisseursRoutes = require("./routes/prixFournisseurs");
 const comptabiliteRoutes = require("./routes/comptabilite");
 const { t } = require("./utils/i18n");
 
@@ -63,6 +64,7 @@ app.use("/api/ventes", ventesRoutes);
 app.use("/api/calcul-prix", calculPrixRoutes);
 app.use("/api/produits", produitsRoutes);
 app.use("/api/receptions", receptionsRoutes);
+app.use("/api/prix-fournisseurs", prixFournisseursRoutes);
 app.use("/api/comptabilite", comptabiliteRoutes);
 
 // Gestionnaire d'erreur generique (dernier recours)

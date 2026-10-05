@@ -443,6 +443,7 @@ export default function ProduitsPage() {
                   </td>
                   <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                     <button type="button" onClick={() => ouvrirEdition(p)} style={lienStyle}>{t("produitsModifier")}</button>
+                    <Link href={`/prix-fournisseurs?produit=${p.id}`} style={{ ...lienStyle, marginLeft: 10, textDecoration: "underline" }}>{t("prixLien")}</Link>
                     {p.source_offre_id && (
                       <button type="button" onClick={() => actualiser(p)} title={t("produitsActualiserAide")} style={{ ...lienStyle, marginLeft: 10 }}>
                         {t("produitsActualiser")}
