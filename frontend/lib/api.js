@@ -604,6 +604,29 @@ export const api = {
   },
   importerProduits: (offreIds) => request("/produits/importer", { method: "POST", body: JSON.stringify({ offre_ids: offreIds }) }),
 
+  // Receptions de marchandises + stock (05/10/2026) : la facture fournisseur
+  // (Excel ou saisie) est la porte d'entree des articles et du stock.
+  getReceptions: (params) => {
+    const query = new URLSearchParams(params || {}).toString();
+    return request(`/receptions${query ? `?${query}` : ""}`);
+  },
+  getReception: (id) => request(`/receptions/${id}`),
+  createReception: (data) => request("/receptions", { method: "POST", body: JSON.stringify(data) }),
+  patchReception: (id, data) => request(`/receptions/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerReception: (id) => request(`/receptions/${id}`, { method: "DELETE" }),
+  validerReception: (id) => request(`/receptions/${id}/valider`, { method: "POST" }),
+  annulerReception: (id) => request(`/receptions/${id}/annuler`, { method: "POST" }),
+  importerExcelReception: (fichier) => {
+    const formData = new FormData();
+    formData.append("fichier", fichier);
+    return requestUpload("/receptions/importer-excel", formData);
+  },
+  getFournisseursReception: () => request("/receptions/fournisseurs"),
+  createFournisseurReception: (data) => request("/receptions/fournisseurs", { method: "POST", body: JSON.stringify(data) }),
+  ajusterStockProduit: (id, data) => request(`/produits/${id}/ajustement-stock`, { method: "POST", body: JSON.stringify(data) }),
+  getMouvementsProduit: (id) => request(`/produits/${id}/mouvements`),
+  getReferencesFournisseursProduit: (id) => request(`/produits/${id}/references-fournisseurs`),
+
   // --- Comptabilite SYSCOHADA (chantier E, phase 1 - 04/10/2026) ---
   comptaStatut: () => request("/comptabilite/statut"),
   comptaInitialiser: (data) => request("/comptabilite/initialiser", { method: "POST", body: JSON.stringify(data || {}) }),

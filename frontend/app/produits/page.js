@@ -35,6 +35,8 @@ export default function ProduitsPage() {
   const [editionId, setEditionId] = useState(null);
   const [form, setForm] = useState(FORM_VIDE);
   const [enregistrement, setEnregistrement] = useState(false);
+  const [details, setDetails] = useState({ refs: [], mouvements: [] });
+  const [ajust, setAjust] = useState({ quantite: "", motif: "" });
 
   const [importOuvert, setImportOuvert] = useState(false);
   const [candidats, setCandidats] = useState([]);
@@ -78,7 +80,30 @@ export default function ProduitsPage() {
     });
     setFormOuvert(true);
     setImportOuvert(false);
+    setAjust({ quantite: "", motif: "" });
+    setDetails({ refs: [], mouvements: [] });
+    Promise.all([api.getReferencesFournisseursProduit(p.id), api.getMouvementsProduit(p.id)])
+      .then(([refs, mouvements]) => setDetails({ refs, mouvements }))
+      .catch(() => {});
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function ajusterStock(e) {
+    e.preventDefault();
+    setErreur("");
+    setInfo("");
+    const quantite = nombreSaisi(ajust.quantite);
+    try {
+      await api.ajusterStockProduit(editionId, { quantite, motif: ajust.motif });
+      setInfo(t("produitsAjustementOk"));
+      setAjust({ quantite: "", motif: "" });
+      setDetails((d) => d);
+      const mouvements = await api.getMouvementsProduit(editionId);
+      setDetails((d) => ({ ...d, mouvements }));
+      await charger();
+    } catch (err) {
+      setErreur(err.message);
+    }
   }
 
   async function enregistrer(e) {
@@ -277,7 +302,7 @@ export default function ProduitsPage() {
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12 }}>
             <div>
-              <label style={labelStyle}>{t("produitsColReference")}</label>
+              <label style={labelStyle}>{t("produitsReferenceInterne")}</label>
               <input value={form.reference} onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))} style={inputStyle} />
             </div>
             <div style={{ gridColumn: "span 2" }}>
@@ -306,6 +331,7 @@ export default function ProduitsPage() {
             </div>
           </div>
           <p style={{ fontSize: 11.5, color: "var(--sub)", margin: "8px 0 0" }}>{t("produitsAideMarge")}</p>
+          <p style={{ fontSize: 11.5, color: "var(--sub)", margin: "4px 0 0" }}>{t("produitsAideReference")}</p>
           {editionId && (
             <label style={{ fontSize: 12.5, display: "inline-flex", gap: 6, alignItems: "center", marginTop: 10 }}>
               <input type="checkbox" checked={form.actif} onChange={(e) => setForm((f) => ({ ...f, actif: e.target.checked }))} />
@@ -320,6 +346,56 @@ export default function ProduitsPage() {
               {t("produitsAnnuler")}
             </button>
           </div>
+          {editionId && (
+            <div style={{ marginTop: 18, borderTop: "1px solid var(--line)", paddingTop: 14, display: "grid", gap: 16 }}>
+              <div>
+                <h3 style={{ fontSize: 13, color: "var(--petrol)", marginBottom: 8 }}>{t("produitsAjusterStock")}</h3>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+                  <div>
+                    <label style={labelStyle}>{t("produitsAjustementQuantite")}</label>
+                    <input inputMode="decimal" value={ajust.quantite} onChange={(e) => setAjust((a) => ({ ...a, quantite: e.target.value }))} style={{ ...inputStyle, width: 170 }} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <label style={labelStyle}>{t("produitsAjustementMotif")}</label>
+                    <input value={ajust.motif} onChange={(e) => setAjust((a) => ({ ...a, motif: e.target.value }))} style={inputStyle} />
+                  </div>
+                  <button type="button" onClick={ajusterStock} style={boutonSecondaireStyle}>
+                    {t("produitsAjusterStock")}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <h3 style={{ fontSize: 13, color: "var(--petrol)", marginBottom: 6 }}>{t("produitsRefsFournisseurs")}</h3>
+                {details.refs.length === 0 ? (
+                  <p style={{ fontSize: 12, color: "var(--sub)" }}>{t("produitsRefsAucune")}</p>
+                ) : (
+                  details.refs.map((r) => (
+                    <div key={r.id} style={{ fontSize: 12.5 }}>
+                      <span style={{ fontWeight: 600 }}>{r.fournisseur_nom}</span> · <span className="mono">{r.reference_fournisseur}</span>
+                      {r.designation_fournisseur ? <span style={{ color: "var(--sub)" }}> — {r.designation_fournisseur}</span> : null}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div>
+                <h3 style={{ fontSize: 13, color: "var(--petrol)", marginBottom: 6 }}>{t("produitsMouvements")}</h3>
+                {details.mouvements.length === 0 ? (
+                  <p style={{ fontSize: 12, color: "var(--sub)" }}>{t("produitsMouvementsAucun")}</p>
+                ) : (
+                  details.mouvements.slice(0, 10).map((m) => (
+                    <div key={m.id} style={{ fontSize: 12.5, display: "flex", gap: 12 }}>
+                      <span className="mono" style={{ color: "var(--sub)" }}>{new Date(m.date_mouvement).toLocaleDateString(dict.dateLocale)}</span>
+                      <span className="mono" style={{ width: 70, textAlign: "right", color: m.quantite < 0 ? "var(--brique)" : "var(--vert)" }}>
+                        {m.quantite > 0 ? "+" : ""}
+                        {Number(m.quantite).toLocaleString()}
+                      </span>
+                      <span>{m.libelle || m.type_mouvement}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </form>
       )}
 
@@ -329,12 +405,13 @@ export default function ProduitsPage() {
         <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("produitsVide")}</p>
       ) : (
         <div className="card" style={{ overflowX: "auto", padding: 0 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 900 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 980 }}>
             <thead>
               <tr>
                 <th style={thStyle}>{t("produitsColReference")}</th>
                 <th style={thStyle}>{t("produitsColDesignation")}</th>
                 <th style={thStyle}>{t("produitsColUnite")}</th>
+                <th style={{ ...thStyle, textAlign: "right" }}>{t("produitsColStock")}</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>{t("produitsColCout")}</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>{t("produitsColMarge")}</th>
                 <th style={{ ...thStyle, textAlign: "right" }}>{t("produitsColPrixVente")}</th>
@@ -345,13 +422,16 @@ export default function ProduitsPage() {
             <tbody>
               {produits.map((p) => (
                 <tr key={p.id} style={{ borderTop: "1px solid var(--line)", opacity: p.actif ? 1 : 0.55 }}>
-                  <td className="mono" style={tdStyle}>{p.reference || "—"}</td>
+                  <td className="mono" style={{ ...tdStyle, whiteSpace: "nowrap" }}>{p.reference || "—"}</td>
                   <td style={{ ...tdStyle, fontWeight: 600 }}>
                     {p.designation}
                     {p.categorie && <div style={{ fontSize: 11, color: "var(--sub)", fontWeight: 400 }}>{p.categorie}</div>}
                     {!p.actif && <div style={{ fontSize: 11, color: "var(--brique)", fontWeight: 400 }}>{t("produitsInactif")}</div>}
                   </td>
                   <td style={tdStyle}>{p.unite}</td>
+                  <td className="mono" style={{ ...tdStyle, textAlign: "right", fontWeight: 600, color: Number(p.stock_quantite) < 0 ? "var(--brique)" : "inherit" }}>
+                    {Number(p.stock_quantite || 0).toLocaleString()}
+                  </td>
                   <td className="mono" style={{ ...tdStyle, textAlign: "right" }}>{Number(p.cout_revient_unitaire_xof).toLocaleString()}</td>
                   <td className="mono" style={{ ...tdStyle, textAlign: "right" }}>{Math.round(Number(p.marge_pct) * 10000) / 100} %</td>
                   <td className="mono" style={{ ...tdStyle, textAlign: "right", fontWeight: 700 }}>{Number(p.prix_vente_xof).toLocaleString()}</td>

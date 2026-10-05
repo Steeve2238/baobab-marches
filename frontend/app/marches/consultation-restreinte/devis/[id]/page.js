@@ -633,6 +633,7 @@ export default function DevisDetailPage() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ fontSize: 11, textAlign: "left", borderBottom: "1px solid var(--line)" }}>
+              {(devis.lignes || []).some((l) => l.reference) && <th style={{ padding: "6px 4px" }}>{t("venteReferenceLabel")}</th>}
               <th style={{ padding: "6px 4px" }}>{t("venteDesignationLabel")}</th>
               <th style={{ padding: "6px 4px" }}>{t("venteUniteLabel")}</th>
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteLabel")}</th>
@@ -643,6 +644,7 @@ export default function DevisDetailPage() {
           <tbody>
             {devis.lignes.map((l) => (
               <tr key={l.id} style={{ borderBottom: "1px solid var(--line-soft)" }}>
+                {(devis.lignes || []).some((l) => l.reference) && <td className="mono" style={{ padding: "6px 4px", fontSize: 12 }}>{l.reference || ""}</td>}
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.designation}</td>
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.unite}</td>
                 <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.quantite).toLocaleString()}</td>

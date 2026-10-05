@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require("uuid");
 const { requireAuth, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { prixVenteDepuisCout, chargerOffresRetenues, sourceLibelle } = require("../services/produitsCatalogue");
+const { enregistrerMouvement, stockProduit } = require("../services/stockService");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -29,6 +30,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 function avecPrixVente(p) {
   return {
     ...p,
+    stock_quantite: p.stock_quantite !== undefined ? Number(p.stock_quantite) : undefined,
     cout_revient_unitaire_xof: Number(p.cout_revient_unitaire_xof),
     marge_pct: Number(p.marge_pct),
     prix_vente_xof: prixVenteDepuisCout(p.cout_revient_unitaire_xof, p.marge_pct),
@@ -48,15 +50,17 @@ function validerCoutMarge(cout, marge) {
 router.get("/", async (req, res) => {
   const { q, inclure_inactifs } = req.query;
   try {
-    const conditions = ["tenant_id = $1"];
+    const conditions = ["p.tenant_id = $1"];
     const valeurs = [req.user.tenantId];
-    if (!inclure_inactifs) conditions.push("actif = true");
+    if (!inclure_inactifs) conditions.push("p.actif = true");
     if (q && String(q).trim()) {
       valeurs.push(`%${String(q).trim()}%`);
-      conditions.push(`(designation ILIKE $${valeurs.length} OR reference ILIKE $${valeurs.length} OR categorie ILIKE $${valeurs.length})`);
+      conditions.push(`(p.designation ILIKE $${valeurs.length} OR p.reference ILIKE $${valeurs.length} OR p.categorie ILIKE $${valeurs.length})`);
     }
     const result = await db.query(
-      `SELECT * FROM produit WHERE ${conditions.join(" AND ")} ORDER BY lower(designation) ASC`,
+      `SELECT p.*, COALESCE((SELECT SUM(m.quantite) FROM mouvement_stock m WHERE m.produit_id = p.id), 0) AS stock_quantite
+       FROM produit p WHERE ${conditions.join(" AND ")}
+       ORDER BY lower(p.designation) ASC`,
       valeurs
     );
     res.json(result.rows.map(avecPrixVente));
@@ -194,6 +198,79 @@ router.post("/:id/actualiser", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "PRODUIT_UPDATE_ERROR") });
+  }
+});
+
+// Mouvements de stock d'un article (entrees, sorties, ajustements).
+router.get("/:id/mouvements", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "PRODUIT_NOT_FOUND") });
+  try {
+    const r = await db.query(
+      `SELECT id, type_mouvement, quantite, cout_unitaire_xof, date_mouvement, origine_type, origine_id, libelle
+       FROM mouvement_stock WHERE tenant_id = $1 AND produit_id = $2 ORDER BY date_mouvement DESC, date_creation DESC LIMIT 200`,
+      [req.user.tenantId, id]
+    );
+    res.json(r.rows.map((m) => ({ ...m, quantite: Number(m.quantite), cout_unitaire_xof: m.cout_unitaire_xof === null ? null : Number(m.cout_unitaire_xof) })));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "PRODUIT_FETCH_ERROR") });
+  }
+});
+
+// Correspondance references fournisseurs <-> cet article.
+router.get("/:id/references-fournisseurs", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "PRODUIT_NOT_FOUND") });
+  try {
+    const r = await db.query(
+      `SELECT pr.id, pr.reference_fournisseur, pr.designation_fournisseur, f.nom AS fournisseur_nom
+       FROM produit_reference_fournisseur pr JOIN fournisseur f ON f.id = pr.fournisseur_id
+       WHERE pr.tenant_id = $1 AND pr.produit_id = $2 ORDER BY f.nom, pr.reference_fournisseur`,
+      [req.user.tenantId, id]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "PRODUIT_FETCH_ERROR") });
+  }
+});
+
+// Ajustement manuel du stock (inventaire, stock initial, casse...).
+router.post("/:id/ajustement-stock", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "PRODUIT_NOT_FOUND") });
+  const quantite = Number(req.body.quantite);
+  const motif = String(req.body.motif || "").trim();
+  if (!Number.isFinite(quantite) || quantite === 0) return res.status(400).json({ error: t(req, "PRODUIT_STOCK_QUANTITE_INVALID") });
+  if (!motif) return res.status(400).json({ error: t(req, "PRODUIT_STOCK_MOTIF_REQUIRED") });
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const p = (await client.query(`SELECT * FROM produit WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [id, req.user.tenantId])).rows[0];
+    if (!p) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: t(req, "PRODUIT_NOT_FOUND") });
+    }
+    await enregistrerMouvement(client, {
+      tenantId: req.user.tenantId,
+      produitId: id,
+      type: "AJUSTEMENT",
+      quantite: Math.round(quantite * 1000) / 1000,
+      coutUnitaire: Number(p.cout_revient_unitaire_xof),
+      origineType: "MANUEL",
+      libelle: motif.slice(0, 200),
+      userId: req.user.sub,
+    });
+    const stock = await stockProduit(client, req.user.tenantId, id);
+    await client.query("COMMIT");
+    res.json({ ...avecPrixVente(p), stock_quantite: stock });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: t(req, "PRODUIT_UPDATE_ERROR") });
+  } finally {
+    client.release();
   }
 });
 

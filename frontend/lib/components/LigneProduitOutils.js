@@ -73,6 +73,7 @@ export default function LigneProduitOutils({ ligne, onPatch }) {
             <option key={p.id} value={p.id}>
               {p.reference ? `${p.reference} · ` : ""}
               {p.designation} — {Number(p.prix_vente_xof).toLocaleString()}
+              {p.stock_quantite !== undefined ? ` · ${t("produitsColStock")} ${Number(p.stock_quantite).toLocaleString()}` : ""}
             </option>
           ))}
         </select>

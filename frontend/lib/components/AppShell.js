@@ -61,6 +61,8 @@ const NAV_ITEMS = [
     key: "navGroupAchatsMoyens",
     items: [
       { href: "/fournisseurs", key: "navSuppliers", moduleKey: "fournisseurs" },
+      // Receptions de marchandises + stock : fournisseurs OU marches (les equipes commerciales consultent le stock).
+      { href: "/receptions", key: "navReceptions", moduleKeyAny: ["fournisseurs", "marches"] },
       { href: "/logistique", key: "navLogistics", moduleKey: "logistique" },
       { href: "/parc-auto", key: "navParcAuto", moduleKey: "parc-auto" },
     ],

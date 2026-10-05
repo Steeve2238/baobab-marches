@@ -10,6 +10,7 @@ const { assurerTiersPourClientSilencieux } = require("../services/comptaService"
 const comptaVentes = require("../services/comptaVentes");
 const comptaAnalytique = require("../services/comptaAnalytique");
 const { verifierAffectationValide } = require("../utils/affectationTache");
+const { enregistrerMouvement, stockProduit } = require("../services/stockService");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -211,14 +212,19 @@ function lienProduitLigne(brut) {
 // a l'identifiant envoye par le frontend).
 async function verifierProduitsLignes(queryable, tenantId, lignes) {
   const ids = [...new Set(lignes.map((l) => l.produit_id).filter(Boolean))];
-  if (ids.length === 0) return;
-  const r = await queryable.query(`SELECT id FROM produit WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [tenantId, ids]);
-  const valides = new Set(r.rows.map((x) => x.id));
+  if (ids.length === 0) {
+    for (const l of lignes) l.reference = null;
+    return;
+  }
+  const r = await queryable.query(`SELECT id, reference FROM produit WHERE tenant_id = $1 AND id = ANY($2::uuid[])`, [tenantId, ids]);
+  const references = new Map(r.rows.map((x) => [x.id, x.reference]));
   for (const l of lignes) {
-    if (l.produit_id && !valides.has(l.produit_id)) {
+    if (l.produit_id && !references.has(l.produit_id)) {
       l.produit_id = null;
       l.cout_revient_unitaire_ht = null;
     }
+    // Reference INTERNE de l'article (jamais celle du fournisseur), relue en base : le frontend ne la fournit pas.
+    l.reference = l.produit_id ? references.get(l.produit_id) || null : null;
   }
 }
 
@@ -332,7 +338,7 @@ function normaliserStatutImport(brut) {
 async function chargerLignesDevis(devisId) {
   const result = await db.query(
     `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix,
-            produit_id, cout_revient_unitaire_ht
+            produit_id, cout_revient_unitaire_ht, reference
      FROM devis_ligne WHERE devis_id = $1 ORDER BY ordre ASC`,
     [devisId]
   );
@@ -341,7 +347,7 @@ async function chargerLignesDevis(devisId) {
 
 async function chargerLignesFacture(factureId) {
   const result = await db.query(
-    `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix
+    `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix, reference, produit_id
      FROM facture_vente_ligne WHERE facture_vente_id = $1 ORDER BY ordre ASC`,
     [factureId]
   );
@@ -350,7 +356,7 @@ async function chargerLignesFacture(factureId) {
 
 async function chargerLignesBl(blId) {
   const result = await db.query(
-    `SELECT id, ordre, designation, unite, quantite_livree
+    `SELECT id, ordre, designation, unite, quantite_livree, reference, produit_id
      FROM bon_livraison_ligne WHERE bon_livraison_id = $1 ORDER BY ordre ASC`,
     [blId]
   );
@@ -1080,10 +1086,10 @@ router.post("/devis", async (req, res) => {
     for (const ligne of calcul.lignes) {
       await client.query(
         `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix,
-                                  produit_id, cout_revient_unitaire_ht)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                  produit_id, cout_revient_unitaire_ht, reference)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [uuidv4(), devis.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre, ligne.mention_prix,
-         ligne.produit_id, ligne.cout_revient_unitaire_ht]
+         ligne.produit_id, ligne.cout_revient_unitaire_ht, ligne.reference]
       );
     }
 
@@ -1191,10 +1197,10 @@ router.patch("/devis/:id", async (req, res) => {
         for (const ligne of calcul.lignes) {
           await client.query(
             `INSERT INTO devis_ligne (id, devis_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix,
-                                      produit_id, cout_revient_unitaire_ht)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                                      produit_id, cout_revient_unitaire_ht, reference)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
             [uuidv4(), id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre, ligne.mention_prix,
-             ligne.produit_id, ligne.cout_revient_unitaire_ht]
+             ligne.produit_id, ligne.cout_revient_unitaire_ht, ligne.reference]
           );
         }
       }
@@ -1695,9 +1701,9 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
     let ordre = 0;
     for (const ligne of lignesDevis) {
       await client.query(
-        `INSERT INTO facture_vente_ligne (id, facture_vente_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [uuidv4(), facture.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre === true, ligne.mention_prix || null]
+        `INSERT INTO facture_vente_ligne (id, facture_vente_id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix, reference, produit_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [uuidv4(), facture.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.prix_unitaire_ht, ligne.montant_ht, ligne.non_chiffre === true, ligne.mention_prix || null, ligne.reference || null, ligne.produit_id || null]
       );
     }
 
@@ -1871,9 +1877,9 @@ router.post("/factures/:id/generer-bl", async (req, res) => {
     let ordre = 0;
     for (const ligne of lignesFacture) {
       await client.query(
-        `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree)
-         VALUES ($1,$2,$3,$4,$5,$6)`,
-        [uuidv4(), bl.id, ordre++, ligne.designation, ligne.unite, ligne.quantite]
+        `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree, reference, produit_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [uuidv4(), bl.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.reference || null, ligne.produit_id || null]
       );
     }
 
@@ -1909,15 +1915,27 @@ router.patch("/bl/:id", async (req, res) => {
     }
 
     if (Array.isArray(lignes)) {
-      await client.query(`DELETE FROM bon_livraison_ligne WHERE bon_livraison_id = $1`, [id]);
-      let ordre = 0;
+      // Le lien article (reference interne + produit) des lignes existantes est conserve : retrouve par id de ligne,
+      // sinon par produit_id fourni, toujours reverifie en base (jamais fait confiance au frontend).
+      const anciennes = (
+        await client.query(`SELECT id, produit_id FROM bon_livraison_ligne WHERE bon_livraison_id = $1`, [id])
+      ).rows;
+      const produitParLigne = new Map(anciennes.map((l) => [l.id, l.produit_id]));
+      const aInserer = [];
       for (const ligne of lignes) {
         const quantite = Number(ligne.quantite_livree);
         if (!ligne.designation || !Number.isFinite(quantite) || quantite < 0) continue;
+        const produitId = (ligne.id && produitParLigne.get(ligne.id)) || (typeof ligne.produit_id === "string" ? ligne.produit_id : null);
+        aInserer.push({ designation: ligne.designation, unite: ligne.unite || "U", quantite, produit_id: produitId && UUID_LIGNE_RE.test(produitId) ? produitId : null });
+      }
+      await verifierProduitsLignes(client, req.user.tenantId, aInserer);
+      await client.query(`DELETE FROM bon_livraison_ligne WHERE bon_livraison_id = $1`, [id]);
+      let ordre = 0;
+      for (const l of aInserer) {
         await client.query(
-          `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree)
-           VALUES ($1,$2,$3,$4,$5,$6)`,
-          [uuidv4(), id, ordre++, ligne.designation, ligne.unite || "U", quantite]
+          `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree, reference, produit_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [uuidv4(), id, ordre++, l.designation, l.unite, l.quantite, l.reference, l.produit_id]
         );
       }
     }
@@ -1940,18 +1958,56 @@ router.patch("/bl/:id", async (req, res) => {
 
 router.patch("/bl/:id/marquer-livre", async (req, res) => {
   const { id } = req.params;
+  const client = await db.pool.connect();
   try {
-    const result = await db.query(
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE bon_livraison SET statut = 'LIVRE' WHERE id = $1 AND tenant_id = $2 AND statut = 'BROUILLON' RETURNING *`,
       [id, req.user.tenantId]
     );
     if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(409).json({ error: t(req, "VENTE_BL_UPDATE_ERROR") });
     }
-    res.json(result.rows[0]);
+    const bl = result.rows[0];
+
+    // Sortie de stock des articles du catalogue (lignes liees a un produit) : cout = dernier cout de revient.
+    // La livraison n'est jamais bloquee par un stock insuffisant (la marchandise est physiquement partie) : les
+    // articles dont le stock devient negatif sont signales dans la reponse.
+    const lignes = (
+      await client.query(
+        `SELECT l.produit_id, SUM(l.quantite_livree) AS quantite, p.cout_revient_unitaire_xof, p.reference, p.designation
+         FROM bon_livraison_ligne l JOIN produit p ON p.id = l.produit_id AND p.tenant_id = $2
+         WHERE l.bon_livraison_id = $1 AND l.produit_id IS NOT NULL AND l.quantite_livree > 0
+         GROUP BY l.produit_id, p.cout_revient_unitaire_xof, p.reference, p.designation`,
+        [id, req.user.tenantId]
+      )
+    ).rows;
+    const avertissementsStock = [];
+    for (const l of lignes) {
+      await enregistrerMouvement(client, {
+        tenantId: req.user.tenantId,
+        produitId: l.produit_id,
+        type: "SORTIE",
+        quantite: -Number(l.quantite),
+        coutUnitaire: Number(l.cout_revient_unitaire_xof),
+        date: bl.date_bl,
+        origineType: "BL",
+        origineId: id,
+        libelle: `BL ${bl.numero}`,
+        userId: req.user.sub,
+      });
+      const stock = await stockProduit(client, req.user.tenantId, l.produit_id);
+      if (stock < 0) avertissementsStock.push({ produit_id: l.produit_id, reference: l.reference, designation: l.designation, stock });
+    }
+    await client.query("COMMIT");
+    res.json({ ...bl, avertissements_stock: avertissementsStock });
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: t(req, "VENTE_BL_UPDATE_ERROR") });
+  } finally {
+    client.release();
   }
 });
 

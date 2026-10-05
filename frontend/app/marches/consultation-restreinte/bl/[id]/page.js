@@ -42,6 +42,7 @@ export default function BlDetailPage() {
   const [bl, setBl] = useState(null);
   const [entete, setEntete] = useState(null);
   const [erreur, setErreur] = useState("");
+  const [avertStock, setAvertStock] = useState([]);
   const [chargement, setChargement] = useState(true);
   const [action, setAction] = useState(false);
   const [lignesEdition, setLignesEdition] = useState([]);
@@ -87,7 +88,7 @@ export default function BlDetailPage() {
     setErreur("");
     try {
       const maj = await api.patchBl(bl.id, {
-        lignes: lignesEdition.map((l) => ({ designation: l.designation, unite: l.unite, quantite_livree: Number(l.quantite_livree) })),
+        lignes: lignesEdition.map((l) => ({ id: l.id, designation: l.designation, unite: l.unite, quantite_livree: Number(l.quantite_livree) })),
       });
       setBl(maj);
       setLignesEdition(maj.lignes.map((l) => ({ ...l })));
@@ -104,6 +105,7 @@ export default function BlDetailPage() {
     try {
       const maj = await api.marquerBlLivre(bl.id);
       setBl((prev) => ({ ...prev, ...maj }));
+      setAvertStock(maj.avertissements_stock || []);
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -134,6 +136,16 @@ export default function BlDetailPage() {
   return (
     <AppShell title={`BL-${numeroComplet}`} backHref="/marches/consultation-restreinte/bl">
       {erreur && <p className="no-print" style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+      {avertStock.length > 0 && (
+        <div className="no-print" style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>
+          <strong>{t("venteStockNegatifTitre")}</strong>
+          {avertStock.map((a) => (
+            <div key={a.produit_id}>
+              {a.reference ? `${a.reference} · ` : ""}{a.designation} : {Number(a.stock).toLocaleString()}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <span style={{ fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20, ...style }}>
@@ -193,6 +205,7 @@ export default function BlDetailPage() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ fontSize: 11, textAlign: "left", borderBottom: "1px solid var(--line)" }}>
+              {(bl.lignes || []).some((l) => l.reference) && <th style={{ padding: "6px 4px" }}>{t("venteReferenceLabel")}</th>}
               <th style={{ padding: "6px 4px" }}>{t("venteDesignationLabel")}</th>
               <th style={{ padding: "6px 4px" }}>{t("venteUniteLabel")}</th>
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteLivreeLabel")}</th>
@@ -201,6 +214,7 @@ export default function BlDetailPage() {
           <tbody>
             {(modifiable ? lignesEdition : bl.lignes).map((l, index) => (
               <tr key={l.id || index} style={{ borderBottom: "1px solid var(--line-soft)" }}>
+                {(bl.lignes || []).some((l) => l.reference) && <td className="mono" style={{ padding: "6px 4px", fontSize: 12 }}>{l.reference || ""}</td>}
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.designation}</td>
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.unite}</td>
                 <td style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
