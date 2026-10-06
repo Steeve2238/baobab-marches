@@ -4,6 +4,7 @@
  * clauses, notes...) n'est jamais traduit ici — uniquement l'interface.
  */
 import { COMPTA_FR, COMPTA_EN } from "./comptaDictionary";
+import { FIN_FR, FIN_EN } from "./financementDictionary";
 
 export const DICTIONARIES = {
   fr: {
@@ -3272,6 +3273,8 @@ export const DICTIONARIES = {
 // Textes du module Comptabilite (fichier separe pour ne pas alourdir ce dictionnaire)
 Object.assign(DICTIONARIES.fr, COMPTA_FR);
 Object.assign(DICTIONARIES.en, COMPTA_EN);
+Object.assign(DICTIONARIES.fr, FIN_FR);
+Object.assign(DICTIONARIES.en, FIN_EN);
 
 // Libellés des statuts de dossier (valeurs stockées en base, non traduites)
 export const STATUT_LABELS = {

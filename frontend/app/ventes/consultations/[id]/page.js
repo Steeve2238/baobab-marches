@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import FinancementDossierSection from "../../../../lib/components/financement/FinancementDossierSection";
 
 const STATUT_STYLE = {
   RECUE: { color: "var(--ocre)", background: "rgba(224,149,76,0.12)" },
@@ -368,6 +369,9 @@ export default function ConsultationDetailPage() {
           )}
         </div>
       </section>
+
+      {/* ---------------- FINANCEMENT ---------------- */}
+      <FinancementDossierSection type="consultation" id={id} />
 
       {/* ---------------- CHRONOGRAMME ---------------- */}
       <section style={{ marginBottom: 30 }}>

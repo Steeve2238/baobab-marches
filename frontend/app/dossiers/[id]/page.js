@@ -7,6 +7,7 @@ import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
 import CourrierSection from "../../../lib/components/CourrierSection";
+import FinancementDossierSection from "../../../lib/components/financement/FinancementDossierSection";
 import { DEVISES } from "../../../lib/constants/devises";
 
 const PHASES_CHRONOGRAMME = ["AVANT_SOUMISSION", "NON_ATTRIBUTION", "ATTRIBUTION_EXECUTION"];
@@ -17,7 +18,6 @@ const PHASES_CHRONOGRAMME = ["AVANT_SOUMISSION", "NON_ATTRIBUTION", "ATTRIBUTION
 // modification (409).
 const STATUTS_DOSSIER_MODIFIABLE = ["ANALYSE", "GO", "NO_GO", "SOUMIS"];
 
-const TYPE_BESOIN_CODES = ["CAUTION_SOUMISSION", "CAUTION_BONNE_EXECUTION", "AVANCE_DEMARRAGE", "LC"];
 const CONDITIONS_REGLEMENT = [
   "COMPTANT",
   "ACOMPTE_SOLDE",
@@ -48,7 +48,8 @@ export default function DossierDetailPage() {
   const [maitresOuvrage, setMaitresOuvrage] = useState([]);
   const [roles, setRoles] = useState([]);
   const [utilisateurs, setUtilisateurs] = useState([]);
-  const [simulations, setSimulations] = useState([]);
+  // Financement v2 : simulations rattachees a ce dossier + cout bancaire retenu.
+  const [financement, setFinancement] = useState({ simulations: [], cout_retenu_total_xof: 0 });
   const [calculsMarge, setCalculsMarge] = useState([]);
   // Lot 6 : marge estimee / reelle issue du Dossier de calcul + receptions (null si module non accessible).
   const [syntheseMarge, setSyntheseMarge] = useState(null);
@@ -61,13 +62,6 @@ export default function DossierDetailPage() {
   const [erreur, setErreur] = useState("");
   const [signalements, setSignalements] = useState({});
 
-  const [formSimulationOuvert, setFormSimulationOuvert] = useState(false);
-  const [formSimulation, setFormSimulation] = useState({
-    type_besoin: TYPE_BESOIN_CODES[0],
-    montant: "",
-    duree_estimee_jours: "",
-  });
-  const [simulationEnCours, setSimulationEnCours] = useState(false);
 
   // "Dossier de calcul" (prix de revient et marge, atelier autonome - voir
   // routes/calculPrix.js) : un dossier de calcul est rattache 0 ou 1 fois a
@@ -173,7 +167,7 @@ export default function DossierDetailPage() {
           api.getMaitresOuvrage(),
           api.getRoles(),
           api.getUtilisateurs(),
-          api.getSimulations(id),
+          api.finDossier("ao", id).catch(() => ({ simulations: [], cout_retenu_total_xof: 0 })),
           api.getCalculsMarge(id),
           api.getSuivisLogistiques(id),
           api.getIncoterms(),
@@ -185,7 +179,7 @@ export default function DossierDetailPage() {
         setMaitresOuvrage(maitresOuvrageData);
         setRoles(rolesData);
         setUtilisateurs(utilisateursData);
-        setSimulations(simulationsData);
+        setFinancement(simulationsData);
         setCalculsMarge(margeData);
         setSuivisLogistiques(suivisData);
         setIncoterms(incotermsData);
@@ -280,36 +274,6 @@ export default function DossierDetailPage() {
     }
   }
 
-  async function handleLancerSimulation(e) {
-    e.preventDefault();
-    setSimulationEnCours(true);
-    try {
-      const nouvelle = await api.createSimulation(id, {
-        type_besoin: formSimulation.type_besoin,
-        montant: Number(formSimulation.montant),
-        duree_estimee_jours: formSimulation.duree_estimee_jours
-          ? Number(formSimulation.duree_estimee_jours)
-          : null,
-      });
-      setSimulations((prev) => [nouvelle, ...prev]);
-      setFormSimulationOuvert(false);
-      setFormSimulation({ type_besoin: TYPE_BESOIN_CODES[0], montant: "", duree_estimee_jours: "" });
-    } catch (err) {
-      setErreur(err.message);
-    } finally {
-      setSimulationEnCours(false);
-    }
-  }
-
-  async function handleRetenirOption(simulationId, ligneCreditTarifId) {
-    try {
-      const maj = await api.patchSimulationRetenue(simulationId, ligneCreditTarifId);
-      setSimulations((prev) => prev.map((s) => (s.id === simulationId ? maj : s)));
-    } catch (err) {
-      setErreur(err.message);
-    }
-  }
-
   async function handleCalculerMarge(e) {
     e.preventDefault();
     setMargeEnCours(true);
@@ -375,17 +339,12 @@ export default function DossierDetailPage() {
    * `simulations`, propre au module Financement du dossier AO.
    */
   function deduireValeursConnues() {
-    const simulationAvecOptionRetenue = simulations.find((s) => s.option_retenue_id);
-    if (!simulationAvecOptionRetenue) return {};
-
-    const optionRetenue = (simulationAvecOptionRetenue.resultat_json || []).find(
-      (o) => o.ligne_credit_tarif_id === simulationAvecOptionRetenue.option_retenue_id
-    );
-
+    const retenue = (financement.simulations || []).find((s) => s.statut !== "SIMULEE");
+    if (!retenue) return {};
     return {
-      montant_demande: simulationAvecOptionRetenue.montant ?? "",
-      duree_jours: simulationAvecOptionRetenue.duree_estimee_jours ?? "",
-      type_facilite: optionRetenue ? typeFaciliteLabel(optionRetenue.type_facilite) : "",
+      montant_demande: retenue.montant ?? "",
+      duree_jours: retenue.duree_jours ?? "",
+      type_facilite: t(`finType_${retenue.type_facilite}`),
     };
   }
 
@@ -1042,137 +1001,7 @@ export default function DossierDetailPage() {
       </section>
 
       {/* ---------------- FINANCEMENT ---------------- */}
-      <section style={{ marginBottom: 30 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("financingSection")}</h2>
-          <button
-            onClick={() => setFormSimulationOuvert((v) => !v)}
-            style={boutonPrincipalStyle}
-          >
-            {formSimulationOuvert ? t("cancel") : t("newSimulation")}
-          </button>
-        </div>
-
-        {formSimulationOuvert && (
-          <form onSubmit={handleLancerSimulation} className="card" style={{ marginBottom: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 12 }}>
-              <div>
-                <label style={labelStyle}>{t("typeBesoinLabel")}</label>
-                <select
-                  value={formSimulation.type_besoin}
-                  onChange={(e) => setFormSimulation((f) => ({ ...f, type_besoin: e.target.value }))}
-                  style={inputStyle}
-                >
-                  {TYPE_BESOIN_CODES.map((code) => (
-                    <option key={code} value={code}>
-                      {typeBesoinLabel(code)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>{t("montantLabel")}</label>
-                <input
-                  type="number"
-                  required
-                  value={formSimulation.montant}
-                  onChange={(e) => setFormSimulation((f) => ({ ...f, montant: e.target.value }))}
-                  style={inputStyle}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>{t("dureeLabel")}</label>
-                <input
-                  type="number"
-                  value={formSimulation.duree_estimee_jours}
-                  onChange={(e) =>
-                    setFormSimulation((f) => ({ ...f, duree_estimee_jours: e.target.value }))
-                  }
-                  style={inputStyle}
-                />
-              </div>
-            </div>
-            <button type="submit" disabled={simulationEnCours} style={{ ...boutonPrincipalStyle, marginTop: 14 }}>
-              {t("launchSimulation")}
-            </button>
-          </form>
-        )}
-
-        <h3 style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 8, fontWeight: 600 }}>
-          {t("simulationHistory")}
-        </h3>
-        {simulations.length === 0 ? (
-          <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("noSimulations")}</p>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {simulations.map((sim) => (
-              <div key={sim.id} className="card">
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13.3 }}>
-                    {typeBesoinLabel(sim.type_besoin)}
-                  </div>
-                  <div className="mono" style={{ fontSize: 12.5, color: "var(--sub)" }}>
-                    {Number(sim.montant).toLocaleString(dict.dateLocale)} XOF
-                    {sim.duree_estimee_jours ? ` · ${sim.duree_estimee_jours}j` : ""}
-                  </div>
-                </div>
-                <div style={{ display: "grid", gap: 6 }}>
-                  {(sim.resultat_json || []).map((option, idx) => {
-                    const estRetenue = sim.option_retenue_id === option.ligne_credit_tarif_id;
-                    const estRecommandee = sim.option_recommandee_id === option.ligne_credit_tarif_id;
-                    return (
-                      <div
-                        key={option.ligne_credit_tarif_id || idx}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          padding: "8px 10px",
-                          borderRadius: 8,
-                          background: estRetenue ? "var(--vert-bg)" : "var(--line-soft)",
-                          fontSize: 12.5,
-                        }}
-                      >
-                        <div>
-                          <span style={{ fontWeight: 600 }}>{option.partenaire_nom}</span>
-                          {estRecommandee && (
-                            <span className="chip ok" style={{ marginLeft: 8 }}>
-                              {t("recommendedOption")}
-                            </span>
-                          )}
-                          {estRetenue && (
-                            <span className="chip warn" style={{ marginLeft: 8 }}>
-                              {t("retainedOption")}
-                            </span>
-                          )}
-                          <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 2 }}>
-                            {option.erreur ? option.erreur : option.formule_utilisee}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span className="mono">
-                            {option.cout_total != null
-                              ? `${Number(option.cout_total).toLocaleString(dict.dateLocale)} XOF`
-                              : t("invalidOption")}
-                          </span>
-                          {option.cout_total != null && !estRetenue && (
-                            <button
-                              onClick={() => handleRetenirOption(sim.id, option.ligne_credit_tarif_id)}
-                              style={boutonSecondaireStyle}
-                            >
-                              {t("retainOption")}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+      <FinancementDossierSection type="ao" id={id} onLoaded={setFinancement} />
 
       {/* ---------------- FOURNISSEURS ---------------- */}
       {offres.length > 0 && (
@@ -1588,6 +1417,15 @@ function MargeDossier({ t, syn }) {
             </div>
           )}
         </div>
+        {syn.frais_bancaires && (
+          <div>
+            <div style={miniLabelStyle}>{t("finMargeFrais")}</div>
+            <div className="mono" style={{ fontSize: 17, fontWeight: 700 }}>{nb(syn.frais_bancaires.utilises_xof)} XOF</div>
+            <div style={{ fontSize: 11.5, color: "var(--sub)" }}>
+              {syn.frais_bancaires.source === "FINANCEMENT" ? t("finMargeSourceFinancement") : t("finMargeSourceCalcul")}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

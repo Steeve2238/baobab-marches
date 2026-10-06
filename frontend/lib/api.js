@@ -238,38 +238,32 @@ export const api = {
   setLangue: (langue_preferee) =>
     request("/auth/langue", { method: "PATCH", body: JSON.stringify({ langue_preferee }) }),
 
-  // Module 2 - Financement
-  getPartenaires: () => request("/financement/partenaires"),
-  createPartenaire: (data) =>
-    request("/financement/partenaires", { method: "POST", body: JSON.stringify(data) }),
-  getGrilles: (partenaireId) => request(`/financement/partenaires/${partenaireId}/grilles`),
-  createGrille: (partenaireId, data) =>
-    request(`/financement/partenaires/${partenaireId}/grilles`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  patchGrilleStatut: (grilleId, statut) =>
-    request(`/financement/grilles/${grilleId}/statut`, {
-      method: "PATCH",
-      body: JSON.stringify({ statut }),
-    }),
-  getLignes: (grilleId) => request(`/financement/grilles/${grilleId}/lignes`),
-  createLigne: (grilleId, data) =>
-    request(`/financement/grilles/${grilleId}/lignes`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  getSimulations: (dossierId) => request(`/financement/dossiers/${dossierId}/simulations`),
-  createSimulation: (dossierId, data) =>
-    request(`/financement/dossiers/${dossierId}/simulations`, {
-      method: "POST",
-      body: JSON.stringify(data),
-    }),
-  patchSimulationRetenue: (simulationId, option_retenue_id) =>
-    request(`/financement/simulations/${simulationId}/retenue`, {
-      method: "PATCH",
-      body: JSON.stringify({ option_retenue_id }),
-    }),
+  // Module 2 - Financement (v2, 06/10/2026)
+  finCatalogue: () => request("/financement/catalogue"),
+  finBanques: () => request("/financement/banques"),
+  finBanque: (id) => request(`/financement/banques/${id}`),
+  finCreerBanque: (data) => request("/financement/banques", { method: "POST", body: JSON.stringify(data) }),
+  finMajBanque: (id, data) => request(`/financement/banques/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  finSupprimerBanque: (id) => request(`/financement/banques/${id}`, { method: "DELETE" }),
+  finConditions: (params = {}) => request(`/financement/conditions?${new URLSearchParams(params).toString()}`),
+  finCondition: (id) => request(`/financement/conditions/${id}`),
+  finCreerCondition: (data) => request("/financement/conditions", { method: "POST", body: JSON.stringify(data) }),
+  finMajCondition: (id, data) => request(`/financement/conditions/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  finDupliquerCondition: (id) => request(`/financement/conditions/${id}/dupliquer`, { method: "POST" }),
+  finSupprimerCondition: (id) => request(`/financement/conditions/${id}`, { method: "DELETE" }),
+  finCalculer: (data) => request("/financement/simulations/calculer", { method: "POST", body: JSON.stringify(data) }),
+  finEnregistrerSimulation: (data) => request("/financement/simulations", { method: "POST", body: JSON.stringify(data) }),
+  finSimulations: (params = {}) => request(`/financement/simulations?${new URLSearchParams(params).toString()}`),
+  finSimulation: (id) => request(`/financement/simulations/${id}`),
+  finSupprimerSimulation: (id) => request(`/financement/simulations/${id}`, { method: "DELETE" }),
+  finRetenir: (id, data) => request(`/financement/simulations/${id}/retenir`, { method: "POST", body: JSON.stringify(data) }),
+  finAnnulerChoix: (id) => request(`/financement/simulations/${id}/annuler-choix`, { method: "POST" }),
+  finLier: (id, data) => request(`/financement/simulations/${id}/lier`, { method: "POST", body: JSON.stringify(data) }),
+  finControler: (id, data) => request(`/financement/simulations/${id}/controles`, { method: "POST", body: JSON.stringify(data) }),
+  finControleDirect: (data) => request("/financement/controle-direct", { method: "POST", body: JSON.stringify(data) }),
+  finSupprimerControle: (id) => request(`/financement/controles/${id}`, { method: "DELETE" }),
+  finSynthese: () => request("/financement/synthese"),
+  finDossier: (type, id) => request(`/financement/dossiers/${type}/${id}`),
 
   // Module 4 - Marge
   getCalculsMarge: (dossierId) => request(`/marge/dossiers/${dossierId}`),

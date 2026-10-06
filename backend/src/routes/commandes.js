@@ -319,11 +319,27 @@ async function syntheseDossier(tenantId, colonne, cle) {
   const achatReel = arr2(Number(reel.achat_xof));
   const approcheReelle = arr2(Number(reel.approche_xof));
   const revientReel = arr2(achatReel + approcheReelle);
+  // Frais bancaires RETENUS dans le module Financement (banque choisie apres simulation) :
+  // quand ils existent, ce sont eux - et non l'estimation du Dossier de calcul - qui
+  // alimentent la marge reelle.
+  const colFin = colonne === "dossier_ao_id" ? "dossier_ao_id" : "consultation_id";
+  const fin = (
+    await db.query(
+      `SELECT s.id, s.libelle, s.type_facilite, s.montant, s.statut, s.cout_retenu_xof, p.nom AS banque
+       FROM financement_simulation s
+       LEFT JOIN financement_condition c ON c.id = s.condition_retenue_id
+       LEFT JOIN partenaire_financier p ON p.id = c.partenaire_id
+       WHERE s.tenant_id = $1 AND s.${colFin} = $2 AND s.statut IN ('RETENUE','CONTROLEE') ORDER BY s.date_retenue ASC`,
+      [tenantId, cle]
+    )
+  ).rows;
+  const fraisFinancementRetenus = arr2(fin.reduce((s, x) => s + Number(x.cout_retenu_xof || 0), 0));
+  const fraisBancairesUtilises = fin.length > 0 ? fraisFinancementRetenus : arr2(estimeFraisBancaires);
   const comparable = enrichies.length > 0 && nonCommandees === 0 && enrichies.every((c) => c.statut_reception === "COMPLETE");
   const estimeRevientArr = arr2(estimeRevient);
   const margeEstimeePct = estimeRevient > 0 ? (estimeMarge / estimeRevient) * 100 : null;
   // Marge reelle = prix de vente HT du Dossier de calcul - cout de revient reel - frais bancaires estimes.
-  const margeReelleXof = comparable ? arr2(estimeVente - revientReel - estimeFraisBancaires) : null;
+  const margeReelleXof = comparable ? arr2(estimeVente - revientReel - fraisBancairesUtilises) : null;
   const margeReellePct = comparable && revientReel > 0 ? (margeReelleXof / revientReel) * 100 : null;
   return {
     estime: { nb_offres: offres.length, achat_xof: arr2(estimeAchat), cout_revient_xof: estimeRevientArr, vente_ht_xof: arr2(estimeVente) },
@@ -332,11 +348,19 @@ async function syntheseDossier(tenantId, colonne, cle) {
     commandes: enrichies,
     offres_non_commandees: nonCommandees,
     comparable,
+    frais_bancaires: {
+      estimes_xof: arr2(estimeFraisBancaires),
+      retenus_xof: fraisFinancementRetenus,
+      utilises_xof: fraisBancairesUtilises,
+      source: fin.length > 0 ? "FINANCEMENT" : "DOSSIER_CALCUL",
+      financements: fin,
+    },
     ecart_cout_revient_xof: comparable && estimeRevientArr > 0 ? arr2(revientReel - estimeRevientArr) : null,
     ecart_cout_revient_pct: comparable && estimeRevientArr > 0 ? Math.round(((revientReel - estimeRevientArr) / estimeRevientArr) * 1000) / 10 : null,
     ecart_achat_engage_reel_xof: comparable ? arr2(achatReel - engage) : null,
     marge: {
       estimee_xof: arr2(estimeMarge),
+      estimee_avec_financement_xof: fin.length > 0 ? arr2(estimeMarge + estimeFraisBancaires - fraisFinancementRetenus) : null,
       estimee_pct: margeEstimeePct === null ? null : Math.round(margeEstimeePct * 100) / 100,
       reelle_xof: margeReelleXof,
       reelle_pct: margeReellePct === null ? null : Math.round(margeReellePct * 100) / 100,
