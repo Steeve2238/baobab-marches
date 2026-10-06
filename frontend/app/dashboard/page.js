@@ -72,7 +72,7 @@ export default function DashboardPage() {
           api.getDossiers(),
           api.getSignaux(),
           autorise("fournisseurs") ? api.getFournisseurs() : Promise.resolve([]),
-          autorise("financement") ? api.getPartenaires() : Promise.resolve([]),
+          autorise("financement") ? api.finBanques() : Promise.resolve([]),
           autorise("logistique") ? api.getIncoterms() : Promise.resolve([]),
           autorise("logistique") ? api.getTransitaires() : Promise.resolve([]),
           autorise("courriers") ? api.getModelesCourrier() : Promise.resolve([]),
@@ -155,8 +155,8 @@ export default function DashboardPage() {
   const scoreFiabiliteMoyen = scoresFiabilite.length
     ? Math.round(scoresFiabilite.reduce((a, b) => a + b, 0) / scoresFiabilite.length)
     : null;
-  const nbBanques = partenaires.filter((p) => p.type === "BANQUE").length;
-  const nbAssurances = partenaires.filter((p) => p.type === "ASSURANCE").length;
+  const nbBanques = partenaires.filter((p) => p.type_partenaire === "BANQUE").length;
+  const nbAssurances = partenaires.filter((p) => p.type_partenaire === "ASSURANCE").length;
   const utilisateursActifs = utilisateurs.filter((u) => u.actif).length;
 
   // moduleKey : null = jamais filtre (routes utilisateurs/roles non
