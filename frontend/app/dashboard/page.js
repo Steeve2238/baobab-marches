@@ -151,7 +151,7 @@ export default function DashboardPage() {
     setFiltreGroupe((prev) => (prev === groupe ? null : groupe));
   }
 
-  const scoresFiabilite = fournisseurs.map((f) => f.score_fiabilite).filter((s) => s != null);
+  const scoresFiabilite = fournisseurs.map((f) => (f.score_fiabilite == null ? null : Number(f.score_fiabilite))).filter((s) => s != null && Number.isFinite(s));
   const scoreFiabiliteMoyen = scoresFiabilite.length
     ? Math.round(scoresFiabilite.reduce((a, b) => a + b, 0) / scoresFiabilite.length)
     : null;

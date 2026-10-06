@@ -146,7 +146,7 @@ export default function ReceptionCompta({ reception, onChange }) {
               <span style={{ fontSize: 12, color: "var(--sub)" }}>{t("rcpComptaFraisApproche")}</span>
               <span style={{ flex: 1 }} />
               <span className="mono" style={{ fontSize: 13 }}>
-                {fmt(g.total_a_facturer)} {t("rcpComptaHt")}
+                {fmt(g.couts.reduce((somme, c) => somme + c.montant, 0))} {t("rcpComptaHt")}
               </span>
             </div>
             <table style={{ width: "100%", fontSize: 12, marginTop: 8, borderCollapse: "collapse" }}>

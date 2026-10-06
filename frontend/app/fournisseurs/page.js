@@ -74,7 +74,7 @@ export default function FournisseursPage() {
                   {t("reliabilityScoreLabel")}
                 </div>
                 <div className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
-                  {f.score_fiabilite != null ? `${f.score_fiabilite}%` : "—"}
+                  {f.score_fiabilite != null ? `${Math.round(Number(f.score_fiabilite))}%` : "—"}
                 </div>
               </div>
             </div>

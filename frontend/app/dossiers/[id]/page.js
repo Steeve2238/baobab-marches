@@ -1231,7 +1231,7 @@ export default function DossierDetailPage() {
                 <div>
                   <div style={miniLabelStyle}>{t("reliabilityScoreLabel")}</div>
                   <div className="mono" style={{ fontSize: 12.5 }}>
-                    {o.score_fiabilite != null ? `${o.score_fiabilite}%` : "—"}
+                    {o.score_fiabilite != null ? `${Math.round(Number(o.score_fiabilite))}%` : "—"}
                   </div>
                 </div>
                 <div>
