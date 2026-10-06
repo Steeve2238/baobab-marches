@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, requireModuleAny, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { rendreTemplate, construireContexte, construireContexteConsultation } = require("../services/courrierEngine");
+const courrierFinancement = require("../services/courrierFinancement");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -148,6 +149,13 @@ router.post("/generer", accesGenerationCourrier, async (req, res) => {
     }
     const modele = modeleResult.rows[0];
 
+    // Financement du dossier (simulation, compte d'exploitation, plan de
+    // tresorerie) : variables reprises automatiquement ; ce que l'utilisateur
+    // a saisi a la main garde la priorite.
+    const auto = await courrierFinancement.contexte(req.user.tenantId, dossier_type === "AO" ? "ao" : "consultation", dossier_id);
+    for (const [cle, valeur] of Object.entries(auto)) {
+      if (contexte[cle] === undefined || contexte[cle] === "" || contexte[cle] === null) contexte[cle] = valeur;
+    }
     const titreRendu = rendreTemplate(modele.titre, contexte);
     const corpsRendu = rendreTemplate(modele.corps_template, contexte);
     const variablesManquantes = [...new Set([...titreRendu.variablesManquantes, ...corpsRendu.variablesManquantes])];

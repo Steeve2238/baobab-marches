@@ -177,6 +177,22 @@ export default function FinancementSimulationFichePage() {
               {t("finFicheOuvrirDossier")}
             </Link>
           )}
+          {(sim.dossier_ao_id || sim.consultation_id) && (
+            <Link
+              href={`/financement/compte/${sim.dossier_ao_id ? "ao" : "consultation"}/${sim.dossier_ao_id || sim.consultation_id}?simulation_id=${sim.id}${sim.condition_retenue_id ? `&condition_id=${sim.condition_retenue_id}` : ""}`}
+              style={{ color: "var(--petrol)", fontWeight: 600, fontSize: 12.5 }}
+            >
+              {t("cexLienDepuisSim")}
+            </Link>
+          )}
+          {(sim.dossier_ao_id || sim.consultation_id) && (
+            <Link
+              href={`/financement/plan/${sim.dossier_ao_id ? "ao" : "consultation"}/${sim.dossier_ao_id || sim.consultation_id}`}
+              style={{ color: "var(--petrol)", fontWeight: 600, fontSize: 12.5 }}
+            >
+              {t("planLienDepuisSim")}
+            </Link>
+          )}
         </div>
       </div>
 

@@ -7,6 +7,7 @@ const { requireAuth, requireRoleOuValidateurUniversel, requireModule, blockLectu
 const { t } = require("../utils/i18n");
 const { genererChronogrammeConsultation } = require("../services/chronogrammeConsultationEngine");
 const { assurerTiersPourClientSilencieux } = require("../services/comptaService");
+const echeancierSvc = require("../services/echeancier");
 const comptaVentes = require("../services/comptaVentes");
 const comptaAnalytique = require("../services/comptaAnalytique");
 const { verifierAffectationValide } = require("../utils/affectationTache");
@@ -386,11 +387,14 @@ router.post("/clients", async (req, res) => {
   if (!nom || !nom.trim()) {
     return res.status(400).json({ error: t(req, "VENTE_CLIENT_FIELDS_REQUIRED") });
   }
+  // Conditions de paiement accordees au client : obligatoires a la creation.
+  const ech = echeancierSvc.normaliser(req.body.echeancier);
+  if (ech.erreur) return res.status(400).json({ error: t(req, ech.erreur) });
   try {
     const result = await db.query(
-      `INSERT INTO client_commercial (id, tenant_id, nom, adresse, telephone, email)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [uuidv4(), req.user.tenantId, nom.trim(), adresse || null, telephone || null, email || null]
+      `INSERT INTO client_commercial (id, tenant_id, nom, adresse, telephone, email, echeancier_json)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [uuidv4(), req.user.tenantId, nom.trim(), adresse || null, telephone || null, email || null, JSON.stringify(ech.lignes)]
     );
     // Compte tiers comptable (CAxxx) : cree automatiquement, sans jamais faire echouer la creation du client.
     await assurerTiersPourClientSilencieux(req.user.tenantId, result.rows[0]);
@@ -404,13 +408,19 @@ router.post("/clients", async (req, res) => {
 router.patch("/clients/:id", async (req, res) => {
   const { id } = req.params;
   const { nom, adresse, telephone, email, actif } = req.body;
+  let echJson = null;
+  if (req.body.echeancier !== undefined) {
+    const ech = echeancierSvc.normaliser(req.body.echeancier);
+    if (ech.erreur) return res.status(400).json({ error: t(req, ech.erreur) });
+    echJson = JSON.stringify(ech.lignes);
+  }
   try {
     const result = await db.query(
       `UPDATE client_commercial
        SET nom = COALESCE($1, nom), adresse = $2, telephone = $3, email = $4,
-           actif = COALESCE($5, actif)
+           actif = COALESCE($5, actif), echeancier_json = COALESCE($8::jsonb, echeancier_json)
        WHERE id = $6 AND tenant_id = $7 RETURNING *`,
-      [nom || null, adresse || null, telephone || null, email || null, actif != null ? actif : null, id, req.user.tenantId]
+      [nom || null, adresse || null, telephone || null, email || null, actif != null ? actif : null, id, req.user.tenantId, echJson]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "VENTE_CLIENT_NOT_FOUND") });
@@ -1011,6 +1021,17 @@ router.get("/devis/:id", async (req, res) => {
   }
 });
 
+// Echeancier de paiement d'un document de vente : celui fourni (valide), sinon
+// celui de la fiche client. Retourne { lignes|null } ou { erreur }.
+async function echeancierPourDocument(queryable, tenantId, clientId, fourni) {
+  if (fourni !== undefined && fourni !== null && fourni !== "") {
+    const n = echeancierSvc.normaliser(fourni);
+    return n.erreur ? { erreur: n.erreur } : { lignes: n.lignes };
+  }
+  const r = await queryable.query(`SELECT echeancier_json FROM client_commercial WHERE id = $1 AND tenant_id = $2`, [clientId, tenantId]);
+  return { lignes: echeancierSvc.lire(r.rows[0] && r.rows[0].echeancier_json) };
+}
+
 router.post("/devis", async (req, res) => {
   const { client_commercial_id, consultation_id, objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes, pourcentage_remise } = req.body;
   // Numero manuel (chantier du 01/10/2026, demande ecrite du client) : reserve
@@ -1079,7 +1100,21 @@ router.post("/devis", async (req, res) => {
         calcul.nb_lignes_non_chiffrees,
       ]
     );
-    const devis = devisResult.rows[0];
+    let devis = devisResult.rows[0];
+
+    // Conditions de paiement structurees : fournies, sinon reprises de la fiche client.
+    const ech = await echeancierPourDocument(client, req.user.tenantId, client_commercial_id, req.body.echeancier);
+    if (ech.erreur) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, ech.erreur) });
+    }
+    if (ech.lignes) {
+      const maj = await client.query(
+        `UPDATE devis SET echeancier_json = $1, conditions_paiement = COALESCE($2, conditions_paiement) WHERE id = $3 RETURNING *`,
+        [JSON.stringify(ech.lignes), req.body.echeancier !== undefined ? echeancierSvc.texte(ech.lignes) : conditions_paiement ? null : echeancierSvc.texte(ech.lignes), devis.id]
+      );
+      devis = maj.rows[0];
+    }
 
     await verifierProduitsLignes(client, req.user.tenantId, calcul.lignes);
     let ordre = 0;
@@ -1225,6 +1260,16 @@ router.patch("/devis/:id", async (req, res) => {
         repasseEnBrouillon, id, req.user.tenantId, totaux.nb_lignes_non_chiffrees || 0,
       ]
     );
+    if (req.body.echeancier !== undefined) {
+      const ech = echeancierSvc.normaliser(req.body.echeancier);
+      if (ech.erreur) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: t(req, ech.erreur) });
+      }
+      await client.query(`UPDATE devis SET echeancier_json = $1, conditions_paiement = $2 WHERE id = $3 AND tenant_id = $4`, [
+        JSON.stringify(ech.lignes), echeancierSvc.texte(ech.lignes), id, req.user.tenantId,
+      ]);
+    }
     // Relit avec la jointure client (comme GET /devis/:id) plutot que de
     // renvoyer le simple RETURNING * de l'UPDATE : le meme bug existait deja
     // avant le chantier du 02/10/2026 (RETURNING * ne contient jamais les
@@ -1697,6 +1742,11 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
       ]
     );
     const facture = factureResult.rows[0];
+    // La facture reprend l'echeancier du devis (conditions de paiement du client pour ce dossier).
+    await client.query(
+      `UPDATE facture_vente SET echeancier_json = (SELECT echeancier_json FROM devis WHERE id = $1) WHERE id = $2`,
+      [id, facture.id]
+    );
 
     let ordre = 0;
     for (const ligne of lignesDevis) {

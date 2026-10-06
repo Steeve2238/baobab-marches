@@ -28,9 +28,17 @@ export default function FinancementDossierSection({ type, id, onLoaded }) {
     <section style={{ marginBottom: 30 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 10, flexWrap: "wrap" }}>
         <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("finDossierTitre")}</h2>
-        <a href={`/financement?${param}=${id}`} style={{ ...boutonPrincipalStyle, ...lienStyle }}>
-          {t("finDossierSimuler")}
-        </a>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <a href={`/financement/compte/${type}/${id}`} style={{ ...boutonSecondaireStyle, ...lienStyle }}>
+            {t("cexLienOuvrir")}
+          </a>
+          <a href={`/financement/plan/${type}/${id}`} style={{ ...boutonSecondaireStyle, ...lienStyle }}>
+            {t("planLienOuvrir")}
+          </a>
+          <a href={`/financement?${param}=${id}`} style={{ ...boutonPrincipalStyle, ...lienStyle }}>
+            {t("finDossierSimuler")}
+          </a>
+        </div>
       </div>
       <p style={{ fontSize: 12, color: "var(--sub)", marginBottom: 10 }}>{t("finDossierIntro")}</p>
       {fin.simulations.length === 0 ? (

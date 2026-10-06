@@ -91,6 +91,16 @@ export default function CourriersPage() {
               "Monsieur le Directeur,\n\nConcernant le marché {{dossier.reference}} - {{dossier.intitule}}...\n\nCordialement."
             }
           />
+          <details style={{ marginTop: 8, fontSize: 12, color: "var(--sub)" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600 }}>{t("cexVariablesTitre")}</summary>
+            <p style={{ margin: "6px 0", lineHeight: 1.5 }}>{t("cexVariablesAide")}</p>
+            <ul style={{ margin: "0 0 0 18px", lineHeight: 1.7, fontFamily: "monospace", fontSize: 11.5 }}>
+              <li>{t("cexVariablesFinancement")}</li>
+              <li>{t("cexVariablesCompte")}</li>
+              <li>{t("cexVariablesPlan")}</li>
+              <li>{t("cexVariablesAnnexes")}</li>
+            </ul>
+          </details>
 
           <label style={{ ...labelStyle, marginTop: 10 }}>{t("letterTriggerLabel")}</label>
           <input

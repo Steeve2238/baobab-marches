@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import AppShell from "../../lib/components/AppShell";
+import { EcheancierModeleSelect } from "../../lib/components/EcheancierEditor";
+import { echeancierValide, pourApi } from "../../lib/echeancier";
 import { useIncoterms, codesAvec } from "../../lib/incoterms";
 import ReceptionCompta from "./ReceptionCompta";
 import { TYPES_COUT, REPARTITIONS, repartirCouts, typesDejaInclus } from "../../lib/receptionCouts";
@@ -55,6 +57,7 @@ export default function ReceptionEditeur({ id }) {
   const [lignes, setLignes] = useState([{ ...LIGNE_VIDE }]);
   const [couts, setCouts] = useState([]);
   const [nouveauFournisseur, setNouveauFournisseur] = useState(null);
+  const [nouvelEcheancier, setNouvelEcheancier] = useState([]);
   // Commande fournisseur : obligatoire pour toute reception (Lot 5).
   const [commandeId, setCommandeId] = useState("");
   const [commandes, setCommandes] = useState([]);
@@ -431,10 +434,11 @@ export default function ReceptionEditeur({ id }) {
   async function creerFournisseur(e) {
     e.preventDefault();
     try {
-      const f = await api.createFournisseurReception({ nom: nouveauFournisseur });
+      const f = await api.createFournisseurReception({ nom: nouveauFournisseur, echeancier: pourApi(nouvelEcheancier) });
       setFournisseurs((prev) => [...prev, f].sort((a, b) => a.nom.localeCompare(b.nom)));
       setForm((x) => ({ ...x, fournisseur_id: f.id }));
       setNouveauFournisseur(null);
+      setNouvelEcheancier([]);
     } catch (err) {
       setErreur(err.message);
     }
@@ -518,7 +522,8 @@ export default function ReceptionEditeur({ id }) {
             {nouveauFournisseur !== null && (
               <form onSubmit={creerFournisseur} style={{ display: "flex", gap: 6, marginTop: 6 }}>
                 <input autoFocus required value={nouveauFournisseur} onChange={(e) => setNouveauFournisseur(e.target.value)} placeholder={t("receptionsNomFournisseur")} style={inputStyle} />
-                <button type="submit" style={boutonSecondaireStyle}>OK</button>
+                <EcheancierModeleSelect sens="FOURNISSEUR" valeur={nouvelEcheancier} onChange={setNouvelEcheancier} style={{ maxWidth: 220 }} />
+                <button type="submit" disabled={!echeancierValide(nouvelEcheancier)} style={boutonSecondaireStyle}>OK</button>
               </form>
             )}
           </div>

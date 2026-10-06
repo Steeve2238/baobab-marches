@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api, estAdmin } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
+import EcheancierEditor from "../../../../../lib/components/EcheancierEditor";
+import { echeancierValide, pourApi } from "../../../../../lib/echeancier";
 import LigneProduitOutils from "../../../../../lib/components/LigneProduitOutils";
 import { MENTIONS_PRIX_SUGGEREES, analyserSaisiePrix, montantLigneSaisie, totauxPrevisualises } from "../../../../../lib/prixLigne";
 
@@ -38,11 +40,18 @@ function NouveauDevisFormulaire() {
     numero: "",
   });
   const [lignes, setLignes] = useState([{ ...LIGNE_VIDE }]);
+  const [echeancier, setEcheancier] = useState([]);
 
   useEffect(() => {
     api.getClientsCommerciaux().then((data) => setClients(data.filter((c) => c.actif))).catch(() => {});
     api.getParametresVentes().then((p) => setTauxTva(Number(p.taux_tva_pourcentage))).catch(() => {});
   }, []);
+
+  // Conditions de paiement : reprises de la fiche du client choisi, modifiables pour ce devis.
+  useEffect(() => {
+    const c = clients.find((x) => x.id === form.client_commercial_id);
+    setEcheancier(c && Array.isArray(c.echeancier_json) ? c.echeancier_json.map((l) => ({ ...l })) : []);
+  }, [form.client_commercial_id, clients]);
 
   function majLigne(index, champ, valeur) {
     setLignes((prev) => prev.map((l, i) => (i === index ? { ...l, [champ]: valeur } : l)));
@@ -70,10 +79,16 @@ function NouveauDevisFormulaire() {
   async function handleSubmit(e) {
     e.preventDefault();
     setErreur("");
+    if (!echeancierValide(echeancier)) {
+      setErreur(t("echObligatoire"));
+      return;
+    }
     setEnregistrement(true);
     try {
       const nouveau = await api.createDevis({
         ...form,
+        conditions_paiement: undefined,
+        echeancier: pourApi(echeancier),
         consultation_id: form.consultation_id || null,
         pourcentage_remise: form.pourcentage_remise || 0,
         numero: form.numero.trim() || undefined,
@@ -121,16 +136,7 @@ function NouveauDevisFormulaire() {
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginTop: 12 }}>
-          <div>
-            <label style={labelStyle}>{t("venteConditionsPaiementLabel")}</label>
-            <input
-              value={form.conditions_paiement}
-              onChange={(e) => setForm((f) => ({ ...f, conditions_paiement: e.target.value }))}
-              style={inputStyle}
-              placeholder={t("venteConditionsPaiementPlaceholder")}
-            />
-          </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
           <div>
             <label style={labelStyle}>{t("venteDelaiLivraisonLabel")}</label>
             <input
@@ -163,6 +169,10 @@ function NouveauDevisFormulaire() {
             <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4, marginBottom: 0 }}>{t("venteNumeroPersonnaliseAide")}</p>
           </div>
         )}
+
+        <div style={{ marginTop: 14 }}>
+          <EcheancierEditor sens="CLIENT" valeur={echeancier} onChange={setEcheancier} aide={t("echRepris")} />
+        </div>
 
         <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginTop: 22, marginBottom: 10 }}>{t("venteLignesSection")}</h3>
 

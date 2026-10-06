@@ -3,6 +3,7 @@ const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
 const { requireAuth, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
+const echeancierSvc = require("../services/echeancier");
 const { chargerParametres } = require("../services/produitsCatalogue");
 const { calculerOffre } = require("../services/calculPrixEngine");
 
@@ -196,6 +197,24 @@ async function fournisseurDuTenant(queryable, tenantId, id) {
   return (await queryable.query(`SELECT 1 FROM fournisseur WHERE id = $1 AND tenant_id = $2`, [id, tenantId])).rows.length > 0;
 }
 
+// Echeancier de paiement de la commande : celui fourni (valide), sinon celui de la
+// fiche fournisseur. Ecrit apres l'insertion de l'en-tete.
+async function poserEcheancierCommande(queryable, tenantId, commandeId, fournisseurId, fourni) {
+  let lignes = null;
+  if (fourni !== undefined && fourni !== null && fourni !== "") {
+    const n = echeancierSvc.normaliser(fourni);
+    if (n.erreur) return n.erreur;
+    lignes = n.lignes;
+  } else {
+    const r = await queryable.query(`SELECT echeancier_json FROM fournisseur WHERE id = $1 AND tenant_id = $2`, [fournisseurId, tenantId]);
+    lignes = echeancierSvc.lire(r.rows[0] && r.rows[0].echeancier_json);
+  }
+  if (lignes) {
+    await queryable.query(`UPDATE commande_fournisseur SET echeancier_json = $1 WHERE id = $2 AND tenant_id = $3`, [JSON.stringify(lignes), commandeId, tenantId]);
+  }
+  return null;
+}
+
 const INSERT_ENTETE = `
   INSERT INTO commande_fournisseur (id, tenant_id, numero, fournisseur_id, dossier_ao_id, consultation_id, dossier_calcul_id,
                                     devise, cours_devise, incoterm, transitaire_id, cotation_id, date_commande,
@@ -277,11 +296,25 @@ async function syntheseDossier(tenantId, colonne, cle) {
   for (const o of offres) {
     const c = calculerOffre(o, parametres);
     estimeAchat += c.prixAchatTotalXof;
-    estimeRevient += c.coutDeRevientHt;
+    // L'assurance transport est une depense reelle : le cout de revient du dossier
+    // l'inclut (le Dossier de calcul ne s'en sert que dans la valeur en douane).
+    estimeRevient += c.coutDeRevientHt + c.assurance;
     estimeVente += c.montantTotalArrondiHt;
     estimeFraisBancaires += c.totalFraisBancaires;
-    estimeMarge += c.margeNetteReelle;
+    // Meme base que la marge reelle (prix de vente arrondi - cout de revient -
+    // frais de paiement fournisseur) : estime et reel sont comparables, et ce
+    // chiffre est celui du compte d'exploitation previsionnel.
+    estimeMarge += c.montantTotalArrondiHt - c.coutDeRevientHt - c.assurance - c.totalFraisBancaires;
   }
+  // Autres charges directes saisies sur le dossier (compte d'exploitation).
+  const autresCharges = arr2(
+    Number(
+      (
+        await db.query(`SELECT COALESCE(SUM(montant_xof), 0) AS s FROM dossier_charge_directe WHERE tenant_id = $1 AND ${colonne} = $2`, [tenantId, cle])
+      ).rows[0].s
+    )
+  );
+  estimeMarge -= autresCharges;
   const commandes = (
     await db.query(`${SELECT_ENTETE} WHERE c.tenant_id = $1 AND c.${colonne} = $2 AND c.statut <> 'ANNULEE' ORDER BY c.date_commande ASC`, [tenantId, cle])
   ).rows;
@@ -334,22 +367,26 @@ async function syntheseDossier(tenantId, colonne, cle) {
     )
   ).rows;
   const fraisFinancementRetenus = arr2(fin.reduce((s, x) => s + Number(x.cout_retenu_xof || 0), 0));
-  const fraisBancairesUtilises = fin.length > 0 ? fraisFinancementRetenus : arr2(estimeFraisBancaires);
+  // Frais de paiement du fournisseur (change, virement) ET cout de la ligne de
+  // financement s'additionnent : ce sont deux depenses distinctes.
+  const fraisBancairesUtilises = arr2(estimeFraisBancaires + fraisFinancementRetenus);
   const comparable = enrichies.length > 0 && nonCommandees === 0 && enrichies.every((c) => c.statut_reception === "COMPLETE");
   const estimeRevientArr = arr2(estimeRevient);
   const margeEstimeePct = estimeRevient > 0 ? (estimeMarge / estimeRevient) * 100 : null;
   // Marge reelle = prix de vente HT du Dossier de calcul - cout de revient reel - frais bancaires estimes.
-  const margeReelleXof = comparable ? arr2(estimeVente - revientReel - fraisBancairesUtilises) : null;
+  const margeReelleXof = comparable ? arr2(estimeVente - revientReel - fraisBancairesUtilises - autresCharges) : null;
   const margeReellePct = comparable && revientReel > 0 ? (margeReelleXof / revientReel) * 100 : null;
   return {
     estime: { nb_offres: offres.length, achat_xof: arr2(estimeAchat), cout_revient_xof: estimeRevientArr, vente_ht_xof: arr2(estimeVente) },
     engage: { nb_commandes: enrichies.length, achat_xof: engage },
     reel: { nb_receptions: reel.nb, achat_xof: achatReel, couts_approche_xof: approcheReelle, cout_revient_xof: revientReel },
     commandes: enrichies,
+    autres_charges_xof: autresCharges,
     offres_non_commandees: nonCommandees,
     comparable,
     frais_bancaires: {
       estimes_xof: arr2(estimeFraisBancaires),
+      paiement_fournisseur_xof: arr2(estimeFraisBancaires),
       retenus_xof: fraisFinancementRetenus,
       utilises_xof: fraisBancairesUtilises,
       source: fin.length > 0 ? "FINANCEMENT" : "DOSSIER_CALCUL",
@@ -360,7 +397,7 @@ async function syntheseDossier(tenantId, colonne, cle) {
     ecart_achat_engage_reel_xof: comparable ? arr2(achatReel - engage) : null,
     marge: {
       estimee_xof: arr2(estimeMarge),
-      estimee_avec_financement_xof: fin.length > 0 ? arr2(estimeMarge + estimeFraisBancaires - fraisFinancementRetenus) : null,
+      estimee_avec_financement_xof: fin.length > 0 ? arr2(estimeMarge - fraisFinancementRetenus) : null,
       estimee_pct: margeEstimeePct === null ? null : Math.round(margeEstimeePct * 100) / 100,
       reelle_xof: margeReelleXof,
       reelle_pct: margeReellePct === null ? null : Math.round(margeReellePct * 100) / 100,
@@ -447,6 +484,7 @@ router.post("/depuis-calcul", async (req, res) => {
         premiere.devise, Number(premiere.cours_devise), null, premiere.transitaire_id, null, null, null,
         `Depuis le dossier de calcul « ${dc.nom} »`, req.user.sub,
       ]);
+      await poserEcheancierCommande(client, req.user.tenantId, id, premiere.fournisseur_id, undefined);
       await remplacerLignes(
         client,
         req.user.tenantId,
@@ -543,6 +581,11 @@ router.post("/", async (req, res) => {
       id, req.user.tenantId, numero, req.body.fournisseur_id, e.dossier_ao_id, e.consultation_id, uuidOuNull(req.body.dossier_calcul_id),
       e.devise, e.cours, e.incoterm, e.transitaire_id, e.cotation_id, e.date_commande, e.date_livraison_prevue, e.notes, req.user.sub,
     ]);
+    const errEch = await poserEcheancierCommande(client, req.user.tenantId, id, req.body.fournisseur_id, req.body.echeancier);
+    if (errEch) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, errEch) });
+    }
     await remplacerLignes(client, req.user.tenantId, id, net.lignes);
     await client.query("COMMIT");
     res.status(201).json(await chargerCommande(req.user.tenantId, id));
@@ -570,6 +613,14 @@ router.patch("/:id", async (req, res) => {
     if (actuelle.statut === "ANNULEE") {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: t(req, "COMMANDE_NON_MODIFIABLE") });
+    }
+    if (b.echeancier !== undefined) {
+      const n = echeancierSvc.normaliser(b.echeancier);
+      if (n.erreur) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: t(req, n.erreur) });
+      }
+      await client.query(`UPDATE commande_fournisseur SET echeancier_json = $1 WHERE id = $2 AND tenant_id = $3`, [JSON.stringify(n.lignes), id, req.user.tenantId]);
     }
     if (actuelle.statut === "CONFIRMEE") {
       // Commande confirmee : lignes, fournisseur, prix et devise figes ; dates, transitaire et notes restent modifiables.

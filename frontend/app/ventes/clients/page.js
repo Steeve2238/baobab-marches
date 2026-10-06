@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
+import EcheancierEditor, { EcheancierFiche } from "../../../lib/components/EcheancierEditor";
+import { echeancierValide, pourApi } from "../../../lib/echeancier";
 import AppShell from "../../../lib/components/AppShell";
 import VentesSousNav from "../../../lib/components/VentesSousNav";
 
@@ -14,7 +16,7 @@ export default function ClientsCommerciauxPage() {
   const [clients, setClients] = useState([]);
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
-  const [form, setForm] = useState({ nom: "", adresse: "", telephone: "", email: "" });
+  const [form, setForm] = useState({ nom: "", adresse: "", telephone: "", email: "", echeancier: [] });
 
   function charger() {
     api
@@ -29,10 +31,14 @@ export default function ClientsCommerciauxPage() {
   async function handleAjouter(e) {
     e.preventDefault();
     setErreur("");
+    if (!echeancierValide(form.echeancier)) {
+      setErreur(t("echObligatoire"));
+      return;
+    }
     try {
-      const nouveau = await api.createClientCommercial(form);
+      const nouveau = await api.createClientCommercial({ ...form, echeancier: pourApi(form.echeancier) });
       setClients((prev) => [...prev, nouveau].sort((a, b) => a.nom.localeCompare(b.nom)));
-      setForm({ nom: "", adresse: "", telephone: "", email: "" });
+      setForm({ nom: "", adresse: "", telephone: "", email: "", echeancier: [] });
     } catch (err) {
       setErreur(err.message);
     }
@@ -50,8 +56,13 @@ export default function ClientsCommerciauxPage() {
   return (
     <AppShell title={t("venteClientsPageTitle")} subNav={<VentesSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+      {clients.filter((c) => !Array.isArray(c.echeancier_json) || c.echeancier_json.length === 0).length > 0 && (
+        <p style={{ fontSize: 12.5, color: "var(--brique)", marginBottom: 12 }}>
+          {t("echFicheManquantes").replace("{n}", clients.filter((c) => !Array.isArray(c.echeancier_json) || c.echeancier_json.length === 0).length)}
+        </p>
+      )}
 
-      <form onSubmit={handleAjouter} className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
+      <form onSubmit={handleAjouter} className="card" style={{ marginBottom: 16, maxWidth: 640 }}>
         <label style={labelStyle}>{t("venteClientNomLabel")}</label>
         <input
           required
@@ -78,6 +89,9 @@ export default function ClientsCommerciauxPage() {
           onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
           style={inputStyle}
         />
+        <div style={{ marginTop: 12 }}>
+          <EcheancierEditor sens="CLIENT" valeur={form.echeancier} onChange={(v) => setForm((f) => ({ ...f, echeancier: v }))} />
+        </div>
         <button type="submit" style={{ ...boutonPrincipalStyle, marginTop: 12 }}>
           {t("venteNewClientButton")}
         </button>
@@ -90,7 +104,8 @@ export default function ClientsCommerciauxPage() {
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
           {clients.map((c) => (
-            <div key={c.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div key={c.id} className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.nom}</div>
                 <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
@@ -114,6 +129,15 @@ export default function ClientsCommerciauxPage() {
                   {c.actif ? t("venteDeactivateClientButton") : t("venteReactivateClientButton")}
                 </button>
               </div>
+            </div>
+            <EcheancierFiche
+              sens="CLIENT"
+              echeancier={c.echeancier_json}
+              onSave={async (lignes) => {
+                const maj = await api.patchClientCommercial(c.id, { echeancier: lignes });
+                setClients((prev) => prev.map((x) => (x.id === c.id ? maj : x)));
+              }}
+            />
             </div>
           ))}
         </div>

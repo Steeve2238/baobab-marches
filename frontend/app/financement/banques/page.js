@@ -63,7 +63,7 @@ export default function FinancementBanquesPage() {
       )}
 
       {banques === null ? (
-        <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("finLoading")}</p>
+        !erreur && <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("finLoading")}</p>
       ) : banques.length === 0 ? (
         <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("finBanqueAucune")}</p>
       ) : (

@@ -93,7 +93,7 @@ export default function CourrierSection({ dossierType, dossierId, valeursConnues
     let m;
     while ((m = regex.exec(texte)) !== null) {
       const cle = m[1];
-      if (!cle.startsWith("dossier.") && cle !== "date_jour") {
+      if (!cle.startsWith("dossier.") && !cle.startsWith("financement.") && !cle.startsWith("compte.") && !cle.startsWith("plan.") && cle !== "annexes" && cle !== "date_jour") {
         trouvees.add(cle);
       }
     }

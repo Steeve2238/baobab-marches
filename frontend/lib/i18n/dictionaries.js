@@ -5,6 +5,9 @@
  */
 import { COMPTA_FR, COMPTA_EN } from "./comptaDictionary";
 import { FIN_FR, FIN_EN } from "./financementDictionary";
+import { ECH_FR, ECH_EN } from "./echeancierDictionary";
+import { PLAN_FR, PLAN_EN } from "./planTresorerieDictionary";
+import { CEX_FR, CEX_EN } from "./compteExploitationDictionary";
 
 export const DICTIONARIES = {
   fr: {
@@ -3275,6 +3278,12 @@ Object.assign(DICTIONARIES.fr, COMPTA_FR);
 Object.assign(DICTIONARIES.en, COMPTA_EN);
 Object.assign(DICTIONARIES.fr, FIN_FR);
 Object.assign(DICTIONARIES.en, FIN_EN);
+Object.assign(DICTIONARIES.fr, ECH_FR);
+Object.assign(DICTIONARIES.en, ECH_EN);
+Object.assign(DICTIONARIES.fr, PLAN_FR);
+Object.assign(DICTIONARIES.en, PLAN_EN);
+Object.assign(DICTIONARIES.fr, CEX_FR);
+Object.assign(DICTIONARIES.en, CEX_EN);
 
 // Libellés des statuts de dossier (valeurs stockées en base, non traduites)
 export const STATUT_LABELS = {

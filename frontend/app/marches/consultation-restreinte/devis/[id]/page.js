@@ -7,6 +7,8 @@ import { api } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import { estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import AppShell from "../../../../../lib/components/AppShell";
+import EcheancierEditor from "../../../../../lib/components/EcheancierEditor";
+import { echeancierValide, pourApi } from "../../../../../lib/echeancier";
 import LigneProduitOutils from "../../../../../lib/components/LigneProduitOutils";
 import MontantLettresBloc, { AvertissementTotalPartiel } from "../../../../../lib/components/MontantLettresBloc";
 import { MENTIONS_PRIX_SUGGEREES, analyserSaisiePrix, ligneApiNonChiffree, mentionLigneApi, montantLigneSaisie } from "../../../../../lib/prixLigne";
@@ -67,6 +69,7 @@ export default function DevisDetailPage() {
   const [permissions, setPermissions] = useState(null);
   const [formOuvert, setFormOuvert] = useState(false);
   const [formDevis, setFormDevis] = useState(null);
+  const [echeancierEdition, setEcheancierEdition] = useState([]);
   const [lignesEdition, setLignesEdition] = useState([]);
   const [enregistrementEdition, setEnregistrementEdition] = useState(false);
   // Liste des clients, pour le selecteur de changement de client dans le
@@ -168,6 +171,7 @@ export default function DevisDetailPage() {
       pourcentage_remise: devis.pourcentage_remise || "0",
       client_commercial_id: devis.client_commercial_id,
     });
+    setEcheancierEdition(Array.isArray(devis.echeancier_json) ? devis.echeancier_json.map((l) => ({ ...l })) : []);
     // Une ligne non chiffree est reeditee avec sa mention (NC...) dans le champ prix.
     setLignesEdition(devis.lignes.map((l) => ({ ...l, prix_unitaire_ht: ligneApiNonChiffree(l) ? mentionLigneApi(l) : l.prix_unitaire_ht })));
     setFormOuvert(true);
@@ -187,8 +191,12 @@ export default function DevisDetailPage() {
 
   async function handleEnregistrerDevis(e) {
     e.preventDefault();
-    setEnregistrementEdition(true);
     setErreur("");
+    if (echeancierEdition.length > 0 && !echeancierValide(echeancierEdition)) {
+      setErreur(t("echObligatoire"));
+      return;
+    }
+    setEnregistrementEdition(true);
     try {
       // Le client se corrige via sa propre route PATCH /devis/:id/client
       // (chantier du 02/10/2026) - separee de l'edition generale ci-dessous
@@ -202,6 +210,7 @@ export default function DevisDetailPage() {
       const { client_commercial_id, ...champsGeneraux } = formDevis;
       await api.patchDevis(devis.id, {
         ...champsGeneraux,
+        ...(echeancierEdition.length > 0 ? { echeancier: pourApi(echeancierEdition) } : {}),
         lignes: lignesEdition.map((l) => ({
           designation: l.designation,
           unite: l.unite,
@@ -512,13 +521,13 @@ export default function DevisDetailPage() {
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
             <div>
-              <label style={labelStyle}>{t("venteConditionsPaiementLabel")}</label>
-              <input value={formDevis.conditions_paiement} onChange={(e) => setFormDevis((f) => ({ ...f, conditions_paiement: e.target.value }))} style={inputStyle} placeholder={t("venteConditionsPaiementPlaceholder")} />
-            </div>
-            <div>
               <label style={labelStyle}>{t("venteDelaiLivraisonLabel")}</label>
               <input value={formDevis.delai_livraison} onChange={(e) => setFormDevis((f) => ({ ...f, delai_livraison: e.target.value }))} style={inputStyle} placeholder={t("venteDelaiLivraisonPlaceholder")} />
             </div>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <EcheancierEditor sens="CLIENT" valeur={echeancierEdition} onChange={setEcheancierEdition} aide={t("echRepris")} />
           </div>
 
           <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginTop: 18, marginBottom: 10 }}>{t("venteLignesSection")}</h3>

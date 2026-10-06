@@ -241,6 +241,19 @@ export const api = {
   // Module 2 - Financement (v2, 06/10/2026)
   finCatalogue: () => request("/financement/catalogue"),
   finBanques: () => request("/financement/banques"),
+  finPlan: (type, id) => request(`/financement/plans/${type}/${id}`),
+  finPlanCalculer: (type, id, data) => request(`/financement/plans/${type}/${id}/calculer`, { method: "POST", body: JSON.stringify(data) }),
+  finCompte: (type, id, params = {}) => request(`/financement/comptes/${type}/${id}?${new URLSearchParams(params).toString()}`),
+  finCompteExporter: (type, id, format, params = {}) =>
+    requestDownload(`/financement/comptes/${type}/${id}/export?${new URLSearchParams({ ...params, format }).toString()}`, `compte_exploitation.${format}`),
+  finPlanExporter: (type, id, format) => requestDownload(`/financement/plans/${type}/${id}/export?format=${format}`, `plan_tresorerie.${format}`),
+  finChargeAjouter: (type, id, data, params = {}) =>
+    request(`/financement/comptes/${type}/${id}/charges?${new URLSearchParams(params).toString()}`, { method: "POST", body: JSON.stringify(data) }),
+  finChargeModifier: (type, id, chargeId, data, params = {}) =>
+    request(`/financement/comptes/${type}/${id}/charges/${chargeId}?${new URLSearchParams(params).toString()}`, { method: "PATCH", body: JSON.stringify(data) }),
+  finChargeSupprimer: (type, id, chargeId, params = {}) =>
+    request(`/financement/comptes/${type}/${id}/charges/${chargeId}?${new URLSearchParams(params).toString()}`, { method: "DELETE" }),
+  finPlanEnregistrer: (type, id, data) => request(`/financement/plans/${type}/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   finBanque: (id) => request(`/financement/banques/${id}`),
   finCreerBanque: (data) => request("/financement/banques", { method: "POST", body: JSON.stringify(data) }),
   finMajBanque: (id, data) => request(`/financement/banques/${id}`, { method: "PUT", body: JSON.stringify(data) }),
@@ -329,6 +342,8 @@ export const api = {
 
   // Module 5 - Comparateur fournisseurs
   getFournisseurs: () => request("/fournisseurs"),
+  echeancierModeles: (sens) => request(`/echeanciers/modeles?sens=${sens}`),
+  patchFournisseur: (id, data) => request(`/fournisseurs/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   createFournisseur: (data) => request("/fournisseurs", { method: "POST", body: JSON.stringify(data) }),
   getOffresFournisseur: (dossierId) => request(`/fournisseurs/dossiers/${dossierId}/offres`),
   createOffreFournisseur: (dossierId, data) =>

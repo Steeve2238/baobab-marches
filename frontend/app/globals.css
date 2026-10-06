@@ -104,5 +104,19 @@ button {
   .no-print {
     display: none !important;
   }
+  /* Tableaux larges (plan de tresorerie, compte d'exploitation) : tout tient
+     dans la largeur de la page imprimee. */
+  .print-letter table {
+    min-width: 0 !important;
+    width: 100% !important;
+    font-size: 10.5px;
+  }
+  .print-letter .card {
+    overflow: visible !important;
+    box-shadow: none !important;
+  }
+  .print-letter tr {
+    break-inside: avoid;
+  }
 }
 

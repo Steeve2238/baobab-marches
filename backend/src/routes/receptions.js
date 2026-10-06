@@ -6,6 +6,7 @@ const { requireAuth, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { assurerTiersPourFournisseurSilencieux } = require("../services/comptaService");
 const { chargerParametres } = require("../services/produitsCatalogue");
+const echeancierSvc = require("../services/echeancier");
 const { enregistrerMouvement, stockProduit, genererReferenceInterne } = require("../services/stockService");
 const { reevaluerMargeDossier } = require("./commandes");
 const { tableInclus } = require("../services/incoterms");
@@ -40,7 +41,7 @@ const arr2 = (n) => Math.round(n * 100) / 100;
 // d'autre module (meme principe que routes/calculPrix.js).
 router.get("/fournisseurs", async (req, res) => {
   try {
-    const r = await db.query(`SELECT id, nom, pays FROM fournisseur WHERE tenant_id = $1 ORDER BY nom ASC`, [req.user.tenantId]);
+    const r = await db.query(`SELECT id, nom, pays, echeancier_json FROM fournisseur WHERE tenant_id = $1 ORDER BY nom ASC`, [req.user.tenantId]);
     res.json(r.rows);
   } catch (err) {
     console.error(err);
@@ -51,10 +52,12 @@ router.get("/fournisseurs", async (req, res) => {
 router.post("/fournisseurs", async (req, res) => {
   const { nom, pays } = req.body;
   if (!nom || !String(nom).trim()) return res.status(400).json({ error: t(req, "FOURNISSEUR_NOM_REQUIRED") });
+  const ech = echeancierSvc.normaliser(req.body.echeancier);
+  if (ech.erreur) return res.status(400).json({ error: t(req, ech.erreur) });
   try {
     const r = await db.query(
-      `INSERT INTO fournisseur (id, tenant_id, nom, pays) VALUES ($1,$2,$3,$4) RETURNING id, nom, pays`,
-      [uuidv4(), req.user.tenantId, String(nom).trim(), pays || null]
+      `INSERT INTO fournisseur (id, tenant_id, nom, pays, echeancier_json) VALUES ($1,$2,$3,$4,$5) RETURNING id, nom, pays, echeancier_json`,
+      [uuidv4(), req.user.tenantId, String(nom).trim(), pays || null, JSON.stringify(ech.lignes)]
     );
     await assurerTiersPourFournisseurSilencieux(req.user.tenantId, r.rows[0]);
     res.status(201).json(r.rows[0]);

@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { assurerTiersPourFournisseurSilencieux } = require("../services/comptaService");
+const echeancier = require("../services/echeancier");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -56,16 +57,46 @@ router.post("/", async (req, res) => {
   if (!nom) {
     return res.status(400).json({ error: t(req, "FOURNISSEUR_NOM_REQUIRED") });
   }
+  // Conditions de paiement du fournisseur : obligatoires a la creation.
+  const ech = echeancier.normaliser(req.body.echeancier);
+  if (ech.erreur) return res.status(400).json({ error: t(req, ech.erreur) });
   try {
     const result = await db.query(
-      `INSERT INTO fournisseur (id, tenant_id, nom, pays) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [uuidv4(), req.user.tenantId, nom, pays || null]
+      `INSERT INTO fournisseur (id, tenant_id, nom, pays, echeancier_json) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [uuidv4(), req.user.tenantId, nom, pays || null, JSON.stringify(ech.lignes)]
     );
     await assurerTiersPourFournisseurSilencieux(req.user.tenantId, result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "FOURNISSEUR_CREATE_ERROR") });
+  }
+});
+
+// PATCH /api/fournisseurs/:id : nom, pays et/ou conditions de paiement (echeancier).
+router.patch("/:id", async (req, res) => {
+  const { id } = req.params;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(404).json({ error: t(req, "FOURNISSEUR_NOT_FOUND") });
+  const b = req.body || {};
+  let echJson = null;
+  if (b.echeancier !== undefined) {
+    const ech = echeancier.normaliser(b.echeancier);
+    if (ech.erreur) return res.status(400).json({ error: t(req, ech.erreur) });
+    echJson = JSON.stringify(ech.lignes);
+  }
+  if (b.nom !== undefined && !String(b.nom).trim()) return res.status(400).json({ error: t(req, "FOURNISSEUR_NOM_REQUIRED") });
+  try {
+    const r = await db.query(
+      `UPDATE fournisseur SET nom = COALESCE($1, nom), pays = CASE WHEN $2::boolean THEN $3 ELSE pays END,
+              echeancier_json = COALESCE($4::jsonb, echeancier_json)
+       WHERE id = $5 AND tenant_id = $6 RETURNING *`,
+      [b.nom !== undefined ? String(b.nom).trim() : null, b.pays !== undefined, b.pays || null, echJson, id, req.user.tenantId]
+    );
+    if (!r.rows[0]) return res.status(404).json({ error: t(req, "FOURNISSEUR_NOT_FOUND") });
+    res.json(r.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "FOURNISSEUR_UPDATE_ERROR") });
   }
 });
 

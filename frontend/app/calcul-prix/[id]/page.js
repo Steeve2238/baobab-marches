@@ -6,6 +6,8 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import { EcheancierModeleSelect } from "../../../lib/components/EcheancierEditor";
+import { echeancierValide, pourApi, texteEcheancier } from "../../../lib/echeancier";
 import { DEVISES } from "../../../lib/constants/devises";
 
 function offreVierge() {
@@ -62,7 +64,7 @@ export default function CalculPrixDetailPage() {
   const [offreEnCours, setOffreEnCours] = useState(false);
 
   const [ajoutFournisseurOuvert, setAjoutFournisseurOuvert] = useState(false);
-  const [nouveauFournisseur, setNouveauFournisseur] = useState({ nom: "", pays: "" });
+  const [nouveauFournisseur, setNouveauFournisseur] = useState({ nom: "", pays: "", echeancier: [] });
   const [ajoutTransitaireOuvert, setAjoutTransitaireOuvert] = useState(false);
   const [nouveauTransitaire, setNouveauTransitaire] = useState({ nom: "" });
   const [partenaireEnCours, setPartenaireEnCours] = useState(false);
@@ -228,11 +230,11 @@ export default function CalculPrixDetailPage() {
     e.preventDefault();
     setPartenaireEnCours(true);
     try {
-      const nouveau = await api.createFournisseurCalcul(nouveauFournisseur);
+      const nouveau = await api.createFournisseurCalcul({ ...nouveauFournisseur, echeancier: pourApi(nouveauFournisseur.echeancier) });
       setFournisseurs((prev) => [...prev, nouveau].sort((a, b) => a.nom.localeCompare(b.nom)));
       setFormOffre((f) => ({ ...f, fournisseur_id: nouveau.id }));
       setAjoutFournisseurOuvert(false);
-      setNouveauFournisseur({ nom: "", pays: "" });
+      setNouveauFournisseur({ nom: "", pays: "", echeancier: [] });
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -674,6 +676,16 @@ function FormulaireOffre({
               </option>
             ))}
           </select>
+          {(() => {
+            const f = fournisseurs.find((x) => x.id === formOffre.fournisseur_id);
+            if (!f) return null;
+            const ech = Array.isArray(f.echeancier_json) && f.echeancier_json.length > 0 ? f.echeancier_json : null;
+            return (
+              <div style={{ fontSize: 11.5, marginTop: 4, color: ech ? "var(--sub)" : "var(--brique)" }}>
+                {ech ? `${t("echTitreFournisseur")} : ${texteEcheancier(ech, t)}` : t("echARenseignerLong")}
+              </div>
+            );
+          })()}
           <button
             type="button"
             onClick={() => setAjoutFournisseurOuvert((v) => !v)}
@@ -695,10 +707,16 @@ function FormulaireOffre({
                 onChange={(e) => setNouveauFournisseur((f) => ({ ...f, pays: e.target.value }))}
                 style={{ ...inputStyle, fontSize: 11.5, padding: "5px 8px", maxWidth: 100 }}
               />
+              <EcheancierModeleSelect
+                sens="FOURNISSEUR"
+                valeur={nouveauFournisseur.echeancier}
+                onChange={(v) => setNouveauFournisseur((f) => ({ ...f, echeancier: v }))}
+                style={{ maxWidth: 200 }}
+              />
               <button
                 type="button"
                 onClick={onCreerFournisseur}
-                disabled={partenaireEnCours || !nouveauFournisseur.nom.trim()}
+                disabled={partenaireEnCours || !nouveauFournisseur.nom.trim() || !echeancierValide(nouveauFournisseur.echeancier)}
                 style={boutonSecondaireStyle}
               >
                 {t("save")}

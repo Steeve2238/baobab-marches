@@ -11,6 +11,9 @@ const { requireAuth, requireModule, blockLectureSeule } = require("../middleware
 const { t, resolveLangue } = require("../utils/i18n");
 const catalogueSvc = require("../services/financementCatalogue");
 const engine = require("../services/financementEngine");
+const planSvc = require("../services/planTresorerie");
+const compteSvc = require("../services/compteExploitation");
+const docsFin = require("../services/documentsFinancement");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -791,6 +794,178 @@ router.get("/dossiers/:type/:id", async (req, res) => {
     res.json({ simulations: r.rows, cout_retenu_total_xof: arr2(retenues.reduce((s, x) => s + Number(x.cout_retenu_xof || 0), 0)) });
   } catch (err) {
     erreurInterne(req, res, err, "FIN_SIMULATIONS_FETCH_ERROR");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Plan de tresorerie previsionnel d'un dossier (AO ou consultation restreinte)
+// ---------------------------------------------------------------------------
+router.get("/plans/:type/:id", async (req, res) => {
+  try {
+    const r = await planSvc.charger(req.user.tenantId, req.params.type, req.params.id, resolveLangue(req));
+    if (!r) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    res.json(r);
+  } catch (err) {
+    erreurInterne(req, res, err, "PLAN_ERROR");
+  }
+});
+
+// Calcul a blanc : applique les parametres du corps sans les enregistrer.
+router.post("/plans/:type/:id/calculer", async (req, res) => {
+  try {
+    const col = planSvc.colonne(req.params.type);
+    if (!col) return fail(req, res, 400, "FIN_TYPE_INVALIDE");
+    const existants = await planSvc.chargerParams(req.user.tenantId, req.params.type, req.params.id);
+    const n = planSvc.nettoyerParams(req.body || {}, existants);
+    if (n.erreur) return fail(req, res, 400, n.erreur);
+    const r = await planSvc.charger(req.user.tenantId, req.params.type, req.params.id, resolveLangue(req), n.params);
+    if (!r) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    res.json(r);
+  } catch (err) {
+    erreurInterne(req, res, err, "PLAN_ERROR");
+  }
+});
+
+router.put("/plans/:type/:id", async (req, res) => {
+  try {
+    const col = planSvc.colonne(req.params.type);
+    if (!col) return fail(req, res, 400, "FIN_TYPE_INVALIDE");
+    if (!(await planSvc.dossierDuTenant(req.user.tenantId, req.params.type, req.params.id))) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    const existants = await planSvc.chargerParams(req.user.tenantId, req.params.type, req.params.id);
+    const n = planSvc.nettoyerParams(req.body || {}, existants);
+    if (n.erreur) return fail(req, res, 400, n.erreur);
+    await planSvc.sauverParams(req.user.tenantId, req.user.sub, req.params.type, req.params.id, n.params);
+    const r = await planSvc.charger(req.user.tenantId, req.params.type, req.params.id, resolveLangue(req));
+    res.json(r);
+  } catch (err) {
+    erreurInterne(req, res, err, "PLAN_ERROR");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Compte d'exploitation previsionnel d'un dossier (HT) + exports PDF / Excel
+// ---------------------------------------------------------------------------
+const UUID_OPT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function optionsCompte(req) {
+  const q = req.query || {};
+  return {
+    simulation_id: q.simulation_id && UUID_OPT.test(q.simulation_id) ? q.simulation_id : null,
+    condition_id: q.condition_id && UUID_OPT.test(q.condition_id) ? q.condition_id : null,
+    version: q.version === "BANQUE" ? "BANQUE" : "INTERNE",
+    detail: q.detail === "1" || q.detail === "true",
+    lang: resolveLangue(req),
+  };
+}
+const NUMERO_TYPE = (type) => (type === "ao" || type === "consultation" ? type : null);
+
+router.get("/comptes/:type/:id", async (req, res) => {
+  try {
+    if (!NUMERO_TYPE(req.params.type)) return fail(req, res, 400, "FIN_TYPE_INVALIDE");
+    const r = await compteSvc.construire(req.user.tenantId, req.params.type, req.params.id, optionsCompte(req));
+    if (!r) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    res.json(r);
+  } catch (err) {
+    erreurInterne(req, res, err, "COMPTE_ERROR");
+  }
+});
+
+function envoyerFichier(res, buffer, nom, format) {
+  res.setHeader("Content-Type", format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="${nom}"`);
+  res.send(buffer);
+}
+const slug = (x) => String(x || "dossier").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "dossier";
+
+router.get("/comptes/:type/:id/export", async (req, res) => {
+  try {
+    if (!NUMERO_TYPE(req.params.type)) return fail(req, res, 400, "FIN_TYPE_INVALIDE");
+    const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
+    const opts = optionsCompte(req);
+    const data = await compteSvc.construire(req.user.tenantId, req.params.type, req.params.id, opts);
+    if (!data) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    const entete = await docsFin.chargerEntete(req.user.tenantId);
+    // Version banque : le plan de tresorerie accompagne le compte (page 2 et annexe).
+    let plan = null;
+    if (opts.version === "BANQUE" || req.query.avec_plan === "1") {
+      const surcharge = opts.simulation_id ? { simulation_id: opts.simulation_id, condition_id: opts.condition_id, avec_financement: true } : undefined;
+      const info = await planSvc.charger(req.user.tenantId, req.params.type, req.params.id, opts.lang, surcharge);
+      if (info && !(info.plan.incomplet && info.plan.incomplet.length)) {
+        plan = { ...info.plan, date_t: info.params.date_t, base: info.params.base, hors_douane: info.params.hors_douane, apport_xof: info.params.apport_xof };
+      }
+    }
+    const buffer = format === "pdf" ? await docsFin.compteExploitationPdf(data, entete, plan) : docsFin.compteExploitationXlsx(data, entete, plan);
+    const nom = `compte_exploitation_${opts.version === "BANQUE" ? "banque_" : ""}${slug(data.dossier.libelle)}.${format}`;
+    envoyerFichier(res, buffer, nom, format);
+  } catch (err) {
+    erreurInterne(req, res, err, "COMPTE_ERROR");
+  }
+});
+
+router.get("/plans/:type/:id/export", async (req, res) => {
+  try {
+    if (!NUMERO_TYPE(req.params.type)) return fail(req, res, 400, "FIN_TYPE_INVALIDE");
+    const format = req.query.format === "xlsx" ? "xlsx" : "pdf";
+    const info = await planSvc.charger(req.user.tenantId, req.params.type, req.params.id, resolveLangue(req));
+    if (!info) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    const entete = await docsFin.chargerEntete(req.user.tenantId);
+    const buffer = format === "pdf" ? await docsFin.planPdf(info, entete) : docsFin.planXlsx(info, entete);
+    envoyerFichier(res, buffer, `plan_tresorerie_${slug(info.dossier.libelle)}.${format}`, format);
+  } catch (err) {
+    erreurInterne(req, res, err, "COMPTE_ERROR");
+  }
+});
+
+// Autres charges directes du dossier
+async function dossierExiste(req) {
+  return NUMERO_TYPE(req.params.type) ? planSvc.dossierDuTenant(req.user.tenantId, req.params.type, req.params.id) : null;
+}
+function lireCharge(body) {
+  const libelle = String((body && body.libelle) || "").trim().slice(0, 160);
+  const montant = numOuNull(body && body.montant_xof);
+  if (!libelle || montant === null || montant < 0) return null;
+  return { libelle, montant: Math.round(montant * 100) / 100 };
+}
+router.post("/comptes/:type/:id/charges", async (req, res) => {
+  try {
+    if (!(await dossierExiste(req))) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    const c = lireCharge(req.body);
+    if (!c) return fail(req, res, 400, "CHARGE_INVALIDE");
+    const col = planSvc.colonne(req.params.type);
+    const ordre = (await db.query(`SELECT COALESCE(MAX(ordre), 0) + 1 AS n FROM dossier_charge_directe WHERE tenant_id = $1 AND ${col} = $2`, [req.user.tenantId, req.params.id])).rows[0].n;
+    await db.query(
+      `INSERT INTO dossier_charge_directe (id, tenant_id, ${col}, libelle, montant_xof, ordre, cree_par) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [uuidv4(), req.user.tenantId, req.params.id, c.libelle, c.montant, ordre, req.user.sub]
+    );
+    res.status(201).json(await compteSvc.construire(req.user.tenantId, req.params.type, req.params.id, optionsCompte(req)));
+  } catch (err) {
+    erreurInterne(req, res, err, "COMPTE_ERROR");
+  }
+});
+router.patch("/comptes/:type/:id/charges/:chargeId", async (req, res) => {
+  try {
+    if (!(await dossierExiste(req))) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    const c = lireCharge(req.body);
+    if (!c) return fail(req, res, 400, "CHARGE_INVALIDE");
+    const col = planSvc.colonne(req.params.type);
+    const r = await db.query(
+      `UPDATE dossier_charge_directe SET libelle = $1, montant_xof = $2 WHERE id = $3 AND tenant_id = $4 AND ${col} = $5`,
+      [c.libelle, c.montant, req.params.chargeId, req.user.tenantId, req.params.id]
+    );
+    if (r.rowCount === 0) return fail(req, res, 404, "CHARGE_NOT_FOUND");
+    res.json(await compteSvc.construire(req.user.tenantId, req.params.type, req.params.id, optionsCompte(req)));
+  } catch (err) {
+    erreurInterne(req, res, err, "COMPTE_ERROR");
+  }
+});
+router.delete("/comptes/:type/:id/charges/:chargeId", async (req, res) => {
+  try {
+    if (!(await dossierExiste(req))) return fail(req, res, 404, "PLAN_DOSSIER_NOT_FOUND");
+    const col = planSvc.colonne(req.params.type);
+    const r = await db.query(`DELETE FROM dossier_charge_directe WHERE id = $1 AND tenant_id = $2 AND ${col} = $3`, [req.params.chargeId, req.user.tenantId, req.params.id]);
+    if (r.rowCount === 0) return fail(req, res, 404, "CHARGE_NOT_FOUND");
+    res.json(await compteSvc.construire(req.user.tenantId, req.params.type, req.params.id, optionsCompte(req)));
+  } catch (err) {
+    erreurInterne(req, res, err, "COMPTE_ERROR");
   }
 });
 

@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import AppShell from "../../lib/components/AppShell";
+import EcheancierEditor from "../../lib/components/EcheancierEditor";
+import { echeancierValide, pourApi } from "../../lib/echeancier";
 import { useIncoterms, codesAvec } from "../../lib/incoterms";
 
 // Saisie / suivi d'une commande fournisseur (Lot 5, 05/10/2026).
@@ -49,6 +51,7 @@ export default function CommandeEditeur({ id }) {
     notes: "",
   });
   const [lignes, setLignes] = useState([{ ...LIGNE_VIDE }]);
+  const [echeancier, setEcheancier] = useState([]);
 
   const statut = commande ? commande.statut : "BROUILLON";
   const brouillon = statut === "BROUILLON";
@@ -70,6 +73,7 @@ export default function CommandeEditeur({ id }) {
       consultation_id: c.consultation_id || "",
       notes: c.notes || "",
     });
+    setEcheancier(Array.isArray(c.echeancier_json) ? c.echeancier_json.map((l) => ({ ...l })) : []);
     setRattachement(c.dossier_ao_id ? "AO" : c.consultation_id ? "CONSULTATION" : "STOCK");
     setLignes(
       c.lignes.length
@@ -113,9 +117,17 @@ export default function CommandeEditeur({ id }) {
     (c) => (!form.transitaire_id || c.transitaire_id === form.transitaire_id) && (c.statut !== "REFUSEE" || c.id === form.cotation_id)
   );
 
+  // Choix du fournisseur : ses conditions de paiement sont reprises, modifiables pour cette commande.
+  function choisirFournisseur(idFournisseur) {
+    maj("fournisseur_id", idFournisseur);
+    const f = fournisseurs.find((x) => x.id === idFournisseur);
+    setEcheancier(f && Array.isArray(f.echeancier_json) ? f.echeancier_json.map((l) => ({ ...l })) : []);
+  }
+
   function charge() {
     return {
       ...form,
+      ...(echeancier.length > 0 ? { echeancier: pourApi(echeancier) } : {}),
       cours_devise: coursNum,
       dossier_ao_id: rattachement === "AO" ? form.dossier_ao_id || null : null,
       consultation_id: rattachement === "CONSULTATION" ? form.consultation_id || null : null,
@@ -136,6 +148,10 @@ export default function CommandeEditeur({ id }) {
   async function enregistrer() {
     if (!form.fournisseur_id) {
       setErreur(t("cmdFournisseurRequis"));
+      return null;
+    }
+    if (echeancier.length > 0 && !echeancierValide(echeancier)) {
+      setErreur(t("echObligatoire"));
       return null;
     }
     const data = charge();
@@ -229,7 +245,7 @@ export default function CommandeEditeur({ id }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           <div>
             <label style={labelStyle}>{t("cmdColFournisseur")}</label>
-            <select disabled={desactiveEntete} value={form.fournisseur_id} onChange={(e) => maj("fournisseur_id", e.target.value)} style={inputStyle}>
+            <select disabled={desactiveEntete} value={form.fournisseur_id} onChange={(e) => choisirFournisseur(e.target.value)} style={inputStyle}>
               <option value="">—</option>
               {fournisseurs.map((f) => (
                 <option key={f.id} value={f.id}>{f.nom}</option>
@@ -321,6 +337,10 @@ export default function CommandeEditeur({ id }) {
           <label style={labelStyle}>{t("receptionsNotes")}</label>
           <input disabled={statut === "ANNULEE"} value={form.notes} onChange={(e) => maj("notes", e.target.value)} style={inputStyle} />
         </div>
+      </section>
+
+      <section style={{ marginBottom: 16 }}>
+        <EcheancierEditor sens="FOURNISSEUR" valeur={echeancier} onChange={setEcheancier} aide={t("echReprisFiche")} lectureSeule={statut === "ANNULEE"} />
       </section>
 
       <section className="card" style={{ marginBottom: 16 }}>
