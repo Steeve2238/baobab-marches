@@ -131,7 +131,8 @@ export default function CompteExploitationPage() {
                   <option key={`${s.id}|${b.condition_id}`} value={`${s.id}|${b.condition_id}`}>
                     {(s.libelle || t(`finType_${s.type_facilite}`))} · {b.partenaire_nom}
                     {b.cout_ttc !== null && b.cout_ttc !== undefined ? ` · ${fmtXof(b.cout_ttc, locale)}` : ""}
-                    {s.statut === "SIMULEE" ? "" : ` · ${t(`finStatutSim_${s.statut}`)}`}
+                    {s.condition_retenue_id && s.condition_retenue_id === b.condition_id ? ` · ${t("finStatutSim_RETENUE")}` : ""}
+                    {b.eligible === false ? ` · ${t("cexBanqueNonEligible")}` : ""}
                   </option>
                 ))
               )}
@@ -210,7 +211,7 @@ export default function CompteExploitationPage() {
                   const fort = l.type === "total" || l.type === "resultat";
                   const fond = l.type === "resultat" ? "var(--vert-bg, #E3EFE9)" : section ? "var(--line-soft)" : "transparent";
                   const base = { padding: "5px 10px", borderBottom: "1px solid var(--line-soft)", fontWeight: fort || section ? 700 : 400, background: fond, fontStyle: l.type === "detail" ? "italic" : "normal", color: l.type === "detail" ? "var(--sub)" : "inherit" };
-                  const num = { ...base, textAlign: "right", fontVariantNumeric: "tabular-nums" };
+                  const num = { ...base, textAlign: "right", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" };
                   return (
                     <tr key={i} style={{ borderTop: l.type === "total" ? "1px solid var(--ink)" : undefined }}>
                       <td style={{ ...base, paddingLeft: 10 + (l.type === "detail" ? 28 : l.type === "ligne" ? 14 : 0) }}>{l.libelle}</td>

@@ -84,7 +84,7 @@ export default function FinancementBanquesPage() {
                 {!b.actif && <Pastille>{t("finBanqueInactive")}</Pastille>}
               </div>
               <div style={{ fontSize: 12.5, marginTop: 10 }}>
-                <b>{b.nb_conditions}</b> {t("finBanqueNbConditions")}
+                <b>{b.nb_conditions}</b> {b.nb_conditions === 1 ? t("finBanqueNbCondition1") : t("finBanqueNbConditions")}
                 {b.nb_conditions_actives > 0 && <span style={{ color: "var(--vert)" }}> ({b.nb_conditions_actives} {t("finStatut_ACTIVE").toLowerCase()})</span>}
               </div>
               {Number(b.cout_retenu_xof) > 0 && (

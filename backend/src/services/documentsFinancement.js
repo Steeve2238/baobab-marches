@@ -91,6 +91,20 @@ const FR = {
   faitA: "Fait le",
 };
 
+const TYPES_FACILITE = {
+  AFFACTURAGE: "Affacturage",
+  ESCOMPTE: "Escompte d'effets",
+  CREDIT_TRESORERIE: "Crédit de trésorerie",
+  CREDIT_RELAIS: "Crédit relais",
+  AVANCE_MARCHE: "Avance sur marché",
+  LC_INTERNATIONAL: "Lettre de crédit (import)",
+  AVAL_TRAITE: "Aval de traite",
+  CAUTION_SOUMISSION: "Caution de soumission",
+  CAUTION_BONNE_EXECUTION: "Caution de bonne exécution",
+  CAUTION_AVANCE_DEMARRAGE: "Caution d'avance de démarrage",
+  CAUTION_RETENUE_GARANTIE: "Caution de retenue de garantie",
+  ASSURANCE_CREDIT: "Assurance-crédit",
+};
 const nf = (n, { zero = true } = {}) => {
   if (n === null || n === undefined || n === "") return "";
   const v = Number(n);
@@ -332,7 +346,7 @@ function pagesBanque(pdf, data, plan) {
   pdf.titreSection(FR.demande);
   if (f) {
     kv([
-      [FR.facilite, f.type_facilite ? f.type_facilite : ""],
+      [FR.facilite, f.type_facilite ? (TYPES_FACILITE[f.type_facilite] || f.type_facilite) : ""],
       [FR.banque, f.banque || ""],
       [FR.montantDemande, `${nf(f.montant)} F CFA`],
       [FR.datePrise, ddmmyyyy(f.date_prise)],

@@ -31,7 +31,7 @@ const LIGNE = (code, libelle, extra = {}) => ({
 
 const FRAIS_DOSSIER = LIGNE("FRAIS_DOSSIER", "Frais de dossier", { mode_calcul: "FORFAIT" });
 const TIMBRE = LIGNE("TIMBRE", "Droits de timbre", { mode_calcul: "FORFAIT", soumis_taxe: false });
-const DEPOT_GARANTIE = LIGNE("DEPOT_GARANTIE", "Depot de garantie (somme bloquee)", {
+const DEPOT_GARANTIE = LIGNE("DEPOT_GARANTIE", "Dépôt de garantie (somme bloquée)", {
   nature: "RETENUE",
   soumis_taxe: false,
 });
@@ -86,9 +86,9 @@ const TYPES = {
     champs: { avance: true, retenue: false, recours: false, debiteurs: false, domiciliation: true },
     defauts: { taux_avance_pct: 100 },
     lignes: [
-      LIGNE("INTERETS", "Interets", { mode_calcul: "POURCENT_ANNUEL", base: "AVANCE", prelevement: "A_L_ECHEANCE" }),
+      LIGNE("INTERETS", "Intérêts", { mode_calcul: "POURCENT_ANNUEL", base: "AVANCE", prelevement: "A_L_ECHEANCE" }),
       LIGNE("COM_ENGAGEMENT", "Commission d'engagement", { mode_calcul: "POURCENT_FLAT" }),
-      LIGNE("COM_MOUVEMENT", "Commission de plus fort decouvert", { mode_calcul: "POURCENT_PAR_PERIODE", periode: "TRIMESTRE" }),
+      LIGNE("COM_MOUVEMENT", "Commission de plus fort découvert", { mode_calcul: "POURCENT_PAR_PERIODE", periode: "TRIMESTRE" }),
       FRAIS_DOSSIER,
       TIMBRE,
       DEPOT_GARANTIE,
@@ -99,7 +99,7 @@ const TYPES = {
     champs: { avance: true, retenue: false, recours: false, debiteurs: false, domiciliation: true },
     defauts: { taux_avance_pct: 100 },
     lignes: [
-      LIGNE("INTERETS", "Interets", { mode_calcul: "POURCENT_ANNUEL", base: "AVANCE", prelevement: "A_L_ECHEANCE" }),
+      LIGNE("INTERETS", "Intérêts", { mode_calcul: "POURCENT_ANNUEL", base: "AVANCE", prelevement: "A_L_ECHEANCE" }),
       LIGNE("COM_ENGAGEMENT", "Commission d'engagement", { mode_calcul: "POURCENT_FLAT" }),
       FRAIS_DOSSIER,
       TIMBRE,
@@ -111,9 +111,9 @@ const TYPES = {
     champs: { avance: true, retenue: false, recours: false, debiteurs: false, domiciliation: true },
     defauts: { taux_avance_pct: 100, domiciliation_exigee: true },
     lignes: [
-      LIGNE("INTERETS", "Interets", { mode_calcul: "POURCENT_ANNUEL", base: "AVANCE", prelevement: "A_L_ECHEANCE" }),
+      LIGNE("INTERETS", "Intérêts", { mode_calcul: "POURCENT_ANNUEL", base: "AVANCE", prelevement: "A_L_ECHEANCE" }),
       LIGNE("COM_ENGAGEMENT", "Commission d'engagement", { mode_calcul: "POURCENT_FLAT" }),
-      LIGNE("COM_SUIVI", "Commission de suivi du marche", { mode_calcul: "POURCENT_PAR_PERIODE", periode: "TRIMESTRE" }),
+      LIGNE("COM_SUIVI", "Commission de suivi du marché", { mode_calcul: "POURCENT_PAR_PERIODE", periode: "TRIMESTRE" }),
       FRAIS_DOSSIER,
       TIMBRE,
       DEPOT_GARANTIE,
@@ -126,8 +126,8 @@ const TYPES = {
       LIGNE("COM_OUVERTURE", "Commission d'ouverture", { mode_calcul: "POURCENT_FLAT" }),
       LIGNE("COM_ENGAGEMENT", "Commission d'engagement", { mode_calcul: "POURCENT_PAR_PERIODE", periode: "TRIMESTRE" }),
       LIGNE("COM_CONFIRMATION", "Commission de confirmation", { mode_calcul: "POURCENT_PAR_PERIODE", periode: "TRIMESTRE" }),
-      LIGNE("COM_LEVEE_DOCUMENTS", "Commission de levee des documents", { mode_calcul: "POURCENT_FLAT", prelevement: "A_L_ECHEANCE" }),
-      LIGNE("SWIFT", "Frais SWIFT / telex", { mode_calcul: "FORFAIT" }),
+      LIGNE("COM_LEVEE_DOCUMENTS", "Commission de levée des documents", { mode_calcul: "POURCENT_FLAT", prelevement: "A_L_ECHEANCE" }),
+      LIGNE("SWIFT", "Frais SWIFT / télex", { mode_calcul: "FORFAIT" }),
       FRAIS_DOSSIER,
       DEPOT_GARANTIE,
     ],
@@ -143,8 +143,8 @@ const TYPES = {
     ],
   },
   CAUTION_SOUMISSION: CAUTION("Caution de soumission"),
-  CAUTION_BONNE_EXECUTION: CAUTION("Caution de bonne execution"),
-  CAUTION_AVANCE_DEMARRAGE: CAUTION("Caution d'avance de demarrage"),
+  CAUTION_BONNE_EXECUTION: CAUTION("Caution de bonne exécution"),
+  CAUTION_AVANCE_DEMARRAGE: CAUTION("Caution d'avance de démarrage"),
   CAUTION_RETENUE_GARANTIE: CAUTION("Caution de retenue de garantie"),
   ASSURANCE_CREDIT: {
     famille: "GARANTIE",
