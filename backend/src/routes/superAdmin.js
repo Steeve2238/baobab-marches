@@ -181,6 +181,9 @@ router.post("/auth/changer-mot-de-passe", requireSuperAdmin, async (req, res) =>
 
 router.use(requireSuperAdmin);
 
+// Offres commerciales, contrats clients, PDF et envois par e-mail (fichier dedie).
+router.use(require("./superAdminCommercial"));
+
 // ---------------------------------------------------------------------------
 // Parametres de facturation du Super Admin (entete + pied de page + logo,
 // utilises sur les factures d'abonnement - voir GET /factures/:id plus bas).
@@ -234,11 +237,15 @@ router.get("/parametres/entete", async (req, res) => {
 // PATCH /api/super-admin/parametres/entete
 router.patch("/parametres/entete", async (req, res) => {
   const { raison_sociale, adresse, telephone, email, rccm, ninea, site_web, coordonnees_bancaires } = req.body;
+  const b = req.body || {};
   try {
     const result = await db.query(
       `UPDATE plateforme_parametres
        SET raison_sociale = $1, adresse = $2, telephone = $3, email = $4,
-           rccm = $5, ninea = $6, site_web = $7, coordonnees_bancaires = $8
+           rccm = $5, ninea = $6, site_web = $7, coordonnees_bancaires = $8,
+           forme_juridique = $9, capital_social = $10, representant_nom = $11, representant_fonction = $12,
+           ville_signature = COALESCE($13, ville_signature), tribunal_competent = COALESCE($14, tribunal_competent),
+           penalite_pi_mois = COALESCE($15, penalite_pi_mois), mention_propriete_intellectuelle = $16
        WHERE id = true
        RETURNING *`,
       [
@@ -250,6 +257,14 @@ router.patch("/parametres/entete", async (req, res) => {
         ninea || null,
         site_web || null,
         coordonnees_bancaires || null,
+        b.forme_juridique || null,
+        b.capital_social || null,
+        b.representant_nom || null,
+        b.representant_fonction || null,
+        b.ville_signature || null,
+        b.tribunal_competent || null,
+        Number.isInteger(Number(b.penalite_pi_mois)) && Number(b.penalite_pi_mois) > 0 && Number(b.penalite_pi_mois) <= 120 ? Number(b.penalite_pi_mois) : null,
+        b.mention_propriete_intellectuelle || null,
       ]
     );
     res.json(result.rows[0]);

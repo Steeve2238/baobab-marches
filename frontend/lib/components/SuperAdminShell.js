@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { href: "/super-admin", key: "saNavDashboard" },
   { href: "/super-admin/clients", key: "saNavClients" },
   { href: "/super-admin/formules", key: "saNavFormules" },
+  { href: "/super-admin/offres", key: "saNavOffres" },
   { href: "/super-admin/factures", key: "saNavFactures" },
   { href: "/super-admin/parametres", key: "saNavParametres" },
 ];
@@ -26,7 +27,7 @@ const NAV_ITEMS = [
  * distinct (bandeau "Espace Super Admin") evite toute confusion pour Steeve
  * s'il a les deux espaces ouverts dans des onglets differents.
  */
-export default function SuperAdminShell({ children, title, backHref }) {
+export default function SuperAdminShell({ children, title, backHref, backLabelKey = "saBackToClients" }) {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useLangue();
@@ -139,7 +140,7 @@ export default function SuperAdminShell({ children, title, backHref }) {
                   href={backHref}
                   style={{ fontSize: 12.5, color: "var(--sub)", display: "block", marginBottom: 6 }}
                 >
-                  ← {t("saBackToClients")}
+                  ← {t(backLabelKey)}
                 </Link>
               )}
               {title && <h1 style={{ fontSize: 19, color: "var(--petrol)" }}>{title}</h1>}

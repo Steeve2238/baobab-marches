@@ -1,6 +1,8 @@
 {
   "name": "baobab-marches-backend",
   "version": "0.1.0",
+  "license": "UNLICENSED",
+  "private": true,
   "description": "Baobab Marches - API backend (Node/Express/PostgreSQL)",
   "main": "src/index.js",
   "type": "commonjs",

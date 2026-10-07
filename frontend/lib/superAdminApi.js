@@ -97,6 +97,30 @@ async function requestUpload(path, formData) {
   return data;
 }
 
+// Telechargement d'un fichier protege par le jeton (PDF d'offre ou de contrat, contrat signe) : fetch + blob + lien temporaire.
+async function telecharger(path, nomParDefaut) {
+  const token = getToken();
+  const langue = getLangueLocale() || "fr";
+  const res = await fetch(`${API_BASE_URL}${path}`, { headers: { "Accept-Language": langue, ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const erreur = new Error(data.error || `Erreur ${res.status}`);
+    erreur.status = res.status;
+    throw erreur;
+  }
+  const blob = await res.blob();
+  const dispo = res.headers.get("content-disposition") || "";
+  const m = /filename="?([^";]+)"?/i.exec(dispo);
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = (m && m[1]) || nomParDefaut;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 export const superAdminApi = {
   login: (email, mot_de_passe) =>
     request("/super-admin/auth/login", { method: "POST", body: JSON.stringify({ email, mot_de_passe }) }),
@@ -175,4 +199,28 @@ export const superAdminApi = {
   marquerFacturePayee: (id, data) =>
     request(`/super-admin/factures/${id}/marquer-payee`, { method: "PATCH", body: JSON.stringify(data) }),
   annulerFacture: (id) => request(`/super-admin/factures/${id}/annuler`, { method: "PATCH" }),
+
+  // --- Offres commerciales et contrats ---
+  getOffres: (query = "") => request(`/super-admin/offres${query}`),
+  getOffre: (id) => request(`/super-admin/offres/${id}`),
+  proposerLignesOffre: (query) => request(`/super-admin/offres/proposition?${query}`),
+  creerOffre: (data) => request("/super-admin/offres", { method: "POST", body: JSON.stringify(data) }),
+  modifierOffre: (id, data) => request(`/super-admin/offres/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  telechargerOffre: (id) => telecharger(`/super-admin/offres/${id}/pdf`, "offre.pdf"),
+  envoyerOffre: (id, data) => request(`/super-admin/offres/${id}/envoyer`, { method: "POST", body: JSON.stringify(data) }),
+  accepterOffre: (id, data) => request(`/super-admin/offres/${id}/accepter`, { method: "POST", body: JSON.stringify(data) }),
+  refuserOffre: (id, data) => request(`/super-admin/offres/${id}/refuser`, { method: "POST", body: JSON.stringify(data) }),
+  annulerOffre: (id) => request(`/super-admin/offres/${id}/annuler`, { method: "POST", body: JSON.stringify({}) }),
+  getContrats: (query = "") => request(`/super-admin/contrats${query}`),
+  getContrat: (id) => request(`/super-admin/contrats/${id}`),
+  regenererContrat: (id, data) => request(`/super-admin/contrats/${id}/regenerer`, { method: "POST", body: JSON.stringify(data || {}) }),
+  telechargerContrat: (id) => telecharger(`/super-admin/contrats/${id}/pdf`, "contrat.pdf"),
+  envoyerContrat: (id, data) => request(`/super-admin/contrats/${id}/envoyer`, { method: "POST", body: JSON.stringify(data) }),
+  deposerContratSigne: (id, fichier, dateSignature) => {
+    const fd = new FormData();
+    if (dateSignature) fd.append("date_signature", dateSignature);
+    fd.append("fichier", fichier);
+    return requestUpload(`/super-admin/contrats/${id}/signe`, fd);
+  },
+  telechargerContratSigne: (id) => telecharger(`/super-admin/contrats/${id}/signe`, "contrat-signe.pdf"),
 };

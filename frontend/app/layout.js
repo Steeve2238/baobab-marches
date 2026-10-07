@@ -4,6 +4,10 @@ import { LanguageProvider } from "../lib/i18n/LanguageContext";
 export const metadata = {
   title: "Baobab Marches",
   description: "L'ecosysteme complet de pilotage des marches publics et prives",
+  authors: [{ name: "YMS Groupe" }],
+  creator: "YMS Groupe",
+  publisher: "YMS Groupe",
+  other: { copyright: `© ${new Date().getFullYear()} YMS Groupe - Baobab Marchés. Tous droits réservés.` },
 };
 
 export default function RootLayout({ children }) {
@@ -18,6 +22,9 @@ export default function RootLayout({ children }) {
       </head>
       <body>
         <LanguageProvider>{children}</LanguageProvider>
+        <footer className="mention-copyright" role="contentinfo">
+          © {new Date().getFullYear()} YMS Groupe - Baobab Marchés. Tous droits réservés. Logiciel protégé par le droit d&apos;auteur ; toute reproduction, extraction ou rétro-ingénierie non autorisée est interdite et passible de poursuites.
+        </footer>
       </body>
     </html>
   );

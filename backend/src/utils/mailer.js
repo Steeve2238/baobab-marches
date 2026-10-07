@@ -85,4 +85,28 @@ Si vous n'etes pas a l'origine de cette demande, vous pouvez ignorer cet email :
   });
 }
 
-module.exports = { envoyerEmailReinitialisation };
+/**
+ * Envoi d'un document commercial (offre ou contrat) en piece jointe, depuis le Super Admin.
+ * `copie` : adresse de l'editeur mise en copie cachee, pour garder une trace dans sa messagerie.
+ */
+async function envoyerEmailAvecPieceJointe({ destinataire, sujet, message, pieces, repondreA, copie }) {
+  const nomExpediteur = process.env.SMTP_FROM_NAME || "Baobab Marches";
+  const transport = obtenirTransporteur();
+  const echapper = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const html = String(message || "")
+    .split(/\n{2,}/)
+    .map((p) => `<p>${echapper(p).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+  await transport.sendMail({
+    from: `"${nomExpediteur}" <${process.env.SMTP_USER}>`,
+    to: destinataire,
+    ...(repondreA ? { replyTo: repondreA } : {}),
+    ...(copie ? { bcc: copie } : {}),
+    subject: sujet,
+    text: message,
+    html,
+    attachments: (pieces || []).map((p) => ({ filename: p.nom, content: p.contenu, contentType: p.type })),
+  });
+}
+
+module.exports = { envoyerEmailReinitialisation, envoyerEmailAvecPieceJointe };

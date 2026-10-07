@@ -13,6 +13,7 @@ import { FIN_FR, FIN_EN } from "./financementDictionary";
 import { ECH_FR, ECH_EN } from "./echeancierDictionary";
 import { PLAN_FR, PLAN_EN } from "./planTresorerieDictionary";
 import { CEX_FR, CEX_EN } from "./compteExploitationDictionary";
+import { OFFRES_FR, OFFRES_EN } from "./offresDictionary";
 
 export const DICTIONARIES = {
   fr: {
@@ -3762,3 +3763,5 @@ export const TYPE_TEMPS_AUTRE_LABELS = {
     AUTRE: "Other",
   },
 };
+Object.assign(DICTIONARIES.fr, OFFRES_FR);
+Object.assign(DICTIONARIES.en, OFFRES_EN);

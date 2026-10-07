@@ -25,6 +25,14 @@ export default function SuperAdminParametresPage() {
     ninea: "",
     site_web: "",
     coordonnees_bancaires: "",
+    forme_juridique: "",
+    capital_social: "",
+    representant_nom: "",
+    representant_fonction: "",
+    ville_signature: "",
+    tribunal_competent: "",
+    penalite_pi_mois: "",
+    mention_propriete_intellectuelle: "",
   });
   const [logo, setLogo] = useState(null);
   // Signature + cachet : une seule image combinee (le cachet papier est
@@ -53,6 +61,14 @@ export default function SuperAdminParametresPage() {
           ninea: data.ninea || "",
           site_web: data.site_web || "",
           coordonnees_bancaires: data.coordonnees_bancaires || "",
+          forme_juridique: data.forme_juridique === null || data.forme_juridique === undefined ? "" : String(data.forme_juridique),
+          capital_social: data.capital_social === null || data.capital_social === undefined ? "" : String(data.capital_social),
+          representant_nom: data.representant_nom === null || data.representant_nom === undefined ? "" : String(data.representant_nom),
+          representant_fonction: data.representant_fonction === null || data.representant_fonction === undefined ? "" : String(data.representant_fonction),
+          ville_signature: data.ville_signature === null || data.ville_signature === undefined ? "" : String(data.ville_signature),
+          tribunal_competent: data.tribunal_competent === null || data.tribunal_competent === undefined ? "" : String(data.tribunal_competent),
+          penalite_pi_mois: data.penalite_pi_mois === null || data.penalite_pi_mois === undefined ? "" : String(data.penalite_pi_mois),
+          mention_propriete_intellectuelle: data.mention_propriete_intellectuelle === null || data.mention_propriete_intellectuelle === undefined ? "" : String(data.mention_propriete_intellectuelle),
         });
         setLogo(data.logo_base64 ? { base64: data.logo_base64, mime: data.logo_type_mime } : null);
         setSignatureCachet(
@@ -249,6 +265,69 @@ export default function SuperAdminParametresPage() {
             onChange={(e) => setForm((f) => ({ ...f, coordonnees_bancaires: e.target.value }))}
             style={inputStyle}
           />
+
+          <h3 style={{ fontSize: 12.5, color: "var(--petrol)", marginTop: 20, marginBottom: 4 }}>{t("saParContratsSection")}</h3>
+          <p style={{ fontSize: 11, color: "var(--sub)", marginBottom: 10 }}>{t("saParContratsAide")}</p>
+
+          <label style={{ ...labelStyle, marginTop: 0 }}>{t("saParFormeJuridique")}</label>
+          <input
+            value={form.forme_juridique}
+            onChange={(e) => setForm((f) => ({ ...f, forme_juridique: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <label style={{ ...labelStyle, marginTop: 12 }}>{t("saParCapital")}</label>
+          <input
+            value={form.capital_social}
+            onChange={(e) => setForm((f) => ({ ...f, capital_social: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <label style={{ ...labelStyle, marginTop: 12 }}>{t("saParRepresentantNom")}</label>
+          <input
+            value={form.representant_nom}
+            onChange={(e) => setForm((f) => ({ ...f, representant_nom: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <label style={{ ...labelStyle, marginTop: 12 }}>{t("saParRepresentantFonction")}</label>
+          <input
+            value={form.representant_fonction}
+            onChange={(e) => setForm((f) => ({ ...f, representant_fonction: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <label style={{ ...labelStyle, marginTop: 12 }}>{t("saParVilleSignature")}</label>
+          <input
+            value={form.ville_signature}
+            onChange={(e) => setForm((f) => ({ ...f, ville_signature: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <label style={{ ...labelStyle, marginTop: 12 }}>{t("saParTribunal")}</label>
+          <input
+            value={form.tribunal_competent}
+            onChange={(e) => setForm((f) => ({ ...f, tribunal_competent: e.target.value }))}
+            style={inputStyle}
+          />
+
+          <label style={{ ...labelStyle, marginTop: 12 }}>{t("saParPenalite")}</label>
+          <input
+            value={form.penalite_pi_mois}
+            onChange={(e) => setForm((f) => ({ ...f, penalite_pi_mois: e.target.value }))}
+            style={inputStyle}
+            inputMode="numeric"
+          />
+
+          <label style={{ ...labelStyle, marginTop: 12 }}>{t("saParMentionPi")}</label>
+          <textarea
+            rows={3}
+            value={form.mention_propriete_intellectuelle}
+            onChange={(e) => setForm((f) => ({ ...f, mention_propriete_intellectuelle: e.target.value }))}
+            style={{ ...inputStyle, resize: "vertical" }}
+            placeholder={t("saParMentionPiPlaceholder")}
+          />
+          <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>{t("saParMentionPiAide")}</p>
 
           {/* Signature + cachet : une seule image (le cachet papier est
               scanne avec la signature dessus, usage reel). Televersee

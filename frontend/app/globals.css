@@ -120,3 +120,16 @@ button {
   }
 }
 
+
+/* Mention de propriete intellectuelle affichee sur toutes les pages (ne pas retirer : voir COPYRIGHT.md et contrats clients). */
+.mention-copyright {
+  padding: 10px 16px 14px;
+  text-align: center;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--sub, #6b7280);
+  opacity: 0.85;
+}
+@media print {
+  .mention-copyright { display: none; }
+}

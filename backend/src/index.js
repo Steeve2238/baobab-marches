@@ -1,3 +1,4 @@
+/* © YMS Groupe - Baobab Marchés. Tous droits réservés. Logiciel propriétaire : voir COPYRIGHT.md. */
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");

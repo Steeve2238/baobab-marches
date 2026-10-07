@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { superAdminApi } from "../../../../lib/superAdminApi";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import SuperAdminShell from "../../../../lib/components/SuperAdminShell";
+import { STYLE_STATUT_OFFRE } from "../../offres/page";
 
 const STATUT_FACTURE_STYLE = {
   IMPAYEE: { color: "var(--brique)", background: "rgba(196,74,58,0.1)" },
@@ -30,6 +32,7 @@ export default function SuperAdminClientDetailPage() {
   const [licForm, setLicForm] = useState({ date_debut: new Date().toISOString().slice(0, 10), duree_mois: 12, generer_facture: true });
   const [licResultat, setLicResultat] = useState(null);
   const [copie, setCopie] = useState("");
+  const [offres, setOffres] = useState([]);
 
   function charger() {
     Promise.all([
@@ -38,8 +41,10 @@ export default function SuperAdminClientDetailPage() {
       superAdminApi.getFacturesClient(params.id),
       superAdminApi.getLicencesClient(params.id).catch(() => []),
       superAdminApi.getEtatLicences().catch(() => null),
+      superAdminApi.getOffres(`?client=${encodeURIComponent(params.id)}`).catch(() => []),
     ])
-      .then(([clientData, formulesData, facturesData, licencesData, etatData]) => {
+      .then(([clientData, formulesData, facturesData, licencesData, etatData, offresData]) => {
+        setOffres(offresData || []);
         setLicences(licencesData || []);
         setEtatLicences(etatData);
         setClient(clientData);
@@ -608,6 +613,35 @@ export default function SuperAdminClientDetailPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 10 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)" }}>{t("saOffTitre")}</h3>
+          <Link href={`/super-admin/offres/nouvelle?client=${client.id}`} style={{ ...boutonSecondaireStyle, textDecoration: "none", display: "inline-block" }}>
+            {t("saOffPreparerPourClient")}
+          </Link>
+        </div>
+        {offres.length === 0 ? (
+          <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("saOffAucune")}</p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <tbody>
+              {offres.map((o) => (
+                <tr key={o.id}>
+                  <td style={{ padding: "7px 8px 7px 0", fontSize: 12.5, borderBottom: "1px solid var(--line)" }}>
+                    <Link href={`/super-admin/offres/${o.id}`} style={{ color: "var(--petrol)", fontWeight: 600 }}>{o.numero}</Link>
+                  </td>
+                  <td style={{ padding: "7px 8px", fontSize: 12, borderBottom: "1px solid var(--line)" }}>{Math.round(Number(o.totaux?.total_ttc) || 0).toLocaleString("fr-FR")} XOF</td>
+                  <td style={{ padding: "7px 8px", borderBottom: "1px solid var(--line)" }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap", ...STYLE_STATUT_OFFRE[o.statut] }}>{t(`saOffStatut_${o.statut}`)}</span>
+                  </td>
+                  <td style={{ padding: "7px 0 7px 8px", fontSize: 12, borderBottom: "1px solid var(--line)" }}>{o.contrat_numero ? `${o.contrat_numero} · ${t(`saCtrStatut_${o.contrat_statut}`)}` : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
 
