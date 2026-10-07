@@ -355,13 +355,74 @@ async function chargerLignesFacture(factureId) {
   return result.rows;
 }
 
+// Quantite deja livree (BL au statut LIVRE) pour une ligne de facture : celle de cette facture, plus celle des autres
+// factures du meme devis portant la meme ligne (meme ordre et meme designation - cas acompte puis solde), pour ne
+// jamais livrer deux fois la meme marchandise. "exclureBlExpr" (optionnel) ecarte un BL donne du total.
+function sqlDejaLivree(flAlias, fAlias, exclureBlExpr) {
+  return `COALESCE((
+    SELECT SUM(b2.quantite_livree) FROM bon_livraison_ligne b2
+    JOIN bon_livraison bl2 ON bl2.id = b2.bon_livraison_id AND bl2.statut = 'LIVRE'${exclureBlExpr ? ` AND bl2.id <> ${exclureBlExpr}` : ""}
+    JOIN facture_vente_ligne fl2 ON fl2.id = b2.facture_ligne_id
+    JOIN facture_vente f2 ON f2.id = fl2.facture_vente_id
+    WHERE fl2.id = ${flAlias}.id
+       OR (f2.devis_id = ${fAlias}.devis_id AND fl2.ordre = ${flAlias}.ordre AND fl2.designation = ${flAlias}.designation)
+  ), 0)`;
+}
+
+// Etat de livraison d'une facture, ligne par ligne : quantite facturee, deja livree, reste a livrer.
+async function etatLivraisonFacture(q, factureId) {
+  const r = await q.query(
+    `SELECT fl.id, fl.ordre, fl.designation, fl.unite, fl.reference, fl.produit_id, fl.quantite,
+            ${sqlDejaLivree("fl", "f", null)} AS deja_livree
+     FROM facture_vente_ligne fl JOIN facture_vente f ON f.id = fl.facture_vente_id
+     WHERE fl.facture_vente_id = $1 ORDER BY fl.ordre ASC`,
+    [factureId]
+  );
+  return r.rows.map((l) => {
+    const quantite = Number(l.quantite);
+    const dejaLivree = Number(l.deja_livree);
+    return { ...l, quantite, deja_livree: dejaLivree, reste_a_livrer: Math.max(0, Math.round((quantite - dejaLivree) * 100) / 100) };
+  });
+}
+
+// Verifie qu'aucune ligne du BL (rattachee a une ligne de facture) ne depasse le reste a livrer.
+async function blDepasseLeReste(q, blId) {
+  const r = await q.query(
+    `SELECT l.id FROM bon_livraison_ligne l
+     JOIN facture_vente_ligne fl ON fl.id = l.facture_ligne_id
+     JOIN facture_vente f ON f.id = fl.facture_vente_id
+     WHERE l.bon_livraison_id = $1
+       AND l.quantite_livree > fl.quantite - ${sqlDejaLivree("fl", "f", "l.bon_livraison_id")} + 0.005`,
+    [blId]
+  );
+  return r.rows.length > 0;
+}
+
 async function chargerLignesBl(blId) {
   const result = await db.query(
-    `SELECT id, ordre, designation, unite, quantite_livree, reference, produit_id
-     FROM bon_livraison_ligne WHERE bon_livraison_id = $1 ORDER BY ordre ASC`,
+    `SELECT l.id, l.ordre, l.designation, l.unite, l.quantite_livree, l.reference, l.produit_id, l.facture_ligne_id,
+            fl.quantite AS quantite_facturee,
+            CASE WHEN fl.id IS NULL THEN NULL ELSE ${sqlDejaLivree("fl", "f", "l.bon_livraison_id")} END AS deja_livree
+     FROM bon_livraison_ligne l
+     LEFT JOIN facture_vente_ligne fl ON fl.id = l.facture_ligne_id
+     LEFT JOIN facture_vente f ON f.id = fl.facture_vente_id
+     WHERE l.bon_livraison_id = $1 ORDER BY l.ordre ASC`,
     [blId]
   );
   return result.rows;
+}
+
+
+// Taux de TVA applicable a un client : 0 si le client est exonere de TVA, sinon le taux parametre du tenant.
+async function tauxTvaApplicable(q, tenantId, clientId) {
+  const r = await q.query(
+    `SELECT t.taux_tva_pourcentage, COALESCE(c.exonere_tva, FALSE) AS exonere
+     FROM tenant t LEFT JOIN client_commercial c ON c.id = $2 AND c.tenant_id = t.id
+     WHERE t.id = $1`,
+    [tenantId, clientId]
+  );
+  if (r.rows.length === 0) return 0;
+  return r.rows[0].exonere ? 0 : Number(r.rows[0].taux_tva_pourcentage);
 }
 
 // ----------------------------------------------------------------------------
@@ -384,6 +445,8 @@ router.get("/clients", async (req, res) => {
 
 router.post("/clients", async (req, res) => {
   const { nom, adresse, telephone, email } = req.body;
+  const exonereTva = req.body.exonere_tva === true || req.body.exonere_tva === "true";
+  const motifExoneration = exonereTva && typeof req.body.motif_exoneration_tva === "string" ? req.body.motif_exoneration_tva.trim() || null : null;
   if (!nom || !nom.trim()) {
     return res.status(400).json({ error: t(req, "VENTE_CLIENT_FIELDS_REQUIRED") });
   }
@@ -392,9 +455,9 @@ router.post("/clients", async (req, res) => {
   if (ech.erreur) return res.status(400).json({ error: t(req, ech.erreur) });
   try {
     const result = await db.query(
-      `INSERT INTO client_commercial (id, tenant_id, nom, adresse, telephone, email, echeancier_json)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [uuidv4(), req.user.tenantId, nom.trim(), adresse || null, telephone || null, email || null, JSON.stringify(ech.lignes)]
+      `INSERT INTO client_commercial (id, tenant_id, nom, adresse, telephone, email, echeancier_json, exonere_tva, motif_exoneration_tva)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [uuidv4(), req.user.tenantId, nom.trim(), adresse || null, telephone || null, email || null, JSON.stringify(ech.lignes), exonereTva, motifExoneration]
     );
     // Compte tiers comptable (CAxxx) : cree automatiquement, sans jamais faire echouer la creation du client.
     await assurerTiersPourClientSilencieux(req.user.tenantId, result.rows[0]);
@@ -408,6 +471,10 @@ router.post("/clients", async (req, res) => {
 router.patch("/clients/:id", async (req, res) => {
   const { id } = req.params;
   const { nom, adresse, telephone, email, actif } = req.body;
+  // Exoneration de TVA : champ optionnel (absent = inchange).
+  const exonereTva = req.body.exonere_tva === undefined ? null : req.body.exonere_tva === true || req.body.exonere_tva === "true";
+  const motifFourni = req.body.motif_exoneration_tva !== undefined;
+  const motifExoneration = typeof req.body.motif_exoneration_tva === "string" ? req.body.motif_exoneration_tva.trim() || null : null;
   let echJson = null;
   if (req.body.echeancier !== undefined) {
     const ech = echeancierSvc.normaliser(req.body.echeancier);
@@ -418,9 +485,12 @@ router.patch("/clients/:id", async (req, res) => {
     const result = await db.query(
       `UPDATE client_commercial
        SET nom = COALESCE($1, nom), adresse = $2, telephone = $3, email = $4,
-           actif = COALESCE($5, actif), echeancier_json = COALESCE($8::jsonb, echeancier_json)
+           actif = COALESCE($5, actif), echeancier_json = COALESCE($8::jsonb, echeancier_json),
+           exonere_tva = COALESCE($9, exonere_tva),
+           motif_exoneration_tva = CASE WHEN $9 = FALSE THEN NULL WHEN $10 THEN $11 ELSE motif_exoneration_tva END
        WHERE id = $6 AND tenant_id = $7 RETURNING *`,
-      [nom || null, adresse || null, telephone || null, email || null, actif != null ? actif : null, id, req.user.tenantId, echJson]
+      [nom || null, adresse || null, telephone || null, email || null, actif != null ? actif : null, id, req.user.tenantId, echJson,
+       exonereTva, motifFourni, motifExoneration]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "VENTE_CLIENT_NOT_FOUND") });
@@ -987,7 +1057,7 @@ router.get("/devis/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
-      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse
+      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse, cl.exonere_tva AS client_exonere_tva, cl.motif_exoneration_tva AS client_motif_exoneration_tva
        FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
        WHERE d.id = $1 AND d.tenant_id = $2`,
       [id, req.user.tenantId]
@@ -1050,8 +1120,8 @@ router.post("/devis", async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const tenantResult = await client.query(`SELECT taux_tva_pourcentage FROM tenant WHERE id = $1`, [req.user.tenantId]);
-    const tauxTva = tenantResult.rows[0].taux_tva_pourcentage;
+    // TVA : taux parametre du tenant, ou 0 si le client est exonere de TVA.
+    const tauxTva = await tauxTvaApplicable(client, req.user.tenantId, client_commercial_id);
 
     const calcul = calculerLignesEtTotaux(lignes, tauxTva, pourcentage_remise);
     if (calcul.erreur === "VIDE") {
@@ -1186,6 +1256,20 @@ router.patch("/devis/:id", async (req, res) => {
       return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_EDITABLE") });
     }
 
+    // TVA applicable maintenant : taux parametre du tenant (ou 0 si le client est exonere). Un devis encore modifiable
+    // reprend ainsi toujours le parametre courant (et non le taux fige a sa creation). Les devis importes (montants saisis
+    // en TTC, taux 0) ne sont jamais recalcules. Un devis deja facture ne change de taux qu'en cas de modification
+    // explicite des lignes ou de la remise.
+    let tauxCible = Number(devisActuel.taux_tva_pourcentage);
+    if (!devisActuel.importe) {
+      const tauxParam = await tauxTvaApplicable(client, req.user.tenantId, devisActuel.client_commercial_id);
+      const nbFactures = Number(
+        (await client.query(`SELECT COUNT(*) AS n FROM facture_vente WHERE devis_id = $1 AND statut != 'ANNULEE'`, [id])).rows[0].n
+      );
+      if (nbFactures === 0 || lignes || pourcentage_remise !== undefined) tauxCible = tauxParam;
+    }
+    const tauxChange = tauxCible !== Number(devisActuel.taux_tva_pourcentage);
+
     let totaux = {
       total_ht: devisActuel.total_ht,
       pourcentage_remise: devisActuel.pourcentage_remise,
@@ -1197,13 +1281,13 @@ router.patch("/devis/:id", async (req, res) => {
     // La remise peut etre modifiee meme sans retoucher les lignes (ex :
     // negociation apres coup sur un devis deja chiffre) - on recalcule alors
     // les totaux a partir des lignes existantes.
-    if (lignes || pourcentage_remise !== undefined) {
+    if (lignes || pourcentage_remise !== undefined || tauxChange) {
       const lignesPourCalcul = lignes || (await chargerLignesDevis(id)).map((l) => ({
         designation: l.designation, unite: l.unite, quantite: l.quantite, prix_unitaire_ht: l.prix_unitaire_ht,
         non_chiffre: l.non_chiffre, mention_prix: l.mention_prix,
       }));
       const remisePourCalcul = pourcentage_remise !== undefined ? pourcentage_remise : devisActuel.pourcentage_remise;
-      const calcul = calculerLignesEtTotaux(lignesPourCalcul, devisActuel.taux_tva_pourcentage, remisePourCalcul);
+      const calcul = calculerLignesEtTotaux(lignesPourCalcul, tauxCible, remisePourCalcul);
       if (calcul.erreur === "VIDE") {
         await client.query("ROLLBACK");
         return res.status(400).json({ error: t(req, "VENTE_DEVIS_FIELDS_REQUIRED") });
@@ -1252,12 +1336,12 @@ router.patch("/devis/:id", async (req, res) => {
            statut = CASE WHEN $11 THEN 'BROUILLON' ELSE statut END,
            valide_par = CASE WHEN $11 THEN NULL ELSE valide_par END,
            date_validation = CASE WHEN $11 THEN NULL ELSE date_validation END,
-           nb_lignes_non_chiffrees = $14
+           nb_lignes_non_chiffrees = $14, taux_tva_pourcentage = $15
        WHERE id = $12 AND tenant_id = $13`,
       [
         objet || null, date_devis || null, conditions_paiement || null, delai_livraison || null, validite_offre || null,
         totaux.total_ht, totaux.pourcentage_remise, totaux.montant_remise, totaux.montant_tva, totaux.total_ttc,
-        repasseEnBrouillon, id, req.user.tenantId, totaux.nb_lignes_non_chiffrees || 0,
+        repasseEnBrouillon, id, req.user.tenantId, totaux.nb_lignes_non_chiffrees || 0, tauxCible,
       ]
     );
     if (req.body.echeancier !== undefined) {
@@ -1278,7 +1362,7 @@ router.patch("/devis/:id", async (req, res) => {
     // nom de client vide apres n'importe quelle edition tant que la page
     // n'etait pas rechargee.
     const devisAvecClient = await client.query(
-      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse
+      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse, cl.exonere_tva AS client_exonere_tva, cl.motif_exoneration_tva AS client_motif_exoneration_tva
        FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
        WHERE d.id = $1`,
       [id]
@@ -1398,6 +1482,29 @@ router.patch("/devis/:id/client", async (req, res) => {
       return res.status(400).json({ error: t(req, "VENTE_CLIENT_NOT_FOUND") });
     }
 
+    // Le nouveau client peut etre (ou ne plus etre) exonere de TVA : on recalcule le taux et les totaux du devis
+    // (devis importes exclus : montants saisis en TTC).
+    let tauxCible = Number(devisActuel.taux_tva_pourcentage);
+    let totaux = null;
+    if (!devisActuel.importe) {
+      tauxCible = await tauxTvaApplicable(client, req.user.tenantId, client_commercial_id);
+      if (tauxCible !== Number(devisActuel.taux_tva_pourcentage)) {
+        const lignesPourCalcul = (await chargerLignesDevis(id)).map((l) => ({
+          designation: l.designation, unite: l.unite, quantite: l.quantite, prix_unitaire_ht: l.prix_unitaire_ht,
+          non_chiffre: l.non_chiffre, mention_prix: l.mention_prix,
+        }));
+        const calcul = calculerLignesEtTotaux(lignesPourCalcul, tauxCible, devisActuel.pourcentage_remise);
+        if (!calcul.erreur) {
+          const { deja_facture: dejaFacture } = await calculerAvancementFacturation(client, req.user.tenantId, id, calcul.total_ttc);
+          if (calcul.total_ttc + 0.01 < dejaFacture) {
+            await client.query("ROLLBACK");
+            return res.status(409).json({ error: t(req, "VENTE_DEVIS_MONTANT_INFERIEUR_FACTURE") });
+          }
+          totaux = calcul;
+        }
+      }
+    }
+
     // Comme pour toute autre edition d'un devis Valide (PATCH /devis/:id
     // ci-dessus) : corriger le client change la substance du document, il
     // doit donc etre revalide avant de pouvoir generer une nouvelle facture
@@ -1408,12 +1515,14 @@ router.patch("/devis/:id/client", async (req, res) => {
        SET client_commercial_id = $1,
            statut = CASE WHEN $2 THEN 'BROUILLON' ELSE statut END,
            valide_par = CASE WHEN $2 THEN NULL ELSE valide_par END,
-           date_validation = CASE WHEN $2 THEN NULL ELSE date_validation END
+           date_validation = CASE WHEN $2 THEN NULL ELSE date_validation END,
+           taux_tva_pourcentage = $5,
+           montant_tva = COALESCE($6, montant_tva), total_ttc = COALESCE($7, total_ttc)
        WHERE id = $3 AND tenant_id = $4`,
-      [client_commercial_id, repasseEnBrouillon, id, req.user.tenantId]
+      [client_commercial_id, repasseEnBrouillon, id, req.user.tenantId, tauxCible, totaux ? totaux.montant_tva : null, totaux ? totaux.total_ttc : null]
     );
     const devisAvecClient = await client.query(
-      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse
+      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse, cl.exonere_tva AS client_exonere_tva, cl.motif_exoneration_tva AS client_motif_exoneration_tva
        FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
        WHERE d.id = $1`,
       [id]
@@ -1583,19 +1692,16 @@ router.get("/factures", async (req, res) => {
   const { statut } = req.query;
   try {
     const result = await db.query(
-      statut
-        ? `SELECT f.*, cl.nom AS client_nom,
-                  bl.id AS bl_id, bl.statut AS bl_statut
-           FROM facture_vente f
-           JOIN client_commercial cl ON cl.id = f.client_commercial_id
-           LEFT JOIN bon_livraison bl ON bl.facture_vente_id = f.id
-           WHERE f.tenant_id = $1 AND f.statut = $2 ORDER BY f.date_creation DESC`
-        : `SELECT f.*, cl.nom AS client_nom,
-                  bl.id AS bl_id, bl.statut AS bl_statut
-           FROM facture_vente f
-           JOIN client_commercial cl ON cl.id = f.client_commercial_id
-           LEFT JOIN bon_livraison bl ON bl.facture_vente_id = f.id
-           WHERE f.tenant_id = $1 ORDER BY f.date_creation DESC`,
+      `SELECT f.*, cl.nom AS client_nom,
+              (SELECT b.id FROM bon_livraison b WHERE b.facture_vente_id = f.id ORDER BY b.rang DESC LIMIT 1) AS bl_id,
+              (SELECT b.statut FROM bon_livraison b WHERE b.facture_vente_id = f.id ORDER BY b.rang DESC LIMIT 1) AS bl_statut,
+              (SELECT COUNT(*) FROM bon_livraison b WHERE b.facture_vente_id = f.id)::int AS bl_nb,
+              (SELECT COUNT(*) FROM bon_livraison b WHERE b.facture_vente_id = f.id AND b.statut = 'LIVRE')::int AS bl_nb_livres,
+              (SELECT COALESCE(SUM(GREATEST(fl.quantite - ${sqlDejaLivree("fl", "f", null)}, 0)), 0)
+                 FROM facture_vente_ligne fl WHERE fl.facture_vente_id = f.id) AS reste_a_livrer
+       FROM facture_vente f
+       JOIN client_commercial cl ON cl.id = f.client_commercial_id
+       WHERE f.tenant_id = $1 ${statut ? "AND f.statut = $2" : ""} ORDER BY f.date_creation DESC`,
       statut ? [req.user.tenantId, statut] : [req.user.tenantId]
     );
     res.json(result.rows);
@@ -1609,7 +1715,7 @@ router.get("/factures/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
-      `SELECT f.*, cl.nom AS client_nom, cl.adresse AS client_adresse
+      `SELECT f.*, cl.nom AS client_nom, cl.adresse AS client_adresse, cl.exonere_tva AS client_exonere_tva, cl.motif_exoneration_tva AS client_motif_exoneration_tva
        FROM facture_vente f JOIN client_commercial cl ON cl.id = f.client_commercial_id
        WHERE f.id = $1 AND f.tenant_id = $2`,
       [id, req.user.tenantId]
@@ -1617,9 +1723,31 @@ router.get("/factures/:id", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "VENTE_FACTURE_NOT_FOUND") });
     }
-    const lignes = await chargerLignesFacture(id);
-    const blResult = await db.query(`SELECT id, numero, statut FROM bon_livraison WHERE facture_vente_id = $1`, [id]);
-    res.json({ ...result.rows[0], lignes, bon_livraison: blResult.rows[0] || null });
+    const lignes = await etatLivraisonFacture(db, id);
+    const lignesFacture = await chargerLignesFacture(id);
+    const etatParId = new Map(lignes.map((l) => [l.id, l]));
+    const lignesAvecLivraison = lignesFacture.map((l) => ({
+      ...l,
+      deja_livree: etatParId.get(l.id)?.deja_livree ?? 0,
+      reste_a_livrer: etatParId.get(l.id)?.reste_a_livrer ?? 0,
+    }));
+    const blResult = await db.query(
+      `SELECT id, numero, rang, statut, date_bl FROM bon_livraison WHERE facture_vente_id = $1 ORDER BY rang ASC`,
+      [id]
+    );
+    const bons = blResult.rows;
+    const resteTotal = lignes.reduce((n, l) => n + l.reste_a_livrer, 0);
+    const nbLivres = bons.filter((b) => b.statut === "LIVRE").length;
+    const livraisonStatut = nbLivres === 0 ? "NON_LIVREE" : resteTotal > 0 ? "PARTIELLE" : "LIVREE";
+    res.json({
+      ...result.rows[0],
+      lignes: lignesAvecLivraison,
+      bons_livraison: bons,
+      bon_livraison: bons[bons.length - 1] || null,
+      livraison_statut: livraisonStatut,
+      reste_a_livrer_total: resteTotal,
+      peut_generer_bl: resteTotal > 0 && !bons.some((b) => b.statut === "BROUILLON"),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "VENTE_FACTURE_FETCH_ERROR") });
@@ -1905,31 +2033,48 @@ router.post("/factures/:id/generer-bl", async (req, res) => {
       return res.status(404).json({ error: t(req, "VENTE_FACTURE_NOT_FOUND") });
     }
     const facture = factureResult.rows[0];
-
-    const dejaBl = await client.query(`SELECT id FROM bon_livraison WHERE facture_vente_id = $1`, [id]);
-    if (dejaBl.rows.length > 0) {
+    if (facture.statut === "ANNULEE") {
       await client.query("ROLLBACK");
-      return res.status(409).json({ error: t(req, "VENTE_FACTURE_ALREADY_HAS_BL") });
+      return res.status(409).json({ error: t(req, "VENTE_BL_FACTURE_ANNULEE") });
     }
 
-    const lignesFacture = await chargerLignesFacture(id);
+    // Plusieurs BL par facture (livraisons partielles) : un seul brouillon a la fois, et seulement s'il reste du
+    // stock a livrer. Le nouveau BL propose d'office le reste a livrer de chaque ligne.
+    const brouillon = await client.query(
+      `SELECT id FROM bon_livraison WHERE facture_vente_id = $1 AND statut = 'BROUILLON'`,
+      [id]
+    );
+    if (brouillon.rows.length > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_BL_BROUILLON_EXISTANT") });
+    }
+    const etat = await etatLivraisonFacture(client, id);
+    const aLivrer = etat.filter((l) => l.reste_a_livrer > 0);
+    if (aLivrer.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_BL_RIEN_A_LIVRER") });
+    }
+    const rang = Number(
+      (await client.query(`SELECT COALESCE(MAX(rang), 0) + 1 AS r FROM bon_livraison WHERE facture_vente_id = $1`, [id])).rows[0].r
+    );
 
     // Le BL reutilise le numero ET le mois d'emission de la facture (pas de
     // tirage sur le compteur VENTE) : reproduit la pratique observee chez
     // Steeve ou Facture et BL d'une meme transaction portent le meme numero.
+    // Les livraisons suivantes (rang 2, 3...) gardent ce numero, suffixe /2, /3 a l'affichage.
     const blResult = await client.query(
-      `INSERT INTO bon_livraison (id, tenant_id, numero, mois_emission, facture_vente_id, client_commercial_id, cree_par)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [uuidv4(), req.user.tenantId, facture.numero, facture.mois_emission, id, facture.client_commercial_id, req.user.sub]
+      `INSERT INTO bon_livraison (id, tenant_id, numero, mois_emission, facture_vente_id, client_commercial_id, cree_par, rang)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [uuidv4(), req.user.tenantId, facture.numero, facture.mois_emission, id, facture.client_commercial_id, req.user.sub, rang]
     );
     const bl = blResult.rows[0];
 
     let ordre = 0;
-    for (const ligne of lignesFacture) {
+    for (const ligne of aLivrer) {
       await client.query(
-        `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree, reference, produit_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [uuidv4(), bl.id, ordre++, ligne.designation, ligne.unite, ligne.quantite, ligne.reference || null, ligne.produit_id || null]
+        `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree, reference, produit_id, facture_ligne_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [uuidv4(), bl.id, ordre++, ligne.designation, ligne.unite, ligne.reste_a_livrer, ligne.reference || null, ligne.produit_id || null, ligne.id]
       );
     }
 
@@ -1968,24 +2113,41 @@ router.patch("/bl/:id", async (req, res) => {
       // Le lien article (reference interne + produit) des lignes existantes est conserve : retrouve par id de ligne,
       // sinon par produit_id fourni, toujours reverifie en base (jamais fait confiance au frontend).
       const anciennes = (
-        await client.query(`SELECT id, produit_id FROM bon_livraison_ligne WHERE bon_livraison_id = $1`, [id])
+        await client.query(`SELECT id, produit_id, reference, facture_ligne_id FROM bon_livraison_ligne WHERE bon_livraison_id = $1`, [id])
       ).rows;
       const produitParLigne = new Map(anciennes.map((l) => [l.id, l.produit_id]));
+      const ancienneParId = new Map(anciennes.map((l) => [l.id, l]));
       const aInserer = [];
       for (const ligne of lignes) {
         const quantite = Number(ligne.quantite_livree);
         if (!ligne.designation || !Number.isFinite(quantite) || quantite < 0) continue;
         const produitId = (ligne.id && produitParLigne.get(ligne.id)) || (typeof ligne.produit_id === "string" ? ligne.produit_id : null);
-        aInserer.push({ designation: ligne.designation, unite: ligne.unite || "U", quantite, produit_id: produitId && UUID_LIGNE_RE.test(produitId) ? produitId : null });
+        const ancienne = ligne.id ? ancienneParId.get(ligne.id) : null;
+        aInserer.push({
+          id_existant: ancienne ? ligne.id : null,
+          designation: ligne.designation, unite: ligne.unite || "U", quantite,
+          produit_id: produitId && UUID_LIGNE_RE.test(produitId) ? produitId : null,
+          reference: ancienne ? ancienne.reference : null,
+          facture_ligne_id: ancienne ? ancienne.facture_ligne_id : null,
+        });
       }
       await verifierProduitsLignes(client, req.user.tenantId, aInserer);
+      // Garde-fou : on ne peut pas livrer plus que le reste a livrer de la ligne de facture.
+      const etat = new Map((await etatLivraisonFacture(client, existant.rows[0].facture_vente_id)).map((l) => [l.id, l]));
+      for (const l of aInserer) {
+        const e = l.facture_ligne_id ? etat.get(l.facture_ligne_id) : null;
+        if (e && l.quantite > e.reste_a_livrer + 0.005) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: t(req, "VENTE_BL_QUANTITE_DEPASSE") });
+        }
+      }
       await client.query(`DELETE FROM bon_livraison_ligne WHERE bon_livraison_id = $1`, [id]);
       let ordre = 0;
       for (const l of aInserer) {
         await client.query(
-          `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree, reference, produit_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [uuidv4(), id, ordre++, l.designation, l.unite, l.quantite, l.reference, l.produit_id]
+          `INSERT INTO bon_livraison_ligne (id, bon_livraison_id, ordre, designation, unite, quantite_livree, reference, produit_id, facture_ligne_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [l.id_existant || uuidv4(), id, ordre++, l.designation, l.unite, l.quantite, l.reference, l.produit_id, l.facture_ligne_id]
         );
       }
     }
@@ -2011,6 +2173,27 @@ router.patch("/bl/:id/marquer-livre", async (req, res) => {
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
+    // Verrouille la facture (serialise deux validations simultanees) puis controle le reste a livrer.
+    const blAVerifier = await client.query(
+      `SELECT facture_vente_id FROM bon_livraison WHERE id = $1 AND tenant_id = $2 AND statut = 'BROUILLON'`,
+      [id, req.user.tenantId]
+    );
+    if (blAVerifier.rows.length > 0) {
+      await client.query(`SELECT id FROM facture_vente WHERE id = $1 FOR UPDATE`, [blAVerifier.rows[0].facture_vente_id]);
+      if (await blDepasseLeReste(client, id)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: t(req, "VENTE_BL_QUANTITE_DEPASSE") });
+      }
+      // Les lignes a quantite 0 (non livrees cette fois) sont retirees du BL ; un BL entierement a 0 est refuse.
+      const nbLivrees = Number(
+        (await client.query(`SELECT COUNT(*) AS n FROM bon_livraison_ligne WHERE bon_livraison_id = $1 AND quantite_livree > 0`, [id])).rows[0].n
+      );
+      if (nbLivrees === 0) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: t(req, "VENTE_BL_VIDE") });
+      }
+      await client.query(`DELETE FROM bon_livraison_ligne WHERE bon_livraison_id = $1 AND quantite_livree <= 0`, [id]);
+    }
     const result = await client.query(
       `UPDATE bon_livraison SET statut = 'LIVRE' WHERE id = $1 AND tenant_id = $2 AND statut = 'BROUILLON' RETURNING *`,
       [id, req.user.tenantId]
@@ -2044,7 +2227,7 @@ router.patch("/bl/:id/marquer-livre", async (req, res) => {
         date: bl.date_bl,
         origineType: "BL",
         origineId: id,
-        libelle: `BL ${bl.numero}`,
+        libelle: `BL ${bl.numero}${bl.rang > 1 ? `/${bl.rang}` : ""}`,
         userId: req.user.sub,
       });
       const stock = await stockProduit(client, req.user.tenantId, l.produit_id);
@@ -2165,7 +2348,10 @@ router.get("/suivi", async (req, res) => {
          f.statut AS facture_statut, f.date_facture, f.date_echeance,
          f.total_ttc AS facture_total_ttc, f.reference_bc_client,
          f.type_facturation, f.pourcentage_acompte, f.montant_net_a_payer,
-         bl.id AS bl_id, bl.numero AS bl_numero, bl.statut AS bl_statut, bl.date_bl,
+         bl.id AS bl_id, bl.numero AS bl_numero, bl.rang AS bl_rang, bl.statut AS bl_statut, bl.date_bl,
+         (SELECT COUNT(*) FROM bon_livraison b WHERE b.facture_vente_id = f.id)::int AS bl_nb,
+         (SELECT COALESCE(SUM(GREATEST(fl.quantite - ${sqlDejaLivree("fl", "f", null)}, 0)), 0)
+            FROM facture_vente_ligne fl WHERE fl.facture_vente_id = f.id) AS reste_a_livrer,
          COALESCE((
            SELECT SUM(f2.montant_net_a_payer) FROM facture_vente f2
            WHERE f2.devis_id = d.id AND f2.statut != 'ANNULEE'
@@ -2177,7 +2363,7 @@ router.get("/suivi", async (req, res) => {
        FROM devis d
        JOIN client_commercial cl ON cl.id = d.client_commercial_id
        LEFT JOIN facture_vente f ON f.devis_id = d.id
-       LEFT JOIN bon_livraison bl ON bl.facture_vente_id = f.id
+       LEFT JOIN bon_livraison bl ON bl.id = (SELECT b.id FROM bon_livraison b WHERE b.facture_vente_id = f.id ORDER BY b.rang DESC LIMIT 1)
        WHERE d.tenant_id = $1
        ORDER BY d.date_devis DESC, d.date_creation DESC
        LIMIT 500`,

@@ -71,7 +71,7 @@ export default function BlListePage() {
                 <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 13.5 }}>
-                      BL-{numeroAffiche(bl.numero, bl.mois_emission)} — {bl.client_nom}
+                      BL-{numeroAffiche(bl.numero, bl.mois_emission)}{bl.rang > 1 ? `/${bl.rang}` : ""} — {bl.client_nom}
                     </div>
                     <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
                       {new Date(bl.date_bl).toLocaleDateString()} · {t("venteInvoiceLinkedLabel")} {numeroAffiche(bl.facture_numero, bl.mois_emission)}

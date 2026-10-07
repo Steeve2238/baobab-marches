@@ -106,6 +106,7 @@ export default function BlDetailPage() {
       const maj = await api.marquerBlLivre(bl.id);
       setBl((prev) => ({ ...prev, ...maj }));
       setAvertStock(maj.avertissements_stock || []);
+      charger();
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -131,7 +132,9 @@ export default function BlDetailPage() {
   const style = STATUT_STYLE[bl.statut] || {};
   const peutFacturer = possedeRole(["COMPTABLE", "FINANCIER"]);
   const modifiable = bl.statut === "BROUILLON" && peutFacturer;
-  const numeroComplet = numeroAffiche(bl.numero, bl.mois_emission);
+  const numeroComplet = numeroAffiche(bl.numero, bl.mois_emission) + (bl.rang > 1 ? `/${bl.rang}` : "");
+  const lignesAffichees = modifiable ? lignesEdition : bl.lignes;
+  const suiviReste = (bl.lignes || []).some((l) => l.facture_ligne_id);
 
   return (
     <AppShell title={`BL-${numeroComplet}`} backHref="/marches/consultation-restreinte/bl">
@@ -208,20 +211,34 @@ export default function BlDetailPage() {
               {(bl.lignes || []).some((l) => l.reference) && <th style={{ padding: "6px 4px" }}>{t("venteReferenceLabel")}</th>}
               <th style={{ padding: "6px 4px" }}>{t("venteDesignationLabel")}</th>
               <th style={{ padding: "6px 4px" }}>{t("venteUniteLabel")}</th>
+              {suiviReste && <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteFactureeLabel")}</th>}
+              {suiviReste && <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteDejaLivreeLabel")}</th>}
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteLivreeLabel")}</th>
+              {suiviReste && <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteResteALivrerLabel")}</th>}
             </tr>
           </thead>
           <tbody>
-            {(modifiable ? lignesEdition : bl.lignes).map((l, index) => (
+            {lignesAffichees.map((l, index) => (
               <tr key={l.id || index} style={{ borderBottom: "1px solid var(--line-soft)" }}>
                 {(bl.lignes || []).some((l) => l.reference) && <td className="mono" style={{ padding: "6px 4px", fontSize: 12 }}>{l.reference || ""}</td>}
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.designation}</td>
                 <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.unite}</td>
+                {suiviReste && (
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                    {l.quantite_facturee != null ? Number(l.quantite_facturee).toLocaleString() : "—"}
+                  </td>
+                )}
+                {suiviReste && (
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                    {l.deja_livree != null ? Number(l.deja_livree).toLocaleString() : "—"}
+                  </td>
+                )}
                 <td style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
                   {modifiable ? (
                     <input
                       type="number"
                       min="0"
+                      max={l.quantite_facturee != null ? Math.max(0, Number(l.quantite_facturee) - Number(l.deja_livree || 0)) : undefined}
                       step="0.01"
                       value={l.quantite_livree}
                       onChange={(e) => majQuantite(index, e.target.value)}
@@ -231,6 +248,13 @@ export default function BlDetailPage() {
                     <span className="mono">{Number(l.quantite_livree).toLocaleString()}</span>
                   )}
                 </td>
+                {suiviReste && (
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right", fontWeight: 700 }}>
+                    {l.quantite_facturee != null
+                      ? Math.max(0, Math.round((Number(l.quantite_facturee) - Number(l.deja_livree || 0) - (Number(l.quantite_livree) || 0)) * 100) / 100).toLocaleString()
+                      : "—"}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

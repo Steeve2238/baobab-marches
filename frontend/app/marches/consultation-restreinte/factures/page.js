@@ -89,7 +89,13 @@ export default function FacturesVentePage() {
                           migration 024. */}
                       {Number(f.montant_net_a_payer).toLocaleString()} XOF
                       {f.reference_bc_client ? ` · ${f.reference_bc_client}` : ""}
-                      {f.bl_id ? ` · BL ${t(`venteBlStatut_${f.bl_statut}`)}` : ` · ${t("venteNoBlYet")}`}
+                      {f.bl_nb === 0
+                        ? ` · ${t("venteNoBlYet")}`
+                        : f.bl_nb_livres === 0
+                        ? ` · BL ${t("venteBlStatut_BROUILLON")}`
+                        : Number(f.reste_a_livrer) > 0
+                        ? ` · ${t("venteLivraisonStatut_PARTIELLE")} (${t("venteResteALivrerLabel")} ${Number(f.reste_a_livrer).toLocaleString()})`
+                        : ` · ${t("venteLivraisonStatut_LIVREE")}`}
                     </div>
                   </div>
                   <span style={{ fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap", ...style }}>

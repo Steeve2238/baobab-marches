@@ -689,10 +689,19 @@ export default function DevisDetailPage() {
               </div>
             </>
           )}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
-            <span>{t("venteTvaLabel")} ({Number(devis.taux_tva_pourcentage)}%)</span>
-            <span className="mono">{Number(devis.montant_tva).toLocaleString()} XOF</span>
-          </div>
+          {Number(devis.taux_tva_pourcentage) > 0 ? (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
+              <span>{t("venteTvaLabel")} ({Number(devis.taux_tva_pourcentage)}%)</span>
+              <span className="mono">{Number(devis.montant_tva).toLocaleString()} XOF</span>
+            </div>
+          ) : (
+            devis.client_exonere_tva && (
+              <div style={{ fontSize: 12, color: "var(--sub)", textAlign: "right" }}>
+                {t("venteExonereTvaMention")}
+                {devis.client_motif_exoneration_tva ? ` (${devis.client_motif_exoneration_tva})` : ""}
+              </div>
+            )
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: "var(--petrol)" }}>
             <span>{totalPartiel ? t("venteTotalTtcPartielLabel") : t("venteTotalTtcLabel")}</span>
             <span className="mono">{Number(devis.total_ttc).toLocaleString()} XOF</span>

@@ -17,7 +17,7 @@ export default function ClientsCommerciauxPage() {
   const [clients, setClients] = useState([]);
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
-  const [form, setForm] = useState({ nom: "", adresse: "", telephone: "", email: "", echeancier: [] });
+  const [form, setForm] = useState({ nom: "", adresse: "", telephone: "", email: "", echeancier: [], exonere_tva: false, motif_exoneration_tva: "" });
   // Edition des coordonnees d'un client existant (chantier du 02/10/2026,
   // demande de Steeve : "pas le stylo qui nous permet de modifier... un
   // client dont le nom aurait ete mal saisi"). PATCH /clients/:id acceptait
@@ -49,7 +49,7 @@ export default function ClientsCommerciauxPage() {
     try {
       const nouveau = await api.createClientCommercial({ ...form, echeancier: pourApi(form.echeancier) });
       setClients((prev) => [...prev, nouveau].sort((a, b) => a.nom.localeCompare(b.nom)));
-      setForm({ nom: "", adresse: "", telephone: "", email: "", echeancier: [] });
+      setForm({ nom: "", adresse: "", telephone: "", email: "", echeancier: [], exonere_tva: false, motif_exoneration_tva: "" });
     } catch (err) {
       setErreur(err.message);
     }
@@ -71,6 +71,8 @@ export default function ClientsCommerciauxPage() {
       adresse: client.adresse || "",
       telephone: client.telephone || "",
       email: client.email || "",
+      exonere_tva: !!client.exonere_tva,
+      motif_exoneration_tva: client.motif_exoneration_tva || "",
     });
     setErreur("");
   }
@@ -127,6 +129,23 @@ export default function ClientsCommerciauxPage() {
           onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
           style={inputStyle}
         />
+        <label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12, fontSize: 12.5, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={!!form.exonere_tva}
+            onChange={(e) => setForm((f) => ({ ...f, exonere_tva: e.target.checked }))}
+          />
+          <span style={{ fontWeight: 600 }}>{t("venteClientExonereTva")}</span>
+        </label>
+        {form.exonere_tva && (
+          <input
+            placeholder={t("venteClientMotifExoneration")}
+            value={form.motif_exoneration_tva}
+            onChange={(e) => setForm((f) => ({ ...f, motif_exoneration_tva: e.target.value }))}
+            style={{ ...inputStyle, marginTop: 6 }}
+          />
+        )}
+        <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>{t("venteClientExonereTvaAide")}</p>
         <div style={{ marginTop: 12 }}>
           <EcheancierEditor sens="CLIENT" valeur={form.echeancier} onChange={(v) => setForm((f) => ({ ...f, echeancier: v }))} />
         </div>
@@ -178,6 +197,25 @@ export default function ClientsCommerciauxPage() {
                     style={inputStyle}
                   />
                 </div>
+                <div>
+                  <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={!!formEdition.exonere_tva}
+                      onChange={(e) => setFormEdition((f) => ({ ...f, exonere_tva: e.target.checked }))}
+                    />
+                    <span style={{ fontWeight: 600 }}>{t("venteClientExonereTva")}</span>
+                  </label>
+                  {formEdition.exonere_tva && (
+                    <input
+                      placeholder={t("venteClientMotifExoneration")}
+                      value={formEdition.motif_exoneration_tva}
+                      onChange={(e) => setFormEdition((f) => ({ ...f, motif_exoneration_tva: e.target.value }))}
+                      style={{ ...inputStyle, marginTop: 6 }}
+                    />
+                  )}
+                  <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>{t("venteClientExonereTvaAide")}</p>
+                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button type="submit" disabled={enregistrementEdition} style={boutonPrincipalStyle}>
                     {t("save")}
@@ -198,7 +236,17 @@ export default function ClientsCommerciauxPage() {
               <div key={c.id} className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.nom}</div>
+                  <div style={{ fontWeight: 600, fontSize: 13.5 }}>
+                    {c.nom}
+                    {c.exonere_tva && (
+                      <span
+                        title={c.motif_exoneration_tva || ""}
+                        style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, color: "var(--petrol)", background: "rgba(20,79,85,0.1)" }}
+                      >
+                        {t("venteClientExonereBadge")}
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 2 }}>
                     {[c.adresse, c.telephone, c.email].filter(Boolean).join(" · ") || "—"}
                   </div>

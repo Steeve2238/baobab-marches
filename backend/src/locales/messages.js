@@ -375,6 +375,11 @@ const MESSAGES = {
     VENTE_BL_UPDATE_ERROR: "Erreur lors de la mise a jour du bon de livraison.",
     VENTE_BL_GENERATE_ERROR: "Erreur lors de la generation du bon de livraison.",
     VENTE_FACTURE_ALREADY_HAS_BL: "Un bon de livraison existe deja pour cette facture.",
+    VENTE_BL_BROUILLON_EXISTANT: "Un bon de livraison en brouillon existe deja pour cette facture : marquez-le livre (ou ajustez-le) avant d'en creer un autre.",
+    VENTE_BL_RIEN_A_LIVRER: "Cette facture est entierement livree : il ne reste rien a livrer.",
+    VENTE_BL_QUANTITE_DEPASSE: "La quantite livree depasse le reste a livrer pour au moins une ligne (quantite facturee moins quantites deja livrees).",
+    VENTE_BL_FACTURE_ANNULEE: "Impossible de creer un bon de livraison pour une facture annulee.",
+    VENTE_BL_VIDE: "Ce bon de livraison ne contient aucune quantite livree : saisissez au moins une quantite avant de le marquer livre.",
 
     VENTE_STATISTIQUES_FETCH_ERROR: "Erreur lors de la recuperation des statistiques.",
     VENTE_SUIVI_FETCH_ERROR: "Erreur lors de la recuperation du suivi.",
@@ -997,6 +1002,11 @@ const MESSAGES = {
     VENTE_BL_UPDATE_ERROR: "Error while updating the delivery note.",
     VENTE_BL_GENERATE_ERROR: "Error while generating the delivery note.",
     VENTE_FACTURE_ALREADY_HAS_BL: "A delivery note already exists for this invoice.",
+    VENTE_BL_BROUILLON_EXISTANT: "A draft delivery note already exists for this invoice: mark it delivered (or adjust it) before creating another.",
+    VENTE_BL_RIEN_A_LIVRER: "This invoice is fully delivered: nothing is left to deliver.",
+    VENTE_BL_QUANTITE_DEPASSE: "The delivered quantity exceeds the remaining quantity to deliver on at least one line (invoiced quantity minus quantities already delivered).",
+    VENTE_BL_FACTURE_ANNULEE: "Cannot create a delivery note for a cancelled invoice.",
+    VENTE_BL_VIDE: "This delivery note has no delivered quantity: enter at least one quantity before marking it delivered.",
 
     VENTE_STATISTIQUES_FETCH_ERROR: "Error while retrieving statistics.",
     VENTE_SUIVI_FETCH_ERROR: "Error while retrieving the tracking overview.",

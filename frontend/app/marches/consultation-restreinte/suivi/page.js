@@ -148,12 +148,17 @@ export default function SuiviVentesPage() {
                       {l.bl_id ? (
                         <>
                           <Link href={`/marches/consultation-restreinte/bl/${l.bl_id}`} className="mono" style={{ color: "var(--petrol)" }}>
-                            BL-{numeroAffiche(l.bl_numero, l.facture_mois_emission)}
+                            BL-{numeroAffiche(l.bl_numero, l.facture_mois_emission)}{l.bl_rang > 1 ? `/${l.bl_rang}` : ""}
                           </Link>
                           <div>
                             <span style={{ ...badgeStyle, ...(BL_STYLE[l.bl_statut] || {}) }}>
                               {t(`venteBlStatut_${l.bl_statut}`)}
                             </span>
+                            {Number(l.bl_nb) > 0 && Number(l.reste_a_livrer) > 0 && l.bl_statut === "LIVRE" && (
+                              <span style={{ ...badgeStyle, color: "var(--ocre)", background: "rgba(224,149,76,0.12)", marginLeft: 4 }}>
+                                {t("venteLivraisonStatut_PARTIELLE")}
+                              </span>
+                            )}
                           </div>
                         </>
                       ) : (

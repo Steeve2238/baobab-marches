@@ -171,23 +171,62 @@ export default function FactureVenteDetailPage() {
               </button>
             </>
           )}
-          {facture.bon_livraison ? (
-            <Link href={`/marches/consultation-restreinte/bl/${facture.bon_livraison.id}`} style={boutonSecondaireStyle}>
-              {t("venteViewBlButton")} ({numeroAffiche(facture.bon_livraison.numero, facture.mois_emission)})
+          {(facture.bons_livraison || []).map((b) => (
+            <Link key={b.id} href={`/marches/consultation-restreinte/bl/${b.id}`} style={boutonSecondaireStyle}>
+              {t("venteViewBlButton")} ({numeroAffiche(b.numero, facture.mois_emission)}{b.rang > 1 ? `/${b.rang}` : ""} · {t(`venteBlStatut_${b.statut}`)})
             </Link>
-          ) : (
-            peutFacturer &&
-            facture.statut !== "ANNULEE" && (
-              <button onClick={handleGenererBl} disabled={action} style={boutonPrincipalStyle}>
-                {t("venteGenerateBlButton")}
-              </button>
-            )
+          ))}
+          {peutFacturer && facture.statut !== "ANNULEE" && facture.peut_generer_bl && (
+            <button onClick={handleGenererBl} disabled={action} style={boutonPrincipalStyle}>
+              {(facture.bons_livraison || []).length === 0 ? t("venteGenerateBlButton") : t("venteGenerateNextBlButton")}
+            </button>
           )}
           <button onClick={() => window.print()} style={boutonSecondaireStyle}>
             {t("print")}
           </button>
         </div>
       </div>
+
+      {(facture.bons_livraison || []).length > 0 && (
+        <div className="card no-print" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{t("venteLivraisonSuiviTitre")}</div>
+            <span
+              style={{
+                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20,
+                ...(facture.livraison_statut === "LIVREE"
+                  ? { color: "#2E7D5B", background: "rgba(46,125,91,0.12)" }
+                  : { color: "var(--ocre)", background: "rgba(224,149,76,0.12)" }),
+              }}
+            >
+              {t(`venteLivraisonStatut_${facture.livraison_statut}`)}
+              {facture.livraison_statut === "PARTIELLE" ? ` · ${t("venteResteALivrerLabel")} ${Number(facture.reste_a_livrer_total).toLocaleString()}` : ""}
+            </span>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ fontSize: 11, textAlign: "left", borderBottom: "1px solid var(--line)" }}>
+                <th style={{ padding: "6px 4px" }}>{t("venteDesignationLabel")}</th>
+                <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteFactureeLabel")}</th>
+                <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteDejaLivreeLabel")}</th>
+                <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteResteALivrerLabel")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {facture.lignes.map((l) => (
+                <tr key={l.id} style={{ borderBottom: "1px solid var(--line-soft)" }}>
+                  <td style={{ padding: "6px 4px", fontSize: 12.5 }}>{l.designation}</td>
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.quantite).toLocaleString()}</td>
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.deja_livree).toLocaleString()}</td>
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right", fontWeight: 700, color: Number(l.reste_a_livrer) > 0 ? "var(--ocre)" : "#2E7D5B" }}>
+                    {Number(l.reste_a_livrer).toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="card print-letter" style={{ padding: "28px 32px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 24, borderBottom: "2px solid var(--petrol)", paddingBottom: 16, marginBottom: 20 }}>
@@ -265,10 +304,19 @@ export default function FactureVenteDetailPage() {
               </div>
             </>
           )}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
-            <span>{t("venteTvaLabel")} ({Number(facture.taux_tva_pourcentage)}%)</span>
-            <span className="mono">{Number(facture.montant_tva).toLocaleString()} XOF</span>
-          </div>
+          {Number(facture.taux_tva_pourcentage) > 0 ? (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
+              <span>{t("venteTvaLabel")} ({Number(facture.taux_tva_pourcentage)}%)</span>
+              <span className="mono">{Number(facture.montant_tva).toLocaleString()} XOF</span>
+            </div>
+          ) : (
+            facture.client_exonere_tva && (
+              <div style={{ fontSize: 12, color: "var(--sub)", textAlign: "right" }}>
+                {t("venteExonereTvaMention")}
+                {facture.client_motif_exoneration_tva ? ` (${facture.client_motif_exoneration_tva})` : ""}
+              </div>
+            )
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: "var(--petrol)" }}>
             <span>{t("venteTotalTtcLabel")}</span>
             <span className="mono">{Number(facture.total_ttc).toLocaleString()} XOF</span>

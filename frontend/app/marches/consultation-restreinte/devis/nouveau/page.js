@@ -70,10 +70,13 @@ function NouveauDevisFormulaire() {
   // serveur a partir des memes lignes (jamais fait confiance a un total
   // envoye par le frontend).
   // Lignes non chiffrees (NC...) : montant null, exclues du total (04/10/2026).
+  // Client exonere de TVA : taux 0 (le serveur applique la meme regle a l'enregistrement).
+  const clientChoisi = clients.find((x) => x.id === form.client_commercial_id);
+  const tauxEffectif = clientChoisi?.exonere_tva ? 0 : tauxTva;
   const lignesCalculees = lignes.map((l) => ({ ...l, montant_ht: montantLigneSaisie(l) }));
   const pourcentageRemise = Number(form.pourcentage_remise) || 0;
   const { totalHt, montantRemise, htNet: totalHtNet, tva: montantTva, totalTtc, nbNonChiffrees } =
-    totauxPrevisualises(lignes, tauxTva, pourcentageRemise);
+    totauxPrevisualises(lignes, tauxEffectif, pourcentageRemise);
   const totalPartiel = nbNonChiffrees > 0;
 
   async function handleSubmit(e) {
@@ -290,10 +293,14 @@ function NouveauDevisFormulaire() {
               </div>
             </>
           )}
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
-            <span>{t("venteTvaLabel")} ({tauxTva}%)</span>
-            <span className="mono">{montantTva.toLocaleString()} XOF</span>
-          </div>
+          {tauxEffectif > 0 ? (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--sub)" }}>
+              <span>{t("venteTvaLabel")} ({tauxEffectif}%)</span>
+              <span className="mono">{montantTva.toLocaleString()} XOF</span>
+            </div>
+          ) : (
+            clientChoisi?.exonere_tva && <div style={{ fontSize: 12, color: "var(--sub)", textAlign: "right" }}>{t("venteExonereTvaMention")}</div>
+          )}
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, color: "var(--petrol)" }}>
             <span>{totalPartiel ? t("venteTotalTtcPartielLabel") : t("venteTotalTtcLabel")}</span>
             <span className="mono">{totalTtc.toLocaleString()} XOF</span>
