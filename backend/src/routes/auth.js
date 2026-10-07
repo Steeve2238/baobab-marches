@@ -39,7 +39,7 @@ router.post("/login", async (req, res) => {
   try {
     const userResult = await db.query(
       `SELECT u.id, u.tenant_id, u.nom, u.prenom, u.email, u.mot_de_passe_hash, u.mot_de_passe_temporaire,
-              u.langue_preferee, u.actif, te.actif AS tenant_actif
+              u.langue_preferee, u.actif, te.actif AS tenant_actif, te.mode_hebergement
        FROM utilisateur u
        JOIN tenant te ON te.id = u.tenant_id
        WHERE u.email = $1`,
@@ -57,6 +57,10 @@ router.post("/login", async (req, res) => {
     // part avant l'ajout du module Super Admin (04/09/2026).
     if (!user.tenant_actif) {
       return res.status(401).json({ error: t(req, "LOGIN_TENANT_SUSPENDU") });
+    }
+    // Client en version installee (mode LOCAL) : ses donnees vivent chez lui, pas sur cette plateforme.
+    if (user.mode_hebergement === "LOCAL") {
+      return res.status(401).json({ error: t(req, "LOGIN_TENANT_LOCAL") });
     }
 
     const passwordOk = await bcrypt.compare(mot_de_passe, user.mot_de_passe_hash);

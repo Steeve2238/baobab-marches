@@ -11,6 +11,7 @@ const FORM_VIDE = {
   secteur_activite: "",
   pays: "Senegal",
   formule_abonnement_id: "",
+  mode_hebergement: "HEBERGE",
   admin_nom: "",
   admin_prenom: "",
   admin_email: "",
@@ -74,12 +75,18 @@ export default function SuperAdminNouveauClientPage() {
           <div style={{ fontSize: 12.5, marginBottom: 4 }}>
             <strong>{t("emailLabel")}:</strong> {resultat.premier_administrateur.email}
           </div>
-          <div style={{ fontSize: 12.5, marginBottom: 10 }}>
-            <strong>{t("saTempPasswordLabel")}:</strong>
-          </div>
-          <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>
-            {resultat.premier_administrateur.mot_de_passe_temporaire}
-          </div>
+          {resultat.mode_hebergement === "LOCAL" ? (
+            <div style={{ fontSize: 12.5, marginTop: 8 }}>{t("saClientLocalCreatedNote")}</div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12.5, marginBottom: 10 }}>
+                <strong>{t("saTempPasswordLabel")}:</strong>
+              </div>
+              <div className="mono" style={{ fontSize: 15, fontWeight: 700 }}>
+                {resultat.premier_administrateur.mot_de_passe_temporaire}
+              </div>
+            </>
+          )}
           {resultat.premiere_facture_installation && (
             <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(0,0,0,0.08)" }}>
               <div style={{ fontSize: 12.5 }}>
@@ -133,6 +140,18 @@ export default function SuperAdminNouveauClientPage() {
           onChange={(e) => setForm((f) => ({ ...f, pays: e.target.value }))}
           style={inputStyle}
         />
+        <label style={{ ...labelStyle, marginTop: 10 }}>{t("saModeHebergementLabel")}</label>
+        <select
+          value={form.mode_hebergement}
+          onChange={(e) => setForm((f) => ({ ...f, mode_hebergement: e.target.value }))}
+          style={inputStyle}
+        >
+          <option value="HEBERGE">{t("saModeHeberge")}</option>
+          <option value="LOCAL">{t("saModeLocal")}</option>
+        </select>
+        <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>
+          {form.mode_hebergement === "LOCAL" ? t("saModeLocalHelp") : t("saModeHebergeHelp")}
+        </p>
         <label style={{ ...labelStyle, marginTop: 10 }}>{t("saFormuleLabel")}</label>
         <select
           value={form.formule_abonnement_id}

@@ -24,14 +24,23 @@ export default function SuperAdminClientDetailPage() {
   const [formuleSelectionnee, setFormuleSelectionnee] = useState("");
   const [modePaiementFacture, setModePaiementFacture] = useState({});
   const [prixCompta, setPrixCompta] = useState("");
+  const [licences, setLicences] = useState([]);
+  const [etatLicences, setEtatLicences] = useState(null);
+  const [licForm, setLicForm] = useState({ date_debut: new Date().toISOString().slice(0, 10), duree_mois: 12, generer_facture: true });
+  const [licResultat, setLicResultat] = useState(null);
+  const [copie, setCopie] = useState("");
 
   function charger() {
     Promise.all([
       superAdminApi.getClient(params.id),
       superAdminApi.getFormules(),
       superAdminApi.getFacturesClient(params.id),
+      superAdminApi.getLicencesClient(params.id).catch(() => []),
+      superAdminApi.getEtatLicences().catch(() => null),
     ])
-      .then(([clientData, formulesData, facturesData]) => {
+      .then(([clientData, formulesData, facturesData, licencesData, etatData]) => {
+        setLicences(licencesData || []);
+        setEtatLicences(etatData);
         setClient(clientData);
         setFormuleSelectionnee(clientData.formule_abonnement_id || "");
         setPrixCompta(String(Number(clientData.module_comptabilite_prix_mensuel_xof || 0)));
@@ -49,6 +58,61 @@ export default function SuperAdminClientDetailPage() {
   }
 
   useEffect(charger, [params.id, router]);
+
+  async function handleChangerMode(mode) {
+    if (mode === client.mode_hebergement) return;
+    const message = mode === "LOCAL" ? t("saModeSwitchToLocalConfirm") : t("saModeSwitchToHebergeConfirm");
+    if (typeof window !== "undefined" && !window.confirm(message)) return;
+    setErreur("");
+    try {
+      const maj = await superAdminApi.patchModeHebergement(client.id, mode);
+      setClient((prev) => ({ ...prev, ...maj }));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  async function handleGenererLicence() {
+    setErreur("");
+    setLicResultat(null);
+    try {
+      const lic = await superAdminApi.genererLicence(client.id, {
+        date_debut: licForm.date_debut,
+        duree_mois: Number(licForm.duree_mois),
+        generer_facture: licForm.generer_facture,
+      });
+      setLicResultat(lic);
+      setLicences((prev) => [lic, ...prev]);
+      const [facturesData, clientData] = await Promise.all([
+        superAdminApi.getFacturesClient(client.id),
+        superAdminApi.getClient(client.id),
+      ]);
+      setFactures(facturesData);
+      setClient(clientData);
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  async function copierTexte(texte, repere) {
+    try {
+      await navigator.clipboard.writeText(texte);
+      setCopie(repere);
+      setTimeout(() => setCopie(""), 2000);
+    } catch (_err) {
+      setErreur(t("saLicenceCopyFailed"));
+    }
+  }
+
+  function telechargerLicence(lic) {
+    const blob = new Blob([lic.cle], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const lien = document.createElement("a");
+    lien.href = url;
+    lien.download = `${lic.numero_serie}.lic`;
+    lien.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function handleSuspendre() {
     setErreur("");
@@ -216,6 +280,117 @@ export default function SuperAdminClientDetailPage() {
       </div>
 
       <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)" }}>{t("saModeHebergementLabel")}</h3>
+          <span
+            style={{
+              fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 20, whiteSpace: "nowrap",
+              color: client.mode_hebergement === "LOCAL" ? "var(--ocre)" : "var(--petrol)",
+              background: client.mode_hebergement === "LOCAL" ? "rgba(224,149,76,0.12)" : "rgba(20,79,85,0.1)",
+            }}
+          >
+            {client.mode_hebergement === "LOCAL" ? t("saModeLocalBadge") : t("saModeHebergeBadge")}
+          </span>
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 0, marginBottom: 10 }}>
+          {client.mode_hebergement === "LOCAL" ? t("saModeLocalHelp") : t("saModeHebergeHelp")}
+        </p>
+        <select value={client.mode_hebergement} onChange={(e) => handleChangerMode(e.target.value)} style={inputStyle}>
+          <option value="HEBERGE">{t("saModeHeberge")}</option>
+          <option value="LOCAL">{t("saModeLocal")}</option>
+        </select>
+      </div>
+
+      {client.mode_hebergement === "LOCAL" && (
+        <div className="card" style={{ marginBottom: 16, maxWidth: 640 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 6 }}>{t("saLicenceSection")}</h3>
+          <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 0, marginBottom: 12 }}>{t("saLicenceDescription")}</p>
+          {etatLicences && !etatLicences.cle_signature_configuree && (
+            <p style={{ fontSize: 12, color: "var(--brique)", marginBottom: 12 }}>{t("saLicenceNoSigningKey")}</p>
+          )}
+          {client.licence_date_fin && (
+            <p style={{ fontSize: 12, marginTop: 0, marginBottom: 12 }}>
+              {t("saLicenceValidUntil")} <strong>{String(client.licence_date_fin).slice(0, 10)}</strong>
+            </p>
+          )}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <div>
+              <label style={{ fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 4 }}>{t("saLicenceStartLabel")}</label>
+              <input type="date" value={licForm.date_debut} onChange={(e) => setLicForm((f) => ({ ...f, date_debut: e.target.value }))} style={{ ...inputStyle, width: 160 }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 4 }}>{t("saLicenceDurationLabel")}</label>
+              <input type="number" min="1" max="60" value={licForm.duree_mois} onChange={(e) => setLicForm((f) => ({ ...f, duree_mois: e.target.value }))} style={{ ...inputStyle, width: 90 }} />
+            </div>
+            <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12, paddingBottom: 8 }}>
+              <input type="checkbox" checked={licForm.generer_facture} onChange={(e) => setLicForm((f) => ({ ...f, generer_facture: e.target.checked }))} />
+              {t("saLicenceWithInvoice")}
+            </label>
+            <button
+              onClick={handleGenererLicence}
+              disabled={!client.formule_abonnement_id || (etatLicences && !etatLicences.cle_signature_configuree)}
+              style={boutonPrincipalStyle}
+            >
+              {licences.length === 0 ? t("saLicenceGenerateButton") : t("saLicenceRenewButton")}
+            </button>
+          </div>
+          {!client.formule_abonnement_id && (
+            <p style={{ fontSize: 11.5, color: "var(--brique)", marginTop: 8 }}>{t("saClientSansFormuleNote")}</p>
+          )}
+
+          {licResultat && (
+            <div style={{ marginTop: 16, padding: 12, border: "1px solid var(--ocre)", borderRadius: 8, background: "rgba(224,149,76,0.08)" }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
+                {t("saLicenceGeneratedTitle")} — {licResultat.numero_serie}
+              </div>
+              {licResultat.premier_administrateur && (
+                <div style={{ fontSize: 12.5, marginBottom: 10 }}>
+                  <div>
+                    <strong>{t("saLicenceFirstAdmin")}:</strong> {licResultat.premier_administrateur.prenom} {licResultat.premier_administrateur.nom} — {licResultat.premier_administrateur.email}
+                  </div>
+                  <div style={{ marginTop: 4 }}>
+                    <strong>{t("saTempPasswordLabel")}:</strong>{" "}
+                    <span className="mono" style={{ fontWeight: 700 }}>{licResultat.premier_administrateur.mot_de_passe_temporaire}</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "var(--brique)", marginTop: 4 }}>{t("saLicenceTempPasswordOnce")}</div>
+                </div>
+              )}
+              <textarea readOnly value={licResultat.cle} rows={5} className="mono" style={{ ...inputStyle, fontSize: 11, wordBreak: "break-all" }} />
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button onClick={() => copierTexte(licResultat.cle, "nouvelle")} style={boutonSecondaireStyle}>
+                  {copie === "nouvelle" ? t("saLicenceCopied") : t("saLicenceCopyButton")}
+                </button>
+                <button onClick={() => telechargerLicence(licResultat)} style={boutonSecondaireStyle}>{t("saLicenceDownloadButton")}</button>
+              </div>
+            </div>
+          )}
+
+          {licences.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{t("saLicenceHistory")}</div>
+              <div style={{ display: "grid", gap: 6 }}>
+                {licences.map((l) => (
+                  <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, fontSize: 12.5, padding: "6px 0", borderBottom: "1px solid var(--line-soft)", flexWrap: "wrap" }}>
+                    <span>
+                      <strong>{l.numero_serie}</strong> · {String(l.date_debut).slice(0, 10)} → {String(l.date_fin).slice(0, 10)}
+                      {l.max_utilisateurs ? ` · ${l.max_utilisateurs} ${t("saUsersCount")}` : ""}
+                      {l.modules_json && l.modules_json.comptabilite ? ` · ${t("saModuleComptaSection")}` : ""}
+                    </span>
+                    <span style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => copierTexte(l.cle, l.id)} style={boutonSecondaireStyle}>
+                        {copie === l.id ? t("saLicenceCopied") : t("saLicenceCopyButton")}
+                      </button>
+                      <button onClick={() => telechargerLicence(l)} style={boutonSecondaireStyle}>{t("saLicenceDownloadButton")}</button>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
         <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 12 }}>{t("saFormuleSection")}</h3>
         <select
           value={formuleSelectionnee}
@@ -331,9 +506,11 @@ export default function SuperAdminClientDetailPage() {
             <button onClick={handleGenererFactureInstallation} style={boutonSecondaireStyle}>
               {t("saGenerateInstallationInvoiceButton")}
             </button>
-            <button onClick={handleGenererFacture} style={boutonSecondaireStyle}>
-              {t("saGenerateInvoiceButton")}
-            </button>
+            {client.mode_hebergement !== "LOCAL" && (
+              <button onClick={handleGenererFacture} style={boutonSecondaireStyle}>
+                {t("saGenerateInvoiceButton")}
+              </button>
+            )}
           </div>
         </div>
         {factures.length === 0 ? (
@@ -353,6 +530,8 @@ export default function SuperAdminClientDetailPage() {
                         {facture.periode} —{" "}
                         {facture.type_facture === "INSTALLATION"
                           ? t("saInvoiceTypeInstallation")
+                          : facture.type_facture === "LICENCE"
+                          ? t("saInvoiceTypeLicence")
                           : t("saInvoiceTypeAbonnement")}{" "}
                         ({facture.formule_nom})
                       </div>

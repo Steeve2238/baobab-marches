@@ -9,6 +9,7 @@ const { requireSuperAdmin } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { genererMotDePasseTemporaire } = require("../utils/motDePasseTemporaire");
 const { envoyerEmailReinitialisation } = require("../utils/mailer");
+const licenceSvc = require("../services/licence");
 
 const router = express.Router();
 
@@ -375,7 +376,10 @@ const SELECT_CLIENT = `
   SELECT te.id, te.raison_sociale, te.secteur_activite, te.pays, te.actif, te.date_creation,
          te.formule_abonnement_id,
          te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof, te.module_comptabilite_date_activation,
+         te.mode_hebergement,
+         (SELECT MAX(l.date_fin) FROM licence_emise l WHERE l.tenant_id = te.id) AS licence_date_fin,
          fa.nom AS formule_nom, fa.prix_mensuel_xof AS formule_prix_mensuel_xof,
+         fa.prix_licence_annuelle_xof AS formule_prix_licence_annuelle_xof,
          fa.plafond_utilisateurs AS formule_plafond_utilisateurs,
          (SELECT COUNT(*) FROM utilisateur u WHERE u.tenant_id = te.id) AS nombre_utilisateurs,
          (SELECT COUNT(*) FROM utilisateur u WHERE u.tenant_id = te.id AND u.actif) AS nombre_utilisateurs_actifs
@@ -430,16 +434,18 @@ router.post("/clients", async (req, res) => {
   if (!raison_sociale || !admin_nom || !admin_prenom || !admin_email) {
     return res.status(400).json({ error: t(req, "SUPER_ADMIN_CLIENT_FIELDS_REQUIRED") });
   }
+  // Mode d'hebergement : HEBERGE (chez Steeve, defaut) ou LOCAL (version installee chez le client).
+  const modeHebergement = req.body.mode_hebergement === "LOCAL" ? "LOCAL" : "HEBERGE";
 
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
 
     const tenantResult = await client.query(
-      `INSERT INTO tenant (id, raison_sociale, secteur_activite, pays, formule_abonnement_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO tenant (id, raison_sociale, secteur_activite, pays, formule_abonnement_id, mode_hebergement)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [uuidv4(), raison_sociale, secteur_activite || null, pays || "Senegal", formule_abonnement_id || null]
+      [uuidv4(), raison_sociale, secteur_activite || null, pays || "Senegal", formule_abonnement_id || null, modeHebergement]
     );
     const tenantId = tenantResult.rows[0].id;
 
@@ -588,6 +594,200 @@ router.patch("/clients/:id/module-comptabilite", async (req, res) => {
   }
 });
 
+// PATCH /api/super-admin/clients/:id/mode-hebergement - bascule un client entre HEBERGE (sa base est chez nous,
+// abonnement mensuel) et LOCAL (version installee chez lui, licence annuelle). Corps : { mode: "HEBERGE" | "LOCAL" }.
+// Un client LOCAL ne peut plus se connecter a la plateforme hebergee (ses donnees vivent chez lui) ; aucune donnee
+// n'est supprimee ni deplacee par ce changement.
+router.patch("/clients/:id/mode-hebergement", async (req, res) => {
+  const mode = req.body && req.body.mode;
+  if (mode !== "HEBERGE" && mode !== "LOCAL") {
+    return res.status(400).json({ error: t(req, "SUPER_ADMIN_MODE_HEBERGEMENT_INVALID") });
+  }
+  try {
+    const result = await db.query(`UPDATE tenant SET mode_hebergement = $1 WHERE id = $2 RETURNING id`, [mode, req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "SUPER_ADMIN_CLIENT_NOT_FOUND") });
+    }
+    const clientResult = await db.query(`${SELECT_CLIENT} WHERE te.id = $1`, [req.params.id]);
+    res.json(clientResult.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "SUPER_ADMIN_CLIENT_UPDATE_ERROR") });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Licences (version installable) - voir services/licence.js
+// ---------------------------------------------------------------------------
+
+// GET /api/super-admin/licences/etat - la cle de signature est-elle configuree sur ce serveur ? (+ cle publique)
+router.get("/licences/etat", async (req, res) => {
+  const publique = licenceSvc.clePubliqueConfiguree();
+  res.json({ cle_signature_configuree: !!publique, cle_publique: publique });
+});
+
+// POST /api/super-admin/licences/verifier - controle une cle (signature + etat a la date du jour). Corps : { cle }.
+router.post("/licences/verifier", async (req, res) => {
+  const publique = licenceSvc.clePubliqueConfiguree();
+  if (!publique) return res.status(503).json({ error: t(req, "SUPER_ADMIN_LICENCE_SANS_CLE") });
+  const v = licenceSvc.verifierLicence(req.body && req.body.cle, publique);
+  if (!v.valide) return res.status(400).json({ valide: false, erreur: v.erreur });
+  const { admin, ...resume } = v.payload;
+  res.json({ valide: true, licence: resume, avec_activation: !!admin, ...licenceSvc.etatLicence(v.payload, new Date().toISOString().slice(0, 10)) });
+});
+
+// GET /api/super-admin/clients/:id/licences - licences deja emises pour ce client
+router.get("/clients/:id/licences", async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, numero_serie, date_emission, date_debut, date_fin, max_utilisateurs, modules_json, cle, facture_id
+       FROM licence_emise WHERE tenant_id = $1 ORDER BY date_emission DESC`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "SUPER_ADMIN_CLIENTS_FETCH_ERROR") });
+  }
+});
+
+// POST /api/super-admin/clients/:id/licence - genere la cle de licence d'un client en mode LOCAL.
+// Corps (tous facultatifs) : { date_debut: "AAAA-MM-JJ" (defaut aujourd'hui), duree_mois: 12, generer_facture: true,
+//   inclure_activation: bool (defaut : vrai si c'est la premiere licence du client) }.
+// - Premiere licence = "activation" : elle embarque le premier compte administrateur (nom, e-mail, EMPREINTE d'un mot
+//   de passe temporaire neuf, jamais le mot de passe lui-meme) ; le mot de passe temporaire est renvoye UNE seule fois
+//   dans la reponse, a transmettre au client a part. Une licence de renouvellement ne contient pas ce bloc.
+// - Genere aussi la facture de licence (formule : prix annuel au prorata de la duree + supplement comptabilite si le
+//   module est actif) sauf generer_facture = false.
+router.post("/clients/:id/licence", async (req, res) => {
+  const body = req.body || {};
+  const dureeMois = body.duree_mois === undefined ? 12 : Number(body.duree_mois);
+  if (!Number.isInteger(dureeMois) || dureeMois < 1 || dureeMois > 60) {
+    return res.status(400).json({ error: t(req, "SUPER_ADMIN_LICENCE_PARAMS_INVALID") });
+  }
+  const debut = body.date_debut || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(debut) || Number.isNaN(Date.parse(debut))) {
+    return res.status(400).json({ error: t(req, "SUPER_ADMIN_LICENCE_PARAMS_INVALID") });
+  }
+  if (!licenceSvc.chargerClePrivee()) {
+    return res.status(503).json({ error: t(req, "SUPER_ADMIN_LICENCE_SANS_CLE") });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const tenantResult = await client.query(
+      `SELECT te.id, te.raison_sociale, te.pays, te.secteur_activite, te.mode_hebergement,
+              te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof,
+              te.formule_abonnement_id, fa.nom AS formule_nom, fa.plafond_utilisateurs, fa.prix_licence_annuelle_xof
+       FROM tenant te LEFT JOIN formule_abonnement fa ON fa.id = te.formule_abonnement_id
+       WHERE te.id = $1 FOR UPDATE OF te`,
+      [req.params.id]
+    );
+    const tenant = tenantResult.rows[0];
+    if (!tenant) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: t(req, "SUPER_ADMIN_CLIENT_NOT_FOUND") });
+    }
+    if (tenant.mode_hebergement !== "LOCAL") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "SUPER_ADMIN_LICENCE_CLIENT_HEBERGE") });
+    }
+    if (!tenant.formule_abonnement_id) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, "SUPER_ADMIN_CLIENT_SANS_FORMULE") });
+    }
+
+    const nbPrecedentes = Number((await client.query(`SELECT COUNT(*) AS n FROM licence_emise WHERE tenant_id = $1`, [tenant.id])).rows[0].n);
+    const inclureActivation = body.inclure_activation === undefined ? nbPrecedentes === 0 : !!body.inclure_activation;
+
+    // Date de fin = debut + duree_mois - 1 jour
+    const d = new Date(`${debut}T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + dureeMois);
+    d.setUTCDate(d.getUTCDate() - 1);
+    const fin = d.toISOString().slice(0, 10);
+
+    const annee = debut.slice(0, 4);
+    const nbAnnee = Number((await client.query(`SELECT COUNT(*) AS n FROM licence_emise WHERE numero_serie LIKE $1`, [`LIC-${annee}-%`])).rows[0].n);
+    const numeroSerie = `LIC-${annee}-${String(nbAnnee + 1).padStart(4, "0")}`;
+
+    const modules = { comptabilite: !!tenant.module_comptabilite_actif };
+    const payload = {
+      v: 1,
+      serie: numeroSerie,
+      client: tenant.raison_sociale,
+      pays: tenant.pays,
+      secteur: tenant.secteur_activite || null,
+      formule: tenant.formule_nom,
+      max_utilisateurs: tenant.plafond_utilisateurs ?? null,
+      modules,
+      debut,
+      fin,
+      emis: new Date().toISOString(),
+    };
+
+    let premierAdmin = null;
+    if (inclureActivation) {
+      const admin = (
+        await client.query(
+          `SELECT u.nom, u.prenom, u.email FROM utilisateur u
+           JOIN utilisateur_role ur ON ur.utilisateur_id = u.id JOIN role r ON r.id = ur.role_id AND r.code = 'ADMIN'
+           WHERE u.tenant_id = $1 ORDER BY u.date_creation ASC LIMIT 1`,
+          [tenant.id]
+        )
+      ).rows[0];
+      if (!admin) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: t(req, "SUPER_ADMIN_LICENCE_SANS_ADMIN") });
+      }
+      const motDePasseTemporaire = genererMotDePasseTemporaire(admin.prenom);
+      payload.admin = {
+        nom: admin.nom,
+        prenom: admin.prenom,
+        email: admin.email,
+        mot_de_passe_hash: await bcrypt.hash(motDePasseTemporaire, 10),
+      };
+      premierAdmin = { nom: admin.nom, prenom: admin.prenom, email: admin.email, mot_de_passe_temporaire: motDePasseTemporaire };
+    }
+
+    const cle = licenceSvc.signerLicence(payload);
+
+    // Facture de licence (prix annuel de la formule au prorata + supplement comptabilite sur la duree)
+    let factureId = null;
+    if (body.generer_facture !== false) {
+      const supplement = tenant.module_comptabilite_actif ? (Number(tenant.module_comptabilite_prix_mensuel_xof) || 0) * dureeMois : 0;
+      const montant = Math.round((Number(tenant.prix_licence_annuelle_xof) * dureeMois) / 12) + supplement;
+      const factureResult = await client.query(
+        `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture,
+                                         plafond_utilisateurs_facture, supplement_comptabilite_xof, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, 'LICENCE', $7, $8, $9) RETURNING id`,
+        [uuidv4(), tenant.id, tenant.formule_abonnement_id, tenant.formule_nom, debut.slice(0, 7), montant,
+         tenant.plafond_utilisateurs ?? null, supplement, `Licence ${numeroSerie} du ${debut} au ${fin}`]
+      );
+      factureId = factureResult.rows[0].id;
+    }
+
+    const licenceResult = await client.query(
+      `INSERT INTO licence_emise (id, tenant_id, numero_serie, date_debut, date_fin, max_utilisateurs, modules_json, cle, facture_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, numero_serie, date_emission, date_debut, date_fin, max_utilisateurs, modules_json, cle, facture_id`,
+      [uuidv4(), tenant.id, numeroSerie, debut, fin, tenant.plafond_utilisateurs ?? null, JSON.stringify(modules), cle, factureId]
+    );
+    await client.query("COMMIT");
+
+    res.status(201).json({ ...licenceResult.rows[0], avec_activation: inclureActivation, premier_administrateur: premierAdmin });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.code === "23505") {
+      return res.status(409).json({ error: t(req, "SUPER_ADMIN_FACTURE_ALREADY_EXISTS") });
+    }
+    console.error(err);
+    res.status(500).json({ error: t(req, "SUPER_ADMIN_LICENCE_GENERATE_ERROR") });
+  } finally {
+    client.release();
+  }
+});
+
 // PATCH /api/super-admin/clients/:id/suspendre - bloque immediatement toute
 // connexion pour ce client (voir routes/auth.js, verification tenant.actif),
 // donnees entierement conservees, reversible via /reactiver.
@@ -647,15 +847,15 @@ router.get("/formules", async (req, res) => {
 
 // POST /api/super-admin/formules
 router.post("/formules", async (req, res) => {
-  const { nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, frais_installation_xof } = req.body;
+  const { nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, frais_installation_xof, prix_licence_annuelle_xof } = req.body;
   if (!nom || prix_mensuel_xof === undefined || prix_mensuel_xof === null) {
     return res.status(400).json({ error: t(req, "SUPER_ADMIN_FORMULE_FIELDS_REQUIRED") });
   }
   try {
     const result = await db.query(
-      `INSERT INTO formule_abonnement (id, nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, frais_installation_xof)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [uuidv4(), nom, plafond_utilisateurs || null, prix_mensuel_xof, ordre_affichage || 0, frais_installation_xof || 0]
+      `INSERT INTO formule_abonnement (id, nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, frais_installation_xof, prix_licence_annuelle_xof)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [uuidv4(), nom, plafond_utilisateurs || null, prix_mensuel_xof, ordre_affichage || 0, frais_installation_xof || 0, prix_licence_annuelle_xof || 0]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -670,7 +870,7 @@ router.post("/formules", async (req, res) => {
 // migration 014) : un changement de frais_installation_xof ici ne modifie
 // jamais une facture d'installation deja generee pour un client existant.
 router.patch("/formules/:id", async (req, res) => {
-  const { nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, actif, frais_installation_xof } = req.body;
+  const { nom, plafond_utilisateurs, prix_mensuel_xof, ordre_affichage, actif, frais_installation_xof, prix_licence_annuelle_xof } = req.body;
   try {
     const existing = await db.query(`SELECT id FROM formule_abonnement WHERE id = $1`, [req.params.id]);
     if (existing.rows.length === 0) {
@@ -683,10 +883,11 @@ router.patch("/formules/:id", async (req, res) => {
          prix_mensuel_xof = COALESCE($3, prix_mensuel_xof),
          ordre_affichage = COALESCE($4, ordre_affichage),
          actif = COALESCE($5, actif),
-         frais_installation_xof = COALESCE($6, frais_installation_xof)
+         frais_installation_xof = COALESCE($6, frais_installation_xof),
+         prix_licence_annuelle_xof = COALESCE($8, prix_licence_annuelle_xof)
        WHERE id = $7
        RETURNING *`,
-      [nom, plafond_utilisateurs ?? null, prix_mensuel_xof, ordre_affichage, actif, frais_installation_xof, req.params.id]
+      [nom, plafond_utilisateurs ?? null, prix_mensuel_xof, ordre_affichage, actif, frais_installation_xof, req.params.id, prix_licence_annuelle_xof]
     );
     res.json(result.rows[0]);
   } catch (err) {
@@ -775,7 +976,8 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
   try {
     const clientResult = await db.query(
       `SELECT te.id, te.formule_abonnement_id, fa.nom AS formule_nom, fa.prix_mensuel_xof,
-              fa.plafond_utilisateurs, te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof
+              fa.plafond_utilisateurs, te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof,
+              te.mode_hebergement
        FROM tenant te LEFT JOIN formule_abonnement fa ON fa.id = te.formule_abonnement_id
        WHERE te.id = $1`,
       [req.params.id]
@@ -783,6 +985,10 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
     const client = clientResult.rows[0];
     if (!client) {
       return res.status(404).json({ error: t(req, "SUPER_ADMIN_CLIENT_NOT_FOUND") });
+    }
+    // Client installe en local : pas d'abonnement mensuel, sa facturation passe par la licence annuelle.
+    if (client.mode_hebergement === "LOCAL") {
+      return res.status(409).json({ error: t(req, "SUPER_ADMIN_CLIENT_LOCAL_PAS_ABONNEMENT") });
     }
     if (!client.formule_abonnement_id) {
       return res.status(400).json({ error: t(req, "SUPER_ADMIN_CLIENT_SANS_FORMULE") });

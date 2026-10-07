@@ -102,6 +102,8 @@ export default function SuperAdminFacturesPage() {
                       {facture.periode} —{" "}
                       {facture.type_facture === "INSTALLATION"
                         ? t("saInvoiceTypeInstallation")
+                        : facture.type_facture === "LICENCE"
+                        ? t("saInvoiceTypeLicence")
                         : t("saInvoiceTypeAbonnement")}{" "}
                       ({facture.formule_nom}) — {Number(facture.montant_xof).toLocaleString()} XOF
                     </div>

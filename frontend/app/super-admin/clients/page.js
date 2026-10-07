@@ -60,6 +60,9 @@ export default function SuperAdminClientsPage() {
                     {client.secteur_activite || "—"} · {client.pays}
                   </div>
                   <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 4 }}>
+                    <span style={{ marginRight: 8, fontWeight: 700, color: client.mode_hebergement === "LOCAL" ? "var(--ocre)" : "var(--petrol)" }}>
+                      {client.mode_hebergement === "LOCAL" ? t("saModeLocalBadge") : t("saModeHebergeBadge")}
+                    </span>
                     {t("saFormuleLabel")}: {client.formule_nom || t("saNoFormule")} ·{" "}
                     {client.nombre_utilisateurs_actifs}/{client.nombre_utilisateurs} {t("saUsersCount")}
                     {client.module_comptabilite_actif && (

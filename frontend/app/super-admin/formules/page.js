@@ -11,6 +11,7 @@ const FORM_VIDE = {
   plafond_utilisateurs: "",
   prix_mensuel_xof: "",
   frais_installation_xof: "",
+  prix_licence_annuelle_xof: "",
   ordre_affichage: "",
 };
 
@@ -55,6 +56,7 @@ export default function SuperAdminFormulesPage() {
         plafond_utilisateurs: form.plafond_utilisateurs ? Number(form.plafond_utilisateurs) : null,
         prix_mensuel_xof: Number(form.prix_mensuel_xof),
         frais_installation_xof: form.frais_installation_xof ? Number(form.frais_installation_xof) : 0,
+        prix_licence_annuelle_xof: form.prix_licence_annuelle_xof ? Number(form.prix_licence_annuelle_xof) : 0,
         ordre_affichage: form.ordre_affichage ? Number(form.ordre_affichage) : 0,
       });
       setFormules((prev) => [...prev, nouvelle]);
@@ -71,6 +73,7 @@ export default function SuperAdminFormulesPage() {
       plafond_utilisateurs: formule.plafond_utilisateurs ?? "",
       prix_mensuel_xof: formule.prix_mensuel_xof,
       frais_installation_xof: formule.frais_installation_xof ?? 0,
+      prix_licence_annuelle_xof: formule.prix_licence_annuelle_xof ?? 0,
       ordre_affichage: formule.ordre_affichage,
     });
   }
@@ -83,6 +86,7 @@ export default function SuperAdminFormulesPage() {
         plafond_utilisateurs: formEdition.plafond_utilisateurs ? Number(formEdition.plafond_utilisateurs) : null,
         prix_mensuel_xof: Number(formEdition.prix_mensuel_xof),
         frais_installation_xof: Number(formEdition.frais_installation_xof) || 0,
+        prix_licence_annuelle_xof: Number(formEdition.prix_licence_annuelle_xof) || 0,
         ordre_affichage: Number(formEdition.ordre_affichage),
       });
       setFormules((prev) => prev.map((f) => (f.id === id ? maj : f)));
@@ -142,6 +146,16 @@ export default function SuperAdminFormulesPage() {
           onChange={(e) => setForm((f) => ({ ...f, frais_installation_xof: e.target.value }))}
           style={inputStyle}
         />
+        <label style={{ ...labelStyle, marginTop: 10 }}>{t("saLicenceAnnualPriceLabel")}</label>
+        <input
+          type="number"
+          min="0"
+          placeholder="0"
+          value={form.prix_licence_annuelle_xof}
+          onChange={(e) => setForm((f) => ({ ...f, prix_licence_annuelle_xof: e.target.value }))}
+          style={inputStyle}
+        />
+        <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>{t("saLicenceAnnualPriceHelp")}</p>
         <label style={{ ...labelStyle, marginTop: 10 }}>{t("saDisplayOrderLabel")}</label>
         <input
           type="number"
@@ -202,6 +216,16 @@ export default function SuperAdminFormulesPage() {
                     />
                   </div>
                   <div>
+                    <label style={labelStyle}>{t("saLicenceAnnualPriceLabel")}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formEdition.prix_licence_annuelle_xof}
+                      onChange={(e) => setFormEdition((f) => ({ ...f, prix_licence_annuelle_xof: e.target.value }))}
+                      style={inputStyle}
+                    />
+                  </div>
+                  <div>
                     <label style={labelStyle}>{t("saDisplayOrderLabel")}</label>
                     <input
                       type="number"
@@ -228,6 +252,12 @@ export default function SuperAdminFormulesPage() {
                       {formule.plafond_utilisateurs
                         ? `${formule.plafond_utilisateurs} ${t("saUsersCount")} max`
                         : t("saUnlimitedUsers")}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+                      {t("saLicenceAnnualPriceLabel")}:{" "}
+                      {Number(formule.prix_licence_annuelle_xof) > 0
+                        ? `${Number(formule.prix_licence_annuelle_xof).toLocaleString()} XOF`
+                        : t("saLicenceAnnualPriceNone")}
                     </div>
                     <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
                       {t("saInstallationFeeLabel")}:{" "}

@@ -125,6 +125,13 @@ export const superAdminApi = {
   patchModuleComptabilite: (id, data) =>
     request(`/super-admin/clients/${id}/module-comptabilite`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  patchModeHebergement: (id, mode) =>
+    request(`/super-admin/clients/${id}/mode-hebergement`, { method: "PATCH", body: JSON.stringify({ mode }) }),
+  getLicencesClient: (id) => request(`/super-admin/clients/${id}/licences`),
+  genererLicence: (id, data) =>
+    request(`/super-admin/clients/${id}/licence`, { method: "POST", body: JSON.stringify(data || {}) }),
+  getEtatLicences: () => request("/super-admin/licences/etat"),
+
   getFormules: () => request("/super-admin/formules"),
   createFormule: (data) => request("/super-admin/formules", { method: "POST", body: JSON.stringify(data) }),
   patchFormule: (id, data) =>
