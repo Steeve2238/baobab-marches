@@ -772,6 +772,7 @@ export const api = {
   comptaDelettrer: (code) => request("/comptabilite/lettrage/delettrer", { method: "POST", body: JSON.stringify({ code }) }),
   comptaLettrageAuto: () => request("/comptabilite/lettrage/automatique", { method: "POST" }),
   comptaBalanceTiers: (params = {}) => request(`/comptabilite/balance-tiers?${new URLSearchParams(params).toString()}`),
+  comptaFacturesEmises: (params = {}) => request(`/comptabilite/factures-emises?${new URLSearchParams(params).toString()}`),
   comptaBalanceAgee: (params = {}) => request(`/comptabilite/balance-agee?${new URLSearchParams(params).toString()}`),
   // --- Comptabilite phase 3C : analytique par dossier ---
   comptaAnalytiqueSections: (params = {}) => request(`/comptabilite/analytique/sections?${new URLSearchParams(params).toString()}`),

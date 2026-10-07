@@ -14,6 +14,7 @@ const analytiqueCompta = require("../services/comptaAnalytique");
 const receptionsCompta = require("../services/comptaReceptions");
 const exportsAnalytique = require("../services/comptaExportsAnalytique");
 const exportsTiers = require("../services/comptaExportsTiers");
+const facturesEmises = require("../services/comptaFacturesEmises");
 const etatsCompta = require("../services/comptaEtats");
 const exportsEtats = require("../services/comptaExportsEtats");
 const immoCompta = require("../services/comptaImmobilisations");
@@ -986,6 +987,44 @@ router.get(
     const buffer = format === "pdf" ? await exportsTiers.balanceAgeePdf(data, entreprise) : exportsTiers.balanceAgeeXlsx(data, entreprise);
     const base = `balance_agee_${data.type === "CLIENT" ? "clients" : "fournisseurs"}_${data.date_arrete}`;
     envoyerFichier(res, buffer, `${base}.${format}`, format);
+  })
+);
+
+// ----------------------------------------------------------------------------
+// Factures de vente emises (registre) : liste filtrable + exports PDF / Excel
+// ----------------------------------------------------------------------------
+
+const optionsFacturesEmises = (req) => ({
+  debut: req.query.debut,
+  fin: req.query.fin,
+  client_id: req.query.client_id,
+  statut: req.query.statut,
+  recherche: req.query.recherche,
+});
+
+router.get(
+  "/factures-emises",
+  gerer(async (req, res) => {
+    const data = await facturesEmises.lister(db, tenant(req), optionsFacturesEmises(req));
+    // Clients ayant au moins une facture (alimente le filtre, independant du filtre courant).
+    const clients = await db.query(
+      `SELECT DISTINCT cl.id, cl.nom FROM facture_vente f JOIN client_commercial cl ON cl.id = f.client_commercial_id
+       WHERE f.tenant_id = $1 ORDER BY cl.nom`,
+      [tenant(req)]
+    );
+    res.json({ ...data, clients: clients.rows });
+  })
+);
+
+router.get(
+  "/factures-emises/export",
+  gerer(async (req, res) => {
+    const format = req.query.format === "pdf" ? "pdf" : "xlsx";
+    const data = await facturesEmises.lister(db, tenant(req), optionsFacturesEmises(req));
+    const entreprise = await raisonSociale(req);
+    const buffer = format === "pdf" ? await facturesEmises.facturesEmisesPdf(data, entreprise) : facturesEmises.facturesEmisesXlsx(data, entreprise);
+    const jour = new Date().toISOString().slice(0, 10);
+    envoyerFichier(res, buffer, `factures_emises_${jour}.${format}`, format);
   })
 );
 

@@ -9,6 +9,7 @@ import { useComptaStatut } from "../comptaUi";
 const ONGLETS = [
   { href: "/comptabilite", key: "comptaNavAccueil", exact: true },
   { href: "/comptabilite/instance", key: "comptaNavInstance", badge: true },
+  { href: "/comptabilite/factures-emises", key: "comptaNavFacturesEmises" },
   { href: "/comptabilite/achats", key: "comptaNavAchats" },
   { href: "/comptabilite/reglements", key: "comptaNavReglements" },
   { href: "/comptabilite/tresorerie", key: "comptaNavTresorerie" },
