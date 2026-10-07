@@ -34,6 +34,10 @@ const MODULES_DISPONIBLES = [
   // (comptable senior / Directeur Financier). Voir routes/comptabilite.js.
   { key: "comptabilite", labelKey: "navComptabilite" },
   { key: "comptabilite-validation", labelKey: "navComptabiliteValidation" },
+  // Fiscalite (module payant, 07/10/2026) : "fiscalite" = consultation + traitement fiscal des factures, NINEA / COFI ;
+  // "fiscalite-validation" = preparer / deposer / payer une declaration, profil fiscal. Voir routes/fiscalite.js.
+  { key: "fiscalite", labelKey: "navFiscalite" },
+  { key: "fiscalite-validation", labelKey: "navFiscaliteValidation" },
 ];
 
 const FORM_VIDE = {
@@ -232,10 +236,22 @@ function PerimetreEditor({ form, setForm, t }) {
   // Module Comptabilite vendu en option (migration 032) : ses deux perimetres ne
   // sont proposes que si le Super Admin l'a active pour cette entreprise.
   const [comptaActive, setComptaActive] = useState(false);
+  const [fiscaliteActive, setFiscaliteActive] = useState(false);
   useEffect(() => {
-    api.getPermissions().then((p) => setComptaActive(!!p?.comptabiliteActive)).catch(() => setComptaActive(false));
+    api
+      .getPermissions()
+      .then((p) => {
+        setComptaActive(!!p?.comptabiliteActive);
+        setFiscaliteActive(!!p?.fiscaliteActive);
+      })
+      .catch(() => {
+        setComptaActive(false);
+        setFiscaliteActive(false);
+      });
   }, []);
-  const modulesProposes = MODULES_DISPONIBLES.filter((m) => comptaActive || !m.key.startsWith("comptabilite"));
+  const modulesProposes = MODULES_DISPONIBLES.filter(
+    (m) => (comptaActive || !m.key.startsWith("comptabilite")) && (fiscaliteActive || !m.key.startsWith("fiscalite"))
+  );
   return (
     <fieldset style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", marginTop: 12 }}>
       <legend style={{ fontSize: 11.5, fontWeight: 600, padding: "0 4px" }}>{t("rolePerimetreLegend")}</legend>

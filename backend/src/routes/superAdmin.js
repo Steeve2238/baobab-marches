@@ -376,6 +376,7 @@ const SELECT_CLIENT = `
   SELECT te.id, te.raison_sociale, te.secteur_activite, te.pays, te.actif, te.date_creation,
          te.formule_abonnement_id,
          te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof, te.module_comptabilite_date_activation,
+         te.module_fiscalite_actif, te.module_fiscalite_prix_mensuel_xof, te.module_fiscalite_date_activation,
          te.mode_hebergement,
          (SELECT MAX(l.date_fin) FROM licence_emise l WHERE l.tenant_id = te.id) AS licence_date_fin,
          fa.nom AS formule_nom, fa.prix_mensuel_xof AS formule_prix_mensuel_xof,
@@ -612,6 +613,43 @@ router.patch("/clients/:id/module-comptabilite", async (req, res) => {
   }
 });
 
+// PATCH /api/super-admin/clients/:id/module-fiscalite - active ou verrouille le module Fiscalite (vendu en option,
+// migration 049) et fixe son supplement mensuel. Meme mecanique que le module Comptabilite : verrouiller ne supprime
+// aucune donnee, seul l'acces est coupe (middleware exigerModuleFiscaliteActif).
+router.patch("/clients/:id/module-fiscalite", async (req, res) => {
+  const { actif, prix_mensuel_xof } = req.body || {};
+  if (typeof actif !== "boolean") {
+    return res.status(400).json({ error: t(req, "SUPER_ADMIN_MODULE_FISCALITE_INVALID") });
+  }
+  let prix = null;
+  if (prix_mensuel_xof !== undefined && prix_mensuel_xof !== null && prix_mensuel_xof !== "") {
+    prix = Number(prix_mensuel_xof);
+    if (!Number.isInteger(prix) || prix < 0) {
+      return res.status(400).json({ error: t(req, "SUPER_ADMIN_MODULE_FISCALITE_INVALID") });
+    }
+  }
+  try {
+    const existing = await db.query(`SELECT module_fiscalite_actif FROM tenant WHERE id = $1`, [req.params.id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "SUPER_ADMIN_CLIENT_NOT_FOUND") });
+    }
+    const etaitActif = !!existing.rows[0].module_fiscalite_actif;
+    await db.query(
+      `UPDATE tenant SET
+         module_fiscalite_actif = $1,
+         module_fiscalite_prix_mensuel_xof = COALESCE($2, module_fiscalite_prix_mensuel_xof),
+         module_fiscalite_date_activation = CASE WHEN $1 AND NOT $3 THEN now() ELSE module_fiscalite_date_activation END
+       WHERE id = $4`,
+      [actif, prix, etaitActif, req.params.id]
+    );
+    const clientResult = await db.query(`${SELECT_CLIENT} WHERE te.id = $1`, [req.params.id]);
+    res.json(clientResult.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "SUPER_ADMIN_CLIENT_UPDATE_ERROR") });
+  }
+});
+
 // PATCH /api/super-admin/clients/:id/mode-hebergement - bascule un client entre HEBERGE (sa base est chez nous,
 // abonnement mensuel) et LOCAL (version installee chez lui, licence annuelle). Corps : { mode: "HEBERGE" | "LOCAL" }.
 // Un client LOCAL ne peut plus se connecter a la plateforme hebergee (ses donnees vivent chez lui) ; aucune donnee
@@ -697,6 +735,7 @@ router.post("/clients/:id/licence", async (req, res) => {
     const tenantResult = await client.query(
       `SELECT te.id, te.raison_sociale, te.pays, te.secteur_activite, te.mode_hebergement,
               te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof,
+              te.module_fiscalite_actif, te.module_fiscalite_prix_mensuel_xof,
               te.formule_abonnement_id, fa.nom AS formule_nom, fa.plafond_utilisateurs, fa.prix_licence_annuelle_xof
        FROM tenant te LEFT JOIN formule_abonnement fa ON fa.id = te.formule_abonnement_id
        WHERE te.id = $1 FOR UPDATE OF te`,
@@ -729,7 +768,7 @@ router.post("/clients/:id/licence", async (req, res) => {
     const nbAnnee = Number((await client.query(`SELECT COUNT(*) AS n FROM licence_emise WHERE numero_serie LIKE $1`, [`LIC-${annee}-%`])).rows[0].n);
     const numeroSerie = `LIC-${annee}-${String(nbAnnee + 1).padStart(4, "0")}`;
 
-    const modules = { comptabilite: !!tenant.module_comptabilite_actif };
+    const modules = { comptabilite: !!tenant.module_comptabilite_actif, fiscalite: !!tenant.module_fiscalite_actif };
     const payload = {
       v: 1,
       serie: numeroSerie,
@@ -774,13 +813,14 @@ router.post("/clients/:id/licence", async (req, res) => {
     let factureId = null;
     if (body.generer_facture !== false) {
       const supplement = tenant.module_comptabilite_actif ? (Number(tenant.module_comptabilite_prix_mensuel_xof) || 0) * dureeMois : 0;
-      const montant = Math.round((Number(tenant.prix_licence_annuelle_xof) * dureeMois) / 12) + supplement;
+      const supplementFisc = tenant.module_fiscalite_actif ? (Number(tenant.module_fiscalite_prix_mensuel_xof) || 0) * dureeMois : 0;
+      const montant = Math.round((Number(tenant.prix_licence_annuelle_xof) * dureeMois) / 12) + supplement + supplementFisc;
       const factureResult = await client.query(
         `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture,
-                                         plafond_utilisateurs_facture, supplement_comptabilite_xof, notes)
-         VALUES ($1, $2, $3, $4, $5, $6, 'LICENCE', $7, $8, $9) RETURNING id`,
+                                         plafond_utilisateurs_facture, supplement_comptabilite_xof, supplement_fiscalite_xof, notes)
+         VALUES ($1, $2, $3, $4, $5, $6, 'LICENCE', $7, $8, $9, $10) RETURNING id`,
         [uuidv4(), tenant.id, tenant.formule_abonnement_id, tenant.formule_nom, debut.slice(0, 7), montant,
-         tenant.plafond_utilisateurs ?? null, supplement, `Licence ${numeroSerie} du ${debut} au ${fin}`]
+         tenant.plafond_utilisateurs ?? null, supplement, supplementFisc, `Licence ${numeroSerie} du ${debut} au ${fin}`]
       );
       factureId = factureResult.rows[0].id;
     }
@@ -921,7 +961,7 @@ router.patch("/formules/:id", async (req, res) => {
 
 const SELECT_FACTURE = `
   SELECT f.id, f.tenant_id, f.formule_abonnement_id, f.formule_nom, f.periode, f.montant_xof,
-         f.plafond_utilisateurs_facture, f.supplement_comptabilite_xof,
+         f.plafond_utilisateurs_facture, f.supplement_comptabilite_xof, f.supplement_fiscalite_xof,
          f.type_facture, f.statut, f.date_generation, f.date_paiement, f.mode_paiement, f.notes,
          te.raison_sociale AS client_raison_sociale, te.adresse AS client_adresse
   FROM facture_abonnement f
@@ -995,6 +1035,7 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
     const clientResult = await db.query(
       `SELECT te.id, te.formule_abonnement_id, fa.nom AS formule_nom, fa.prix_mensuel_xof,
               fa.plafond_utilisateurs, te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof,
+              te.module_fiscalite_actif, te.module_fiscalite_prix_mensuel_xof,
               te.mode_hebergement
        FROM tenant te LEFT JOIN formule_abonnement fa ON fa.id = te.formule_abonnement_id
        WHERE te.id = $1`,
@@ -1015,9 +1056,10 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
     // Module Comptabilite actif : son supplement mensuel s'ajoute a la facture
     // (fige ici, montant_xof = total formule + supplement).
     const supplementCompta = client.module_comptabilite_actif ? Number(client.module_comptabilite_prix_mensuel_xof) || 0 : 0;
+    const supplementFisc = client.module_fiscalite_actif ? Number(client.module_fiscalite_prix_mensuel_xof) || 0 : 0;
     const result = await db.query(
-      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture, plafond_utilisateurs_facture, supplement_comptabilite_xof)
-       VALUES ($1, $2, $3, $4, $5, $6, 'ABONNEMENT', $7, $8)
+      `INSERT INTO facture_abonnement (id, tenant_id, formule_abonnement_id, formule_nom, periode, montant_xof, type_facture, plafond_utilisateurs_facture, supplement_comptabilite_xof, supplement_fiscalite_xof)
+       VALUES ($1, $2, $3, $4, $5, $6, 'ABONNEMENT', $7, $8, $9)
        RETURNING id`,
       [
         uuidv4(),
@@ -1025,9 +1067,10 @@ router.post("/clients/:id/factures/generer", async (req, res) => {
         client.formule_abonnement_id,
         client.formule_nom,
         periode,
-        Number(client.prix_mensuel_xof) + supplementCompta,
+        Number(client.prix_mensuel_xof) + supplementCompta + supplementFisc,
         client.plafond_utilisateurs ?? null,
         supplementCompta,
+        supplementFisc,
       ]
     );
 

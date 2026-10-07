@@ -1076,7 +1076,10 @@ module.exports = {
   annulerLot,
   modeleGrandLivre,
   modeleBalance,
-  // pour les tests
+  // pour les tests et pour l'import du module Fiscalite (lecture des memes fichiers Sage)
+  lireClasseur,
+  lireMontant,
+  cleEntete,
   lireDate,
   normaliserCompte,
   parserGrandLivre,

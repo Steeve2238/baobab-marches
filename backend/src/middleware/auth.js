@@ -36,7 +36,7 @@ async function requireAuth(req, res, next) {
 
   try {
     const userResult = await db.query(
-      `SELECT u.id, u.tenant_id, u.email, u.actif, te.module_comptabilite_actif
+      `SELECT u.id, u.tenant_id, u.email, u.actif, te.module_comptabilite_actif, te.module_fiscalite_actif
        FROM utilisateur u
        JOIN tenant te ON te.id = u.tenant_id
        WHERE u.id = $1`,
@@ -92,6 +92,7 @@ async function requireAuth(req, res, next) {
     }
 
     permissions.comptabiliteActive = !!user.module_comptabilite_actif;
+    permissions.fiscaliteActive = !!user.module_fiscalite_actif;
 
     req.user = {
       sub: user.id,
@@ -231,6 +232,15 @@ function exigerModuleComptabiliteActif(req, res, next) {
 }
 
 /**
+ * Module Fiscalite vendu en option (migration 049, 07/10/2026) : meme principe que la Comptabilite - acces
+ * totalement refuse tant que le Super Admin n'a pas active le module pour ce client, ADMIN compris.
+ */
+function exigerModuleFiscaliteActif(req, res, next) {
+  if (req.user?.permissions?.fiscaliteActive) return next();
+  return res.status(403).json({ error: t(req, "FISCALITE_MODULE_VERROUILLE"), code: "MODULE_VERROUILLE" });
+}
+
+/**
  * Bloque toute methode d'ecriture (tout sauf GET) pour un utilisateur dont
  * TOUS les roles sont marques "lecture seule" (cas du Directeur General,
  * qui doit pouvoir tout consulter mais ne jamais rien modifier). ADMIN n'est
@@ -304,6 +314,7 @@ module.exports = {
   requireModule,
   requireModuleAny,
   exigerModuleComptabiliteActif,
+  exigerModuleFiscaliteActif,
   blockLectureSeule,
   requireSuperAdmin,
 };

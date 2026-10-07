@@ -4,6 +4,11 @@
  * clauses, notes...) n'est jamais traduit ici — uniquement l'interface.
  */
 import { COMPTA_FR, COMPTA_EN } from "./comptaDictionary";
+import { FISC_FR, FISC_EN } from "./fiscaliteDictionary";
+import { FISC_IS_FR, FISC_IS_EN } from "./fiscaliteIsDictionary";
+import { FISC_CCA_FR, FISC_CCA_EN } from "./fiscaliteCcaDictionary";
+import { FISC_LOT5_FR, FISC_LOT5_EN } from "./fiscaliteLot5Dictionary";
+import { FISC_RET_FR, FISC_RET_EN } from "./fiscaliteRetenuesDictionary";
 import { FIN_FR, FIN_EN } from "./financementDictionary";
 import { ECH_FR, ECH_EN } from "./echeancierDictionary";
 import { PLAN_FR, PLAN_EN } from "./planTresorerieDictionary";
@@ -3376,6 +3381,16 @@ export const DICTIONARIES = {
 // Textes du module Comptabilite (fichier separe pour ne pas alourdir ce dictionnaire)
 Object.assign(DICTIONARIES.fr, COMPTA_FR);
 Object.assign(DICTIONARIES.en, COMPTA_EN);
+Object.assign(DICTIONARIES.fr, FISC_FR);
+Object.assign(DICTIONARIES.fr, FISC_IS_FR);
+Object.assign(DICTIONARIES.fr, FISC_CCA_FR);
+Object.assign(DICTIONARIES.fr, FISC_LOT5_FR);
+Object.assign(DICTIONARIES.fr, FISC_RET_FR);
+Object.assign(DICTIONARIES.en, FISC_EN);
+Object.assign(DICTIONARIES.en, FISC_IS_EN);
+Object.assign(DICTIONARIES.en, FISC_CCA_EN);
+Object.assign(DICTIONARIES.en, FISC_LOT5_EN);
+Object.assign(DICTIONARIES.en, FISC_RET_EN);
 Object.assign(DICTIONARIES.fr, FIN_FR);
 Object.assign(DICTIONARIES.en, FIN_EN);
 Object.assign(DICTIONARIES.fr, ECH_FR);

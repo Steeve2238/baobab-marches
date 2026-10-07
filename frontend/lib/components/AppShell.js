@@ -54,6 +54,8 @@ const NAV_ITEMS = [
       // requiresFlag : module vendu en option (migration 032), verrouille par defaut -
       // masque tant que le Super Admin ne l'a pas active pour ce client (meme pour un ADMIN).
       { href: "/comptabilite", key: "navComptabilite", moduleKeyStrictAny: ["comptabilite", "comptabilite-validation"], requiresFlag: "comptabiliteActive" },
+      // Fiscalite : module payant distinct (migration 049), meme principe de verrou que la Comptabilite.
+      { href: "/fiscalite", key: "navFiscalite", moduleKeyStrictAny: ["fiscalite", "fiscalite-validation"], requiresFlag: "fiscaliteActive" },
     ],
   },
   {

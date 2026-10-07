@@ -24,6 +24,7 @@ export default function SuperAdminClientDetailPage() {
   const [formuleSelectionnee, setFormuleSelectionnee] = useState("");
   const [modePaiementFacture, setModePaiementFacture] = useState({});
   const [prixCompta, setPrixCompta] = useState("");
+  const [prixFisc, setPrixFisc] = useState("");
   const [licences, setLicences] = useState([]);
   const [etatLicences, setEtatLicences] = useState(null);
   const [licForm, setLicForm] = useState({ date_debut: new Date().toISOString().slice(0, 10), duree_mois: 12, generer_facture: true });
@@ -44,6 +45,7 @@ export default function SuperAdminClientDetailPage() {
         setClient(clientData);
         setFormuleSelectionnee(clientData.formule_abonnement_id || "");
         setPrixCompta(String(Number(clientData.module_comptabilite_prix_mensuel_xof || 0)));
+        setPrixFisc(String(Number(clientData.module_fiscalite_prix_mensuel_xof || 0)));
         setFormules(formulesData);
         setFactures(facturesData);
       })
@@ -172,6 +174,35 @@ export default function SuperAdminClientDetailPage() {
       const maj = await superAdminApi.patchModuleComptabilite(client.id, {
         actif: !!client.module_comptabilite_actif,
         prix_mensuel_xof: prixCompta === "" ? 0 : Number(prixCompta),
+      });
+      setClient((prev) => ({ ...prev, ...maj }));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  // Module Fiscalite vendu en option (migration 049) : meme mecanique que la Comptabilite.
+  async function handleModuleFisc(actif) {
+    if (!actif && typeof window !== "undefined" && !window.confirm(t("saModuleFiscLockConfirm"))) return;
+    setErreur("");
+    try {
+      const maj = await superAdminApi.patchModuleFiscalite(client.id, {
+        actif,
+        prix_mensuel_xof: prixFisc === "" ? 0 : Number(prixFisc),
+      });
+      setClient((prev) => ({ ...prev, ...maj }));
+      setPrixFisc(String(Number(maj.module_fiscalite_prix_mensuel_xof || 0)));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  async function handleEnregistrerPrixFisc() {
+    setErreur("");
+    try {
+      const maj = await superAdminApi.patchModuleFiscalite(client.id, {
+        actif: !!client.module_fiscalite_actif,
+        prix_mensuel_xof: prixFisc === "" ? 0 : Number(prixFisc),
       });
       setClient((prev) => ({ ...prev, ...maj }));
     } catch (err) {
@@ -375,6 +406,7 @@ export default function SuperAdminClientDetailPage() {
                       <strong>{l.numero_serie}</strong> · {String(l.date_debut).slice(0, 10)} → {String(l.date_fin).slice(0, 10)}
                       {l.max_utilisateurs ? ` · ${l.max_utilisateurs} ${t("saUsersCount")}` : ""}
                       {l.modules_json && l.modules_json.comptabilite ? ` · ${t("saModuleComptaSection")}` : ""}
+                      {l.modules_json && l.modules_json.fiscalite ? ` · ${t("saModuleFiscSection")}` : ""}
                     </span>
                     <span style={{ display: "flex", gap: 6 }}>
                       <button onClick={() => copierTexte(l.cle, l.id)} style={boutonSecondaireStyle}>
@@ -462,6 +494,60 @@ export default function SuperAdminClientDetailPage() {
             </>
           ) : (
             <button onClick={() => handleModuleCompta(true)} style={boutonPrincipalStyle}>
+              {t("saModuleComptaActivateButton")}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)" }}>{t("saModuleFiscSection")}</h3>
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 700,
+              padding: "3px 8px",
+              borderRadius: 20,
+              color: client.module_fiscalite_actif ? "#2E7D5B" : "var(--brique)",
+              background: client.module_fiscalite_actif ? "rgba(46,125,91,0.12)" : "rgba(196,74,58,0.1)",
+            }}
+          >
+            {client.module_fiscalite_actif ? t("saModuleComptaActive") : t("saModuleComptaVerrouille")}
+          </span>
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 0, marginBottom: 12 }}>{t("saModuleFiscDescription")}</p>
+        <label style={{ fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 5 }}>{t("saModuleComptaPrixLabel")}</label>
+        <input
+          type="number"
+          min="0"
+          step="1"
+          value={prixFisc}
+          onChange={(e) => setPrixFisc(e.target.value)}
+          style={{ ...inputStyle, maxWidth: 200 }}
+        />
+        <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 6, marginBottom: 0 }}>{t("saModuleComptaFacturationAide")}</p>
+        {client.module_fiscalite_actif && client.module_fiscalite_date_activation && (
+          <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4, marginBottom: 0 }}>
+            {t("saModuleComptaSince")} {new Date(client.module_fiscalite_date_activation).toLocaleDateString()}
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+          {client.module_fiscalite_actif ? (
+            <>
+              <button
+                onClick={handleEnregistrerPrixFisc}
+                disabled={prixFisc === String(Number(client.module_fiscalite_prix_mensuel_xof || 0))}
+                style={boutonSecondaireStyle}
+              >
+                {t("saModuleComptaSavePrixButton")}
+              </button>
+              <button onClick={() => handleModuleFisc(false)} style={boutonDangerStyle}>
+                {t("saModuleComptaLockButton")}
+              </button>
+            </>
+          ) : (
+            <button onClick={() => handleModuleFisc(true)} style={boutonPrincipalStyle}>
               {t("saModuleComptaActivateButton")}
             </button>
           )}

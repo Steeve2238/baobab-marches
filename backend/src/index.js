@@ -32,6 +32,7 @@ const commandesRoutes = require("./routes/commandes");
 const incotermsRoutes = require("./routes/incoterms");
 const livraisonsDossierRoutes = require("./routes/livraisonsDossier");
 const comptabiliteRoutes = require("./routes/comptabilite");
+const fiscaliteRoutes = require("./routes/fiscalite");
 const { t } = require("./utils/i18n");
 
 const app = express();
@@ -76,6 +77,7 @@ app.use("/api/commandes", commandesRoutes);
 app.use("/api/incoterms", incotermsRoutes);
 app.use("/api/livraisons-dossier", livraisonsDossierRoutes);
 app.use("/api/comptabilite", comptabiliteRoutes);
+app.use("/api/fiscalite", fiscaliteRoutes);
 
 // Gestionnaire d'erreur generique (dernier recours)
 app.use((err, req, res, next) => {
