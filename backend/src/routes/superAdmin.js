@@ -411,7 +411,25 @@ router.get("/clients/:id", async (req, res) => {
        FROM utilisateur WHERE tenant_id = $1 ORDER BY nom ASC, prenom ASC`,
       [req.params.id]
     );
-    res.json({ ...client, utilisateurs: usersResult.rows });
+    // Roles attribues a chaque utilisateur par l'administrateur du client
+    // (une seule requete groupee, un utilisateur peut cumuler plusieurs roles).
+    const rolesParUtilisateur = {};
+    if (usersResult.rows.length > 0) {
+      const rolesResult = await db.query(
+        `SELECT ur.utilisateur_id, r.code, r.libelle
+         FROM utilisateur_role ur
+         JOIN role r ON r.id = ur.role_id
+         WHERE ur.utilisateur_id = ANY($1::uuid[])
+         ORDER BY r.libelle ASC`,
+        [usersResult.rows.map((u) => u.id)]
+      );
+      for (const row of rolesResult.rows) {
+        if (!rolesParUtilisateur[row.utilisateur_id]) rolesParUtilisateur[row.utilisateur_id] = [];
+        rolesParUtilisateur[row.utilisateur_id].push({ code: row.code, libelle: row.libelle });
+      }
+    }
+    const utilisateurs = usersResult.rows.map((u) => ({ ...u, roles: rolesParUtilisateur[u.id] || [] }));
+    res.json({ ...client, utilisateurs });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "SUPER_ADMIN_CLIENTS_FETCH_ERROR") });

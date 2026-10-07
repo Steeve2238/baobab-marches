@@ -475,26 +475,52 @@ export default function SuperAdminClientDetailPage() {
         {client.utilisateurs.length === 0 ? (
           <p style={{ fontSize: 12, color: "var(--sub)" }}>{t("saNoUsers")}</p>
         ) : (
-          <div style={{ display: "grid", gap: 6 }}>
-            {client.utilisateurs.map((u) => (
-              <div
-                key={u.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 12.5,
-                  padding: "6px 0",
-                  borderBottom: "1px solid var(--line-soft)",
-                }}
-              >
-                <span>
-                  {u.prenom} {u.nom} — {u.email}
-                </span>
-                <span style={{ color: u.actif ? "#2E7D5B" : "var(--brique)" }}>
-                  {u.actif ? t("activeLabel") : t("inactiveLabel")}
-                </span>
-              </div>
-            ))}
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+              <thead>
+                <tr style={{ textAlign: "left", color: "var(--sub)", fontSize: 11.5 }}>
+                  <th style={thUserStyle}>{t("saUserColName")}</th>
+                  <th style={thUserStyle}>{t("saUserColEmail")}</th>
+                  <th style={thUserStyle}>{t("saUserColRoles")}</th>
+                  <th style={thUserStyle}>{t("saUserColStatus")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {client.utilisateurs.map((u) => (
+                  <tr key={u.id} style={{ borderBottom: "1px solid var(--line-soft)" }}>
+                    <td style={tdUserStyle}>
+                      {u.prenom} {u.nom}
+                    </td>
+                    <td style={tdUserStyle}>{u.email}</td>
+                    <td style={tdUserStyle}>
+                      {u.roles && u.roles.length > 0 ? (
+                        <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 4 }}>
+                          {u.roles.map((r) => (
+                            <span
+                              key={r.code}
+                              style={{
+                                border: "1px solid var(--line)",
+                                borderRadius: 10,
+                                padding: "1px 8px",
+                                fontSize: 11.5,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {r.libelle}
+                            </span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span style={{ color: "var(--brique)", fontSize: 11.5 }}>{t("saUserNoRole")}</span>
+                      )}
+                    </td>
+                    <td style={{ ...tdUserStyle, color: u.actif ? "#2E7D5B" : "var(--brique)", whiteSpace: "nowrap" }}>
+                      {u.actif ? t("activeLabel") : t("inactiveLabel")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -604,6 +630,9 @@ const boutonPrincipalStyle = {
   fontWeight: 600,
   whiteSpace: "nowrap",
 };
+const thUserStyle = { fontWeight: 600, padding: "4px 10px 6px 0", borderBottom: "1px solid var(--line)" };
+const tdUserStyle = { padding: "7px 10px 7px 0", verticalAlign: "top" };
+
 const boutonSecondaireStyle = {
   background: "transparent",
   color: "var(--petrol)",
