@@ -357,6 +357,9 @@ export const DICTIONARIES = {
     marchesAppelOffresTitle: "Appel d'offres",
     marchesAppelOffresDesc:
       "Marchés publics soumis à mise en concurrence : maîtres d'ouvrage, historique de la concurrence, clauses à risque.",
+    marchesVenteDirecteTitle: "Vente directe",
+    marchesVenteDirecteDesc:
+      "Négoce et commerce : une vente en une étape, client, devis, facture et bon de livraison, sans circuit de consultation.",
     marchesOuvrirLabel: "Ouvrir",
 
     navDossiers: "Dossiers",
@@ -2068,6 +2071,9 @@ export const DICTIONARIES = {
     marchesAppelOffresTitle: "Public tender",
     marchesAppelOffresDesc:
       "Public contracts subject to competitive bidding: contracting authorities, competitor history, risk clauses.",
+    marchesVenteDirecteTitle: "Direct sale",
+    marchesVenteDirecteDesc:
+      "Trading and retail: a sale in one step, client, quote, invoice and delivery note, without a consultation circuit.",
     marchesOuvrirLabel: "Open",
 
     navDossiers: "Files",

@@ -28,8 +28,10 @@ export default function ConsultationsPage() {
   const [clients, setClients] = useState([]);
   const profil = useProfilActivite();
   // NEGOCE : uniquement des ventes ; MARCHES : uniquement des consultations ; LES_DEUX : les deux, au choix a la creation.
-  const typeListe = profil === "NEGOCE" ? "VENTE" : profil === "MARCHES" ? "CONSULTATION" : undefined;
-  const filtresDispo = profil === "NEGOCE" ? FILTRES_VENTE : FILTRES;
+  // LES_DEUX arrivant de la carte « Vente directe » (?type=VENTE) : liste limitee aux ventes.
+  const [typeUrl, setTypeUrl] = useState(null);
+  const typeListe = profil === "NEGOCE" ? "VENTE" : profil === "MARCHES" ? "CONSULTATION" : typeUrl || undefined;
+  const filtresDispo = typeListe === "VENTE" ? FILTRES_VENTE : FILTRES;
   const [filtre, setFiltre] = useState("RECUE");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
@@ -48,14 +50,18 @@ export default function ConsultationsPage() {
 
   // Une fois le profil connu : NEGOCE demarre sur « Devis en cours » (une vente n'est jamais « Reçue »).
   useEffect(() => {
-    if (profil === "NEGOCE" && filtre === "RECUE") setFiltre("DEVIS_EN_COURS");
-  }, [profil]);
-  useEffect(() => charger(filtre), [filtre, profil]);
+    if (typeListe === "VENTE" && filtre === "RECUE") setFiltre("DEVIS_EN_COURS");
+  }, [profil, typeUrl]);
+  useEffect(() => charger(filtre), [filtre, profil, typeUrl]);
   useEffect(() => {
     api.getClientsCommerciaux().then((data) => setClients(data.filter((c) => c.actif))).catch(() => {});
     // Arrivee depuis la fiche d'un client (« Nouvelle vente ») : formulaire ouvert avec le client prerempli.
     try {
       const q = new URLSearchParams(window.location.search);
+      if (q.get("type") === "VENTE") {
+        setTypeUrl("VENTE");
+        setForm((f) => ({ ...f, type: "VENTE" }));
+      }
       if (q.get("nouveau") === "1") {
         setForm((f) => ({ ...f, client_commercial_id: q.get("client_id") || "", type: "VENTE" }));
         setAfficherForm(true);
@@ -117,7 +123,7 @@ export default function ConsultationsPage() {
           ))}
         </div>
         <button onClick={() => setAfficherForm((v) => !v)} style={boutonPrincipalStyle}>
-          {afficherForm ? t("cancel") : t(profil === "NEGOCE" ? "venteNewVenteButton" : "venteNewConsultationButton")}
+          {afficherForm ? t("cancel") : t(profil === "NEGOCE" || typeUrl === "VENTE" ? "venteNewVenteButton" : "venteNewConsultationButton")}
         </button>
       </div>
 

@@ -30,10 +30,19 @@ const BRANCHES = [
   },
 ];
 
+const BRANCHE_VENTE = {
+  href: "/marches/consultation-restreinte/consultations?type=VENTE",
+  titleKey: "marchesVenteDirecteTitle",
+  descKey: "marchesVenteDirecteDesc",
+  accent: "var(--petrol)",
+};
+
 export default function MarchesPage() {
   const { t } = useLangue();
   const router = useRouter();
   const profil = useProfilActivite();
+  // Profil LES_DEUX : une 3e carte « Vente directe » (liste filtree sur les ventes). MARCHES : pas de vente.
+  const branches = profil === "LES_DEUX" ? [...BRANCHES, BRANCHE_VENTE] : BRANCHES;
   // Profil NEGOCE : pas d'ecran de choix, on ouvre directement la liste des ventes.
   useEffect(() => {
     if (profil === "NEGOCE") router.replace("/marches/consultation-restreinte/consultations");
@@ -46,8 +55,8 @@ export default function MarchesPage() {
         {t("marchesPageSubtitle")}
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-        {BRANCHES.map((branche) => (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 18 }}>
+        {branches.map((branche) => (
           <Link
             key={branche.href}
             href={branche.href}
