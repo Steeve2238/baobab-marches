@@ -198,7 +198,17 @@ function lireCondition(body, type) {
     justificatifs: txtOuNull(body.justificatifs),
     conditions_particulieres: txtOuNull(body.conditions_particulieres),
     notes: txtOuNull(body.notes),
+    points_confirmes_json: lirePointsConfirmes(body.points_confirmes_json),
   };
+}
+
+// Points confirmes par la banque : { CODE: true } (seuls les codes connus et vrais sont gardes).
+function lirePointsConfirmes(v) {
+  const out = {};
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    for (const code of engine.CODES_POINTS) if (v[code] === true) out[code] = true;
+  }
+  return out;
 }
 
 function lireFrais(liste) {
@@ -219,6 +229,9 @@ function lireFrais(liste) {
       maximum: numOuNull(l.maximum),
       prelevement: PRELEVEMENTS.includes(l.prelevement) ? l.prelevement : "A_LA_MISE_EN_PLACE",
       soumis_taxe: l.soumis_taxe === false ? false : true,
+      taxe_taux_pct: numOuNull(l.taxe_taux_pct),
+      taxe_libelle: txtOuNull(l.taxe_libelle),
+      frequence: l.frequence === "UNIQUE_CONTRAT" ? "UNIQUE_CONTRAT" : "PAR_OPERATION",
       actif: l.actif === false ? false : true,
       observation: txtOuNull(l.observation),
     }));
@@ -228,10 +241,11 @@ async function insererFrais(client, conditionId, frais) {
   for (const f of frais) {
     await client.query(
       `INSERT INTO financement_condition_frais (id, condition_id, ordre, code, libelle, nature, mode_calcul, base, taux_pct, montant_fixe,
-              periode, periode_entamee, minimum, maximum, prelevement, soumis_taxe, actif, observation)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+              periode, periode_entamee, minimum, maximum, prelevement, soumis_taxe, actif, observation, taxe_taux_pct, taxe_libelle, frequence)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
       [uuidv4(), conditionId, f.ordre, f.code, f.libelle, f.nature, f.mode_calcul, f.base, f.taux_pct, f.montant_fixe,
-        f.periode, f.periode_entamee, f.minimum, f.maximum, f.prelevement, f.soumis_taxe, f.actif, f.observation]
+        f.periode, f.periode_entamee, f.minimum, f.maximum, f.prelevement, f.soumis_taxe, f.actif, f.observation,
+        f.taxe_taux_pct, f.taxe_libelle, f.frequence]
     );
   }
 }
@@ -251,9 +265,9 @@ const COLONNES_CONDITION = [
   "libelle", "reference_proposition", "statut", "date_proposition", "date_effet", "date_validite", "date_fin", "plafond_montant",
   "montant_min", "duree_min_jours", "duree_max_jours", "taux_avance_pct", "retenue_incluse_avance", "base_creance", "base_jours",
   "jours_valeur", "duree_minimale_facturee", "taxe_libelle", "taxe_taux_pct", "recours", "domiciliation_exigee", "restreindre_debiteurs",
-  "debiteurs_agrees_json", "justificatifs", "conditions_particulieres", "notes",
+  "debiteurs_agrees_json", "justificatifs", "conditions_particulieres", "notes", "points_confirmes_json",
 ];
-const valeursCondition = (c) => COLONNES_CONDITION.map((k) => (k === "debiteurs_agrees_json" ? JSON.stringify(c[k]) : c[k]));
+const valeursCondition = (c) => COLONNES_CONDITION.map((k) => (k === "debiteurs_agrees_json" || k === "points_confirmes_json" ? JSON.stringify(c[k]) : c[k]));
 
 router.get("/conditions", async (req, res) => {
   try {

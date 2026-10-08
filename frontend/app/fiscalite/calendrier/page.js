@@ -20,6 +20,7 @@ function lienEcheance(e) {
   if (e.type.startsWith("CEL_")) return `/fiscalite/cel/${e.periode}`;
   if (e.type === "VEHICULES") return "/fiscalite/vehicules";
   if (e.type === "RETENUES") return `/fiscalite/retenues?annee=${e.annee_periode}&mois=${e.mois_periode}`;
+  if (e.type === "SALAIRES" && e.paie_periode_id) return `/paie/mois/${e.paie_periode_id}`;
   return null;
 }
 
@@ -42,7 +43,7 @@ export default function FiscaliteCalendrierPage() {
   useEffect(charger, [charger]);
 
   const libelle = (e) => {
-    if (e.type === "TVA" || e.type === "RETENUES") return `${t(`fiscEch${e.type}`)} — ${nomMois(e.mois_periode, locale)} ${e.annee_periode}`;
+    if (e.type === "TVA" || e.type === "RETENUES" || e.type === "SALAIRES") return `${t(`fiscEch${e.type}`)} — ${nomMois(e.mois_periode, locale)} ${e.annee_periode}`;
     return `${t(`fiscEch${e.type}`)} ${e.periode}`;
   };
 
@@ -156,7 +157,7 @@ export default function FiscaliteCalendrierPage() {
                 <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>{dateCourte(e.date_limite, locale)}</td>
                 <td style={tdStyle}>
                   {lienEcheance(e) ? <Link href={lienEcheance(e)} style={{ color: "var(--petrol)", fontWeight: 600 }}>{libelle(e)}</Link> : libelle(e)}
-                  {!e.automatique && e.type === "RETENUES" && <div style={{ fontSize: 11, color: "var(--sub)" }}>{t("fiscSuiviManuel")}</div>}
+                  {!e.automatique && (e.type === "RETENUES" || e.type === "SALAIRES") && <div style={{ fontSize: 11, color: "var(--sub)" }}>{t("fiscSuiviManuel")}</div>}
                   {e.penalites_estimees && e.penalites_estimees.total > 0 && (
                     <div style={{ fontSize: 11, color: "var(--brique)" }}>
                       {t("fiscPenalitesEstimees")} : {formaterXof(e.penalites_estimees.total, locale)} XOF ({e.penalites_estimees.jours_retard} {t("fiscJours")})

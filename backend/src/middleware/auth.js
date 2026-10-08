@@ -36,7 +36,7 @@ async function requireAuth(req, res, next) {
 
   try {
     const userResult = await db.query(
-      `SELECT u.id, u.tenant_id, u.email, u.actif, te.module_comptabilite_actif, te.module_fiscalite_actif
+      `SELECT u.id, u.tenant_id, u.email, u.actif, te.module_comptabilite_actif, te.module_fiscalite_actif, te.module_paie_actif
        FROM utilisateur u
        JOIN tenant te ON te.id = u.tenant_id
        WHERE u.id = $1`,
@@ -93,6 +93,7 @@ async function requireAuth(req, res, next) {
 
     permissions.comptabiliteActive = !!user.module_comptabilite_actif;
     permissions.fiscaliteActive = !!user.module_fiscalite_actif;
+    permissions.paieActive = !!user.module_paie_actif;
 
     req.user = {
       sub: user.id,
@@ -241,6 +242,15 @@ function exigerModuleFiscaliteActif(req, res, next) {
 }
 
 /**
+ * Module Paie vendu en option (migration 061, 08/10/2026) : meme principe - acces totalement refuse tant que le Super
+ * Admin n'a pas active le module pour ce client, ADMIN compris.
+ */
+function exigerModulePaieActif(req, res, next) {
+  if (req.user?.permissions?.paieActive) return next();
+  return res.status(403).json({ error: t(req, "PAIE_MODULE_VERROUILLE"), code: "MODULE_VERROUILLE" });
+}
+
+/**
  * Bloque toute methode d'ecriture (tout sauf GET) pour un utilisateur dont
  * TOUS les roles sont marques "lecture seule" (cas du Directeur General,
  * qui doit pouvoir tout consulter mais ne jamais rien modifier). ADMIN n'est
@@ -315,6 +325,7 @@ module.exports = {
   requireModuleAny,
   exigerModuleComptabiliteActif,
   exigerModuleFiscaliteActif,
+  exigerModulePaieActif,
   blockLectureSeule,
   requireSuperAdmin,
 };

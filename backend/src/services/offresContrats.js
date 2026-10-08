@@ -85,7 +85,7 @@ function calculerTotaux(lignes, remisePct, tvaPct) {
 async function proposerLignes({ tenant_id, formule_id, mode, modules, duree_mois }) {
   const t = await db.query(
     `SELECT te.id, te.raison_sociale, te.adresse, te.ninea, te.rccm, te.email, te.signataire_nom, te.signataire_titre,
-            te.formule_abonnement_id, te.mode_hebergement, te.module_comptabilite_prix_mensuel_xof, te.module_fiscalite_prix_mensuel_xof
+            te.formule_abonnement_id, te.mode_hebergement, te.module_comptabilite_prix_mensuel_xof, te.module_fiscalite_prix_mensuel_xof, te.module_paie_prix_mensuel_xof
      FROM tenant te WHERE te.id = $1`,
     [tenant_id]
   );
@@ -104,7 +104,7 @@ async function proposerLignes({ tenant_id, formule_id, mode, modules, duree_mois
   } else {
     lignes.push({ libelle: `Licence d'utilisation de Baobab Marchés - formule ${f.nom}`, description: `Version installée chez le client, ${plafond}, mises à jour et support pendant ${duree} mois`, quantite: Math.round((duree / 12) * 100) / 100, unite: "an", prix_unitaire: arrondi(f.prix_licence_annuelle_xof) });
   }
-  const prixModule = { COMPTABILITE: arrondi(tenant.module_comptabilite_prix_mensuel_xof), FISCALITE: arrondi(tenant.module_fiscalite_prix_mensuel_xof), PAIE: 0 };
+  const prixModule = { COMPTABILITE: arrondi(tenant.module_comptabilite_prix_mensuel_xof), FISCALITE: arrondi(tenant.module_fiscalite_prix_mensuel_xof), PAIE: arrondi(tenant.module_paie_prix_mensuel_xof) };
   for (const code of Array.isArray(modules) ? modules : []) {
     if (!MODULES[code]) continue;
     lignes.push({ libelle: `Module ${MODULES[code]}`, description: m === "HEBERGE" ? "Supplément mensuel" : "Supplément mensuel de licence", quantite: duree, unite: "mois", prix_unitaire: prixModule[code] || 0 });

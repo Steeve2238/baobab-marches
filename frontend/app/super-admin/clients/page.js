@@ -71,6 +71,9 @@ export default function SuperAdminClientsPage() {
                     {client.module_fiscalite_actif && (
                       <span style={{ marginLeft: 8, color: "#2E7D5B", fontWeight: 600 }}>· {t("saModuleFiscSection")}</span>
                     )}
+                    {client.module_paie_actif && (
+                      <span style={{ marginLeft: 8, color: "#2E7D5B", fontWeight: 600 }}>· {t("saModulePaieSection")}</span>
+                    )}
                   </div>
                 </div>
                 <span

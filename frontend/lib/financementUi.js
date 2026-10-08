@@ -35,6 +35,13 @@ export const PERIODES = ["MOIS", "TRIMESTRE", "SEMESTRE", "AN"];
 export const RETENUES = ["INCLUSE", "EN_PLUS", "A_CONFIRMER"];
 export const RECOURS = ["AVEC_RECOURS_NOTIFIE", "AVEC_RECOURS_NON_NOTIFIE", "SANS_RECOURS"];
 export const STATUTS = ["EN_NEGOCIATION", "ACTIVE", "ARCHIVEE"];
+export const FREQUENCES = ["PAR_OPERATION", "UNIQUE_CONTRAT"];
+// Points que la proposition de la banque ne precise pas toujours : a cocher une fois confirmes par ecrit.
+export const POINTS_CONFIRMABLES = {
+  CREANCE: ["BASE_COMMISSION", "TAXE", "BASE_JOURS", "PRELEVEMENT_INTERETS", "FRAIS_UNIQUES", "LIBERATION_FONDS", "RETARD_PAIEMENT", "VALIDITE", "DUREE_MAX"],
+  PRET: ["TAXE", "BASE_JOURS", "PRELEVEMENT_INTERETS", "VALIDITE", "DUREE_MAX"],
+  GARANTIE: ["TAXE", "VALIDITE"],
+};
 
 /** Montant sans decimales (les montants du module sont en XOF entiers). */
 export function fmtXof(n, locale = "fr-FR") {

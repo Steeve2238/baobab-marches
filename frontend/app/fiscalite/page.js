@@ -15,6 +15,7 @@ function lienEcheance(e) {
   if (e.type === "CEL_LOCAUX" || e.type.startsWith("CEL_")) return `/fiscalite/cel/${e.periode}`;
   if (e.type === "VEHICULES") return "/fiscalite/vehicules";
   if (e.type === "RETENUES") return `/fiscalite/retenues?annee=${e.annee_periode}&mois=${e.mois_periode}`;
+  if (e.type === "SALAIRES" && e.paie_periode_id) return `/paie/mois/${e.paie_periode_id}`;
   return "/fiscalite/calendrier";
 }
 
@@ -32,6 +33,7 @@ export default function FiscaliteAccueilPage() {
 
   const libelleEcheance = (e) => {
     if (e.type === "TVA") return `${t("fiscEchTVA")} — ${nomMois(e.mois_periode, locale)} ${e.annee_periode}`;
+    if (e.type === "SALAIRES") return `${t("fiscEchSALAIRES")} — ${nomMois(e.mois_periode, locale)} ${e.annee_periode}`;
     if (e.type === "RETENUES") return `${t("fiscEchRETENUES")} — ${nomMois(e.mois_periode, locale)} ${e.annee_periode}`;
     return `${t(`fiscEch${e.type}`)} ${e.periode}`;
   };

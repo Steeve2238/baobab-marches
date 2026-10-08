@@ -6,49 +6,46 @@ import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import FicheEmployeForm, { formInitial, formVersCorps, inputStyle } from "../../../../lib/components/FicheEmployeForm";
 
 export default function FicheEmployePage() {
   const { id } = useParams();
-  const { t, statutEmployeLabel } = useLangue();
+  const { t } = useLangue();
   const [fiche, setFiche] = useState(null);
   const [form, setForm] = useState(null);
   const [erreur, setErreur] = useState("");
   const [message, setMessage] = useState("");
   const [enCours, setEnCours] = useState(false);
+  const [comptes, setComptes] = useState([]);
+  const [compteChoisi, setCompteChoisi] = useState("");
+  const [contrats, setContrats] = useState([]);
+  const [courriers, setCourriers] = useState([]);
+  const [dmts, setDmts] = useState([]);
+
+  function appliquer(f) {
+    setFiche(f);
+    setForm(formInitial(f));
+  }
 
   useEffect(() => {
-    api
-      .getFicheEmploye(id)
-      .then((f) => {
-        setFiche(f);
-        setForm({
-          poste: f.poste || "",
-          type_contrat: f.type_contrat || "",
-          date_embauche: f.date_embauche ? f.date_embauche.slice(0, 10) : "",
-          date_fin_contrat: f.date_fin_contrat ? f.date_fin_contrat.slice(0, 10) : "",
-          telephone: f.telephone || "",
-          contact_urgence_nom: f.contact_urgence_nom || "",
-          contact_urgence_telephone: f.contact_urgence_telephone || "",
-          solde_conges: f.solde_conges != null ? String(f.solde_conges) : "0",
-          statut: f.statut || "ACTIF",
-        });
-      })
-      .catch((err) => setErreur(err.message));
+    api.getFicheEmploye(id).then(appliquer).catch((err) => setErreur(err.message));
+    api.getUtilisateursDisponiblesRH().then(setComptes).catch(() => {});
+    api.getContrats(id).then(setContrats).catch(() => {});
+    api.getCourriers({ employe_id: id }).then(setCourriers).catch(() => {});
+    api.getDmts(id).then(setDmts).catch(() => {});
   }, [id]);
+
+  const estSalarieSeul = fiche && fiche.historique === undefined;
 
   async function handleEnregistrer(e) {
     e.preventDefault();
     setEnCours(true);
     setMessage("");
+    setErreur("");
     try {
-      const maj = await api.patchFicheEmploye(id, {
-        ...form,
-        date_embauche: form.date_embauche || null,
-        date_fin_contrat: form.date_fin_contrat || null,
-        solde_conges: form.solde_conges !== "" ? Number(form.solde_conges) : null,
-      });
-      setFiche(maj);
-      setMessage(t("ficheUpdated"));
+      const maj = await api.patchFicheEmploye(id, formVersCorps(form, { salarieSeul: estSalarieSeul }));
+      appliquer(maj);
+      setMessage(t("rhdEnregistre"));
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -56,163 +53,239 @@ export default function FicheEmployePage() {
     }
   }
 
+  async function changerCompte(utilisateurId) {
+    setErreur("");
+    try {
+      const maj = await api.lierCompteEmploye(id, utilisateurId);
+      appliquer(maj);
+      setCompteChoisi("");
+      setMessage(t("rhdCompteMaj"));
+      api.getUtilisateursDisponiblesRH().then(setComptes).catch(() => {});
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
   if (erreur && !fiche) {
     return (
-      <AppShell title={t("ficheEmployePageTitle")}>
+      <AppShell title={t("rhdListTitre")}>
         <p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p>
       </AppShell>
     );
   }
-
   if (!fiche || !form) {
     return (
-      <AppShell title={t("ficheEmployePageTitle")}>
+      <AppShell title={t("rhdListTitre")}>
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
       </AppShell>
     );
   }
 
+  const parts = fiche.parts;
+  const comp = fiche.completude;
+
   return (
-    <AppShell title={`${fiche.prenom} ${fiche.nom}`}>
+    <AppShell title={`${fiche.prenom || ""} ${fiche.nom || ""}`}>
       <Link href="/rh/personnel" style={{ fontSize: 12, color: "var(--petrol)", display: "inline-block", marginBottom: 12 }}>
-        {t("backToPersonnel")}
+        {t("rhdRetour")}
       </Link>
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       {message && <p style={{ color: "var(--petrol)", fontSize: 12.5, marginBottom: 14 }}>{message}</p>}
 
-      <div className="card" style={{ maxWidth: 560, marginBottom: 16 }}>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>
-          {fiche.prenom} {fiche.nom}
-        </div>
-        <div style={{ fontSize: 12, color: "var(--sub)", marginBottom: 8 }}>{fiche.email}</div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {(fiche.roles || []).length === 0 ? (
-            <span style={{ fontSize: 11.5, color: "var(--sub)" }}>{t("aucunRole")}</span>
-          ) : (
-            fiche.roles.map((r) => (
-              <span key={r.code} className="chip ok">
-                {r.libelle}
-              </span>
-            ))
+      <div style={{ maxWidth: 980, display: "grid", gap: 16 }}>
+        <div className="card" style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{fiche.prenom} {fiche.nom}</div>
+            <div className="mono" style={{ fontSize: 12, color: "var(--sub)" }}>{fiche.matricule || "—"}</div>
+          </div>
+          {parts && (
+            <>
+              <Stat label={t("rhdPartsIR")} valeur={parts.parts_ir} note={parts.manuel_ir ? t("rhdPartsImposees") : t("rhdPartsCalculees")} />
+              <Stat label={t("rhdPartsTrimf")} valeur={parts.parts_trimf} note={parts.manuel_trimf ? t("rhdPartsImposees") : t("rhdPartsCalculees")} />
+              <Stat label={t("rhdEnfantsCharge")} valeur={parts.enfants_a_charge} note={String(parts.annee)} />
+            </>
+          )}
+          {comp && (
+            <span className={comp.pourcentage === 100 ? "chip ok" : "chip risk"} style={{ marginLeft: "auto" }}>
+              {comp.pourcentage === 100 ? t("rhdFicheComplete") : `${t("rhdFicheIncomplete")} · ${comp.pourcentage} %`}
+            </span>
           )}
         </div>
+
+        {comp && comp.manquants.length > 0 && !estSalarieSeul && (
+          <div className="card">
+            <h2 style={{ fontSize: 14, margin: "0 0 8px" }}>{t("rhdSecCompletude")}</h2>
+            <p style={{ fontSize: 12, color: "var(--sub)", margin: "0 0 8px" }}>{t("rhdCompletudeAide")}</p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {comp.manquants.map((m) => (
+                <span key={m} className="chip risk">{t(`rhd_${m}`)}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleEnregistrer}>
+          <FicheEmployeForm form={form} setForm={setForm} t={t} salarieSeul={estSalarieSeul} />
+          <button
+            type="submit"
+            disabled={enCours}
+            style={{
+              marginTop: 16,
+              background: "var(--petrol)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "9px 20px",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {enCours ? t("rhdEnregistrement") : t("rhdEnregistrer")}
+          </button>
+        </form>
+
+        {!estSalarieSeul && (
+          <section className="card">
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+              <h2 style={{ fontSize: 14, margin: 0 }}>{t("rhcDocs")}</h2>
+              <Link href={`/rh/contrats/nouveau?employe_id=${id}&type=${fiche.type_contrat === "CDD" || fiche.type_contrat === "JOURNALIER" ? fiche.type_contrat : "CDI"}`} style={{ ...boutonLeger, marginLeft: "auto" }}>
+                + {t("rhcGenererContrat")}
+              </Link>
+              <Link href={`/rh/dmt/nouvelle?employe_id=${id}&objet=EMBAUCHE`} style={boutonLeger}>
+                + {t("rhcGenererDmt")}
+              </Link>
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {contrats.map((c) => (
+                <Link key={c.id} href={`/rh/contrats/${c.id}`} style={{ display: "flex", gap: 12, fontSize: 12.5, textDecoration: "none", color: "inherit", borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+                  <span className="mono" style={{ fontWeight: 600 }}>{c.numero}</span>
+                  <span>{t(`rhcType_${c.type}`)}</span>
+                  <span style={{ color: "var(--sub)" }}>{String(c.date_effet || "").slice(0, 10)}</span>
+                  <span className="chip" style={{ marginLeft: "auto" }}>{t(`rhcStatut_${c.statut}`)}</span>
+                </Link>
+              ))}
+              {dmts.map((d) => (
+                <Link key={d.id} href={`/rh/dmt/${d.id}`} style={{ display: "flex", gap: 12, fontSize: 12.5, textDecoration: "none", color: "inherit", borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+                  <span className="mono" style={{ fontWeight: 600 }}>{d.numero}</span>
+                  <span>{t(`rhdmObjet_${d.objet}`)}</span>
+                  <span className="chip" style={{ marginLeft: "auto" }}>{t(`rhdmStatut_${d.statut}`)}</span>
+                </Link>
+              ))}
+              {contrats.length === 0 && dmts.length === 0 && (
+                <p style={{ fontSize: 12.5, color: "var(--sub)", margin: 0 }}>{t("rhcAucun")}</p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {!estSalarieSeul && (
+          <section className="card">
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+              <h2 style={{ fontSize: 14, margin: 0 }}>{t("rhkCourriersFiche")}</h2>
+              <Link href={`/rh/courriers?employe_id=${id}`} style={{ ...boutonLeger, marginLeft: "auto" }}>+ {t("rhkNouveau")}</Link>
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {courriers.map((c) => (
+                <Link key={c.id} href={`/rh/courriers/${c.id}`} style={{ display: "flex", gap: 12, fontSize: 12.5, textDecoration: "none", color: "inherit", borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+                  <span className="mono" style={{ fontWeight: 600 }}>{c.numero}</span>
+                  <span>{t(`rhkType_${c.type}`)}</span>
+                  <span style={{ color: "var(--sub)" }}>{String(c.date_courrier || "").slice(0, 10)}</span>
+                  <span className="chip" style={{ marginLeft: "auto" }}>{t(`rhkStatut_${c.statut}`)}</span>
+                </Link>
+              ))}
+              {courriers.length === 0 && <p style={{ fontSize: 12.5, color: "var(--sub)", margin: 0 }}>{t("rhkAucun")}</p>}
+            </div>
+          </section>
+        )}
+
+        {!estSalarieSeul && (
+          <section className="card">
+            <h2 style={{ fontSize: 14, margin: "0 0 8px" }}>{t("rhdSecCompte")}</h2>
+            <p style={{ fontSize: 11.5, color: "var(--sub)", margin: "0 0 10px" }}>{t("rhdCompteAide")}</p>
+            {fiche.utilisateur_id ? (
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13 }}>{t("rhdCompteLie")} <strong>{fiche.email}</strong></span>
+                {(fiche.roles || []).map((r) => (
+                  <span key={r.code} className="chip ok">{r.libelle}</span>
+                ))}
+                <button type="button" onClick={() => changerCompte(null)} style={boutonLeger}>
+                  {t("rhdCompteDelier")}
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rhdCompteAucun")}</span>
+                <select value={compteChoisi} onChange={(e) => setCompteChoisi(e.target.value)} style={{ ...inputStyle, width: "auto", minWidth: 260 }}>
+                  <option value="">{t("rhdCompteChoisir")}</option>
+                  {comptes.map((u) => (
+                    <option key={u.id} value={u.id}>{u.prenom} {u.nom} ({u.email})</option>
+                  ))}
+                </select>
+                <button type="button" disabled={!compteChoisi} onClick={() => changerCompte(compteChoisi)} style={boutonLeger}>
+                  {t("rhdCompteLier")}
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {!estSalarieSeul && (
+          <section className="card">
+            <h2 style={{ fontSize: 14, margin: "0 0 10px" }}>{t("rhdSecHistorique")}</h2>
+            {(fiche.historique || []).length === 0 ? (
+              <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rhdHistAucun")}</p>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", color: "var(--sub)" }}>
+                      <th style={th}>{t("rhdHistDate")}</th>
+                      <th style={th}>{t("rhdHistChamp")}</th>
+                      <th style={th}>{t("rhdHistAvant")}</th>
+                      <th style={th}>{t("rhdHistApres")}</th>
+                      <th style={th}>{t("rhdHistPar")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fiche.historique.map((h, i) => (
+                      <tr key={i} style={{ borderTop: "1px solid var(--line)" }}>
+                        <td style={td}>{String(h.date_modification).slice(0, 10)}</td>
+                        <td style={td}>{t(`rhd_${h.champ}`)}</td>
+                        <td style={td}>{h.ancienne_valeur || "—"}</td>
+                        <td style={td}>{h.nouvelle_valeur || "—"}</td>
+                        <td style={td}>{[h.auteur_prenom, h.auteur_nom].filter(Boolean).join(" ") || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
       </div>
-
-      <form onSubmit={handleEnregistrer} className="card" style={{ maxWidth: 560 }}>
-        <label style={labelStyle}>{t("posteLabel")}</label>
-        <input
-          value={form.poste}
-          onChange={(e) => setForm((f) => ({ ...f, poste: e.target.value }))}
-          style={inputStyle}
-        />
-
-        <label style={{ ...labelStyle, marginTop: 10 }}>{t("typeContratLabel")}</label>
-        <input
-          value={form.type_contrat}
-          onChange={(e) => setForm((f) => ({ ...f, type_contrat: e.target.value }))}
-          style={inputStyle}
-        />
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
-          <div>
-            <label style={labelStyle}>{t("dateEmbaucheLabel")}</label>
-            <input
-              type="date"
-              value={form.date_embauche}
-              onChange={(e) => setForm((f) => ({ ...f, date_embauche: e.target.value }))}
-              style={inputStyle}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>{t("dateFinContratLabel")}</label>
-            <input
-              type="date"
-              value={form.date_fin_contrat}
-              onChange={(e) => setForm((f) => ({ ...f, date_fin_contrat: e.target.value }))}
-              style={inputStyle}
-            />
-          </div>
-        </div>
-
-        <label style={{ ...labelStyle, marginTop: 10 }}>{t("telephoneLabel")}</label>
-        <input
-          value={form.telephone}
-          onChange={(e) => setForm((f) => ({ ...f, telephone: e.target.value }))}
-          style={inputStyle}
-        />
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
-          <div>
-            <label style={labelStyle}>{t("contactUrgenceNomLabel")}</label>
-            <input
-              value={form.contact_urgence_nom}
-              onChange={(e) => setForm((f) => ({ ...f, contact_urgence_nom: e.target.value }))}
-              style={inputStyle}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>{t("contactUrgenceTelephoneLabel")}</label>
-            <input
-              value={form.contact_urgence_telephone}
-              onChange={(e) => setForm((f) => ({ ...f, contact_urgence_telephone: e.target.value }))}
-              style={inputStyle}
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 10 }}>
-          <div>
-            <label style={labelStyle}>{t("soldeCongesLabel")}</label>
-            <input
-              type="number"
-              step="0.5"
-              min="0"
-              value={form.solde_conges}
-              onChange={(e) => setForm((f) => ({ ...f, solde_conges: e.target.value }))}
-              style={inputStyle}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>{t("statutEmployeLabel")}</label>
-            <select
-              value={form.statut}
-              onChange={(e) => setForm((f) => ({ ...f, statut: e.target.value }))}
-              style={inputStyle}
-            >
-              <option value="ACTIF">{statutEmployeLabel("ACTIF")}</option>
-              <option value="INACTIF">{statutEmployeLabel("INACTIF")}</option>
-            </select>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={enCours}
-          style={{
-            marginTop: 14,
-            background: "var(--petrol)",
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            padding: "8px 16px",
-            fontSize: 12.5,
-            fontWeight: 600,
-          }}
-        >
-          {enCours ? t("savingFiche") : t("saveFicheButton")}
-        </button>
-      </form>
     </AppShell>
   );
 }
 
-const labelStyle = { fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 5 };
-const inputStyle = {
-  width: "100%",
-  padding: "8px 10px",
+function Stat({ label, valeur, note }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9.5, color: "var(--sub)", textTransform: "uppercase", letterSpacing: 0.4 }}>{label}</div>
+      <div className="mono" style={{ fontSize: 18, fontWeight: 700 }}>{valeur}</div>
+      <div style={{ fontSize: 10.5, color: "var(--sub)" }}>{note}</div>
+    </div>
+  );
+}
+
+const th = { padding: "6px 8px", fontWeight: 600 };
+const td = { padding: "6px 8px" };
+const boutonLeger = {
+  background: "transparent",
   border: "1px solid var(--line)",
   borderRadius: 8,
-  fontSize: 13,
+  padding: "6px 14px",
+  fontSize: 12,
+  cursor: "pointer",
   fontFamily: "inherit",
 };

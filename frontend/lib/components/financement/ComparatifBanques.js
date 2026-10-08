@@ -107,6 +107,7 @@ export function ReleveCarte({ releve, classement, onChoisir, choisi, choixEnCour
           <Chiffre label={t("finCarteRecu")} valeur={`${fmtXof(flux)} ${t("finXof")}`} fort couleur={releve.eligible ? "var(--vert)" : "var(--sub)"} sous={releve.avance_montant ? `${t("finCarteAvance")} ${fmtPct(releve.taux_avance_pct, undefined, 2)} %` : null} />
         )}
         <Chiffre label={t("finCarteCout")} valeur={`${fmtXof(tt.cout_ttc)} ${t("finXof")}`} fort sous={`${fmtPct(tt.part_du_montant_pct)} % — ${t("finCartePart")}`} />
+        {Number(tt.frais_uniques_ttc) > 0 && <Chiffre label={t("finCarteFraisUniques")} valeur={`${fmtXof(tt.frais_uniques_ttc)} ${t("finXof")}`} sous={`${t("finCarteCoutCourant")} : ${fmtXof(tt.cout_courant_ttc)} ${t("finXof")}`} />}
         {Number(tt.a_payer_echeance) > 0 && <Chiffre label={t("finCarteEcheance")} valeur={`${fmtXof(tt.a_payer_echeance)} ${t("finXof")}`} />}
         {Number(tt.retenue_totale) > 0 && <Chiffre label={t("finCarteRestitue")} valeur={`${fmtXof(tt.retenue_totale)} ${t("finXof")}`} />}
         {tt.net_final !== null && tt.net_final !== undefined && <Chiffre label={t("finCarteNetFinal")} valeur={`${fmtXof(tt.net_final)} ${t("finXof")}`} />}
@@ -166,6 +167,7 @@ export function ReleveCarte({ releve, classement, onChoisir, choisi, choixEnCour
                     <td style={tdStyle}>
                       {l.libelle}
                       {l.nature === "RETENUE" && <span style={{ color: "var(--sub)" }}> ({t("finCarteBloquee")})</span>}
+                      {l.frequence === "UNIQUE_CONTRAT" && <span style={{ color: "var(--sub)" }}> ({t("finCarteUnique")})</span>}
                       {l.incomplete && <span style={{ color: "var(--ocre)", fontWeight: 700 }}> — {t("finCarteIncomplete")}</span>}
                     </td>
                     <td style={{ ...tdStyle, color: "var(--sub)", fontSize: 11.5 }}>{l.formule || ""}</td>

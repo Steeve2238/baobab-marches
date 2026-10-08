@@ -38,6 +38,9 @@ const MODULES_DISPONIBLES = [
   // "fiscalite-validation" = preparer / deposer / payer une declaration, profil fiscal. Voir routes/fiscalite.js.
   { key: "fiscalite", labelKey: "navFiscalite" },
   { key: "fiscalite-validation", labelKey: "navFiscaliteValidation" },
+  // Paie (module payant, 08/10/2026) : "paie" = dossiers de paie et saisie ; "paie-validation" = parametres, generation, cloture.
+  { key: "paie", labelKey: "navPaie" },
+  { key: "paie-validation", labelKey: "navPaieValidation" },
 ];
 
 const FORM_VIDE = {
@@ -237,20 +240,23 @@ function PerimetreEditor({ form, setForm, t }) {
   // sont proposes que si le Super Admin l'a active pour cette entreprise.
   const [comptaActive, setComptaActive] = useState(false);
   const [fiscaliteActive, setFiscaliteActive] = useState(false);
+  const [paieActive, setPaieActive] = useState(false);
   useEffect(() => {
     api
       .getPermissions()
       .then((p) => {
         setComptaActive(!!p?.comptabiliteActive);
         setFiscaliteActive(!!p?.fiscaliteActive);
+        setPaieActive(!!p?.paieActive);
       })
       .catch(() => {
         setComptaActive(false);
         setFiscaliteActive(false);
+        setPaieActive(false);
       });
   }, []);
   const modulesProposes = MODULES_DISPONIBLES.filter(
-    (m) => (comptaActive || !m.key.startsWith("comptabilite")) && (fiscaliteActive || !m.key.startsWith("fiscalite"))
+    (m) => (comptaActive || !m.key.startsWith("comptabilite")) && (fiscaliteActive || !m.key.startsWith("fiscalite")) && (paieActive || !m.key.startsWith("paie"))
   );
   return (
     <fieldset style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "10px 12px", marginTop: 12 }}>

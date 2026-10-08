@@ -8,7 +8,7 @@ import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
 import FinancementSousNav from "../../../../lib/components/financement/FinancementSousNav";
 import { ReleveCarte } from "../../../../lib/components/financement/ComparatifBanques";
-import { MODES, PERIODES, RETENUES, RECOURS, STATUTS, jour, Aide, labelStyle, inputStyle, boutonPrincipalStyle, boutonSecondaireStyle, boutonDangerStyle } from "../../../../lib/financementUi";
+import { MODES, PERIODES, RETENUES, RECOURS, STATUTS, FREQUENCES, POINTS_CONFIRMABLES, jour, Aide, labelStyle, inputStyle, boutonPrincipalStyle, boutonSecondaireStyle, boutonDangerStyle } from "../../../../lib/financementUi";
 
 // Editeur des conditions d'une banque pour UN type de financement : dates,
 // plafonds, avance, taxe, clients agrees et surtout les lignes de frais
@@ -34,7 +34,10 @@ function versFormulaire(c) {
     maximum: l.maximum === null || l.maximum === undefined ? "" : String(Number(l.maximum)),
     periode: l.periode || "",
     observation: l.observation || "",
+    taxe_taux_pct: l.taxe_taux_pct === null || l.taxe_taux_pct === undefined ? "" : String(Number(l.taxe_taux_pct)),
+    frequence: l.frequence || "PAR_OPERATION",
   }));
+  f.points_confirmes_json = c.points_confirmes_json && typeof c.points_confirmes_json === "object" ? { ...c.points_confirmes_json } : {};
   return f;
 }
 
@@ -273,6 +276,18 @@ export default function FinancementConditionPage() {
           <Aide>{t("finCondTaxeAide")}</Aide>
         </Section>
 
+        <Section titre={t("finCondSectionPoints")}>
+          <Aide>{t("finCondPointsAide")}</Aide>
+          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+            {(POINTS_CONFIRMABLES[famille] || POINTS_CONFIRMABLES.PRET).map((code) => (
+              <label key={code} style={{ fontSize: 12.5, display: "flex", gap: 8, alignItems: "center" }}>
+                <input type="checkbox" checked={form.points_confirmes_json[code] === true} onChange={(e) => setForm((f) => ({ ...f, points_confirmes_json: { ...f.points_confirmes_json, [code]: e.target.checked } }))} />
+                {t(`finPoint_${code}`)}
+              </label>
+            ))}
+          </div>
+        </Section>
+
         {(champs.recours || champs.domiciliation || champs.debiteurs) && (
           <Section titre={t("finCondSectionRisque")}>
             <div style={{ display: "grid", gap: 12 }}>
@@ -437,6 +452,24 @@ export default function FinancementConditionPage() {
                         {t("finFraisTaxe")} ({form.taxe_libelle || "TOB"})
                       </label>
                     )}
+                    {l.nature === "COUT" && l.soumis_taxe !== false && (
+                      <div>
+                        <label style={labelStyle}>{t("finFraisTauxTaxe")}</label>
+                        <input type="number" step="any" min="0" value={l.taxe_taux_pct} placeholder={form.taxe_taux_pct} onChange={(e) => majLigne(i, "taxe_taux_pct", e.target.value)} style={inputStyle} />
+                      </div>
+                    )}
+                    {l.nature === "COUT" && (
+                      <div>
+                        <label style={labelStyle}>{t("finFraisFrequence")}</label>
+                        <select value={l.frequence || "PAR_OPERATION"} onChange={(e) => majLigne(i, "frequence", e.target.value)} style={selectStyle}>
+                          {FREQUENCES.map((q) => (
+                            <option key={q} value={q}>
+                              {t(`finFrequence_${q}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div style={{ gridColumn: "1 / -1" }}>
                       <label style={labelStyle}>{t("finFraisObservation")}</label>
                       <input value={l.observation} onChange={(e) => majLigne(i, "observation", e.target.value)} style={inputStyle} />
@@ -454,7 +487,7 @@ export default function FinancementConditionPage() {
                 ...f,
                 frais: [
                   ...f.frais,
-                  { code: `LIGNE_${f.frais.length + 1}`, libelle: "", nature: "COUT", mode_calcul: "POURCENT_FLAT", base: "CREANCE", taux_pct: "", montant_fixe: "", periode: "", periode_entamee: true, minimum: "", maximum: "", prelevement: "A_LA_MISE_EN_PLACE", soumis_taxe: true, actif: true, observation: "" },
+                  { code: `LIGNE_${f.frais.length + 1}`, libelle: "", nature: "COUT", mode_calcul: "POURCENT_FLAT", base: "CREANCE", taux_pct: "", montant_fixe: "", periode: "", periode_entamee: true, minimum: "", maximum: "", prelevement: "A_LA_MISE_EN_PLACE", soumis_taxe: true, taxe_taux_pct: "", frequence: "PAR_OPERATION", actif: true, observation: "" },
                 ],
               }))
             }

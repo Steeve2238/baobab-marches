@@ -26,10 +26,14 @@ const LIGNE = (code, libelle, extra = {}) => ({
   periode: null,
   prelevement: "A_LA_MISE_EN_PLACE",
   soumis_taxe: true,
+  frequence: "PAR_OPERATION",
   ...extra,
 });
 
 const FRAIS_DOSSIER = LIGNE("FRAIS_DOSSIER", "Frais de dossier", { mode_calcul: "FORFAIT" });
+// Affacturage : frais de dossier et d'avenant, en general factures UNE fois par contrat (a confirmer avec la banque).
+const FRAIS_DOSSIER_UNIQUE = LIGNE("FRAIS_DOSSIER", "Frais de dossier", { mode_calcul: "FORFAIT", frequence: "UNIQUE_CONTRAT" });
+const FRAIS_AVENANT = LIGNE("FRAIS_AVENANT", "Frais sur avenant au contrat", { mode_calcul: "FORFAIT", frequence: "UNIQUE_CONTRAT" });
 const TIMBRE = LIGNE("TIMBRE", "Droits de timbre", { mode_calcul: "FORFAIT", soumis_taxe: false });
 const DEPOT_GARANTIE = LIGNE("DEPOT_GARANTIE", "Dépôt de garantie (somme bloquée)", {
   nature: "RETENUE",
@@ -63,9 +67,11 @@ const TYPES = {
       LIGNE("COM_FINANCEMENT", "Commission de financement", {
         mode_calcul: "POURCENT_ANNUEL",
         base: "AVANCE",
+        prelevement: "A_L_ECHEANCE",
       }),
       LIGNE("FRAIS_GESTION", "Frais de gestion / recouvrement", { mode_calcul: "FORFAIT" }),
-      FRAIS_DOSSIER,
+      FRAIS_DOSSIER_UNIQUE,
+      FRAIS_AVENANT,
       TIMBRE,
     ],
   },
@@ -184,6 +190,8 @@ function catalogue() {
         periode_entamee: true,
         prelevement: l.prelevement,
         soumis_taxe: l.soumis_taxe,
+        frequence: l.frequence || "PAR_OPERATION",
+        taxe_taux_pct: null,
         actif: true,
         taux_pct: null,
         montant_fixe: null,

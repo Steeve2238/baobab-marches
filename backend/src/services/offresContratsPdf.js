@@ -406,4 +406,9 @@ async function contratPdf(contratRow, params) {
   return fini;
 }
 
-module.exports = { offrePdf, contratPdf };
+module.exports = {
+  offrePdf,
+  contratPdf,
+  // Briques reutilisees par les PDF RH (contrats de travail, DMT).
+  helpers: { nouveauDocument, largeurUtile, basPage, placerImage, image, titre, asseoir, section, corps, dateLongue, dateCourte, ou, fmt, PETROLE, ACCENT, GRIS, LIGNE, POINTS },
+};

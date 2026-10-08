@@ -1,0 +1,959 @@
+{
+ "date_effet": "2023-07-01",
+ "conventions": [
+  {
+   "code": "BTP",
+   "libelle": "Bâtiment et travaux publics",
+   "ordre": 1,
+   "anciennete": [
+    {
+     "annees": 2,
+     "taux": 2
+    },
+    {
+     "annees": 3,
+     "taux": 3
+    },
+    {
+     "annees": 4,
+     "taux": 4
+    },
+    {
+     "annees": 5,
+     "taux": 5
+    },
+    {
+     "annees": 6,
+     "taux": 6
+    },
+    {
+     "annees": 7,
+     "taux": 7
+    },
+    {
+     "annees": 8,
+     "taux": 8
+    },
+    {
+     "annees": 9,
+     "taux": 9
+    },
+    {
+     "annees": 10,
+     "taux": 10
+    },
+    {
+     "annees": 11,
+     "taux": 11
+    },
+    {
+     "annees": 12,
+     "taux": 12
+    },
+    {
+     "annees": 13,
+     "taux": 13
+    },
+    {
+     "annees": 14,
+     "taux": 14
+    },
+    {
+     "annees": 15,
+     "taux": 15
+    },
+    {
+     "annees": 16,
+     "taux": 16
+    },
+    {
+     "annees": 17,
+     "taux": 17
+    },
+    {
+     "annees": 18,
+     "taux": 18
+    },
+    {
+     "annees": 19,
+     "taux": 19
+    },
+    {
+     "annees": 20,
+     "taux": 20
+    },
+    {
+     "annees": 21,
+     "taux": 21
+    },
+    {
+     "annees": 22,
+     "taux": 22
+    },
+    {
+     "annees": 23,
+     "taux": 23
+    },
+    {
+     "annees": 24,
+     "taux": 24
+    },
+    {
+     "annees": 25,
+     "taux": 25
+    },
+    {
+     "annees": 26,
+     "taux": 25
+    },
+    {
+     "annees": 27,
+     "taux": 25
+    },
+    {
+     "annees": 28,
+     "taux": 25
+    },
+    {
+     "annees": 29,
+     "taux": 25
+    },
+    {
+     "annees": 30,
+     "taux": 25
+    },
+    {
+     "annees": 31,
+     "taux": 25
+    },
+    {
+     "annees": 32,
+     "taux": 25
+    },
+    {
+     "annees": 33,
+     "taux": 25
+    },
+    {
+     "annees": 34,
+     "taux": 25
+    },
+    {
+     "annees": 35,
+     "taux": 25
+    },
+    {
+     "annees": 36,
+     "taux": 25
+    },
+    {
+     "annees": 37,
+     "taux": 25
+    },
+    {
+     "annees": 38,
+     "taux": 25
+    },
+    {
+     "annees": 39,
+     "taux": 25
+    },
+    {
+     "annees": 40,
+     "taux": 25
+    }
+   ],
+   "majorations": [
+    {
+     "code": "HS_15",
+     "libelle": "Heures supplémentaires majorées de 15 %",
+     "taux": 15
+    },
+    {
+     "code": "HS_40",
+     "libelle": "Heures supplémentaires majorées de 40 %",
+     "taux": 40
+    },
+    {
+     "code": "HS_60",
+     "libelle": "Heures supplémentaires de nuit majorées de 60 %",
+     "taux": 60
+    },
+    {
+     "code": "HS_100",
+     "libelle": "Heures supplémentaires dimanche / jours fériés majorées de 100 %",
+     "taux": 100
+    }
+   ],
+   "categories": [
+    {
+     "code": "OUV1",
+     "libelle": "Ouvrier 1ère catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 72085
+    },
+    {
+     "code": "OUV2",
+     "libelle": "Ouvrier 2ème catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 72425
+    },
+    {
+     "code": "OUV3",
+     "libelle": "Ouvrier 3ème catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 77873
+    },
+    {
+     "code": "OUV4A",
+     "libelle": "Ouvrier 4ème A catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 80022
+    },
+    {
+     "code": "OUV4B",
+     "libelle": "Ouvrier 4ème B catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 82171
+    },
+    {
+     "code": "OUV5A",
+     "libelle": "Ouvrier 5ème A catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 83171
+    },
+    {
+     "code": "OUV5B",
+     "libelle": "Ouvrier 5ème B catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 86557
+    },
+    {
+     "code": "OUV6A",
+     "libelle": "Ouvrier 6ème A catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 86814
+    },
+    {
+     "code": "OUV6B",
+     "libelle": "Ouvrier 6ème B catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 96511
+    },
+    {
+     "code": "OUV7A",
+     "libelle": "Ouvrier 7ème A catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 112649
+    },
+    {
+     "code": "OUV7B",
+     "libelle": "Ouvrier 7ème B catégorie",
+     "classification": "OUVRIER",
+     "salaire_base": 123157
+    },
+    {
+     "code": "EMP1",
+     "libelle": "Employé 1ère catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 70697
+    },
+    {
+     "code": "EMP2",
+     "libelle": "Employé 2ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 73989
+    },
+    {
+     "code": "EMP3",
+     "libelle": "Employé 3ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 80642
+    },
+    {
+     "code": "EMP4",
+     "libelle": "Employé 4ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 82096
+    },
+    {
+     "code": "EMP5",
+     "libelle": "Employé 5ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 87564
+    },
+    {
+     "code": "EMP6",
+     "libelle": "Employé 6ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 90926
+    },
+    {
+     "code": "EMP7",
+     "libelle": "Employé 7ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 92861
+    },
+    {
+     "code": "AM1",
+     "libelle": "Agent de maîtrise AM1",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 97615
+    },
+    {
+     "code": "AM2",
+     "libelle": "Agent de maîtrise AM2",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 114034
+    },
+    {
+     "code": "AM3",
+     "libelle": "Agent de maîtrise AM3",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 125290
+    },
+    {
+     "code": "AM4",
+     "libelle": "Agent de maîtrise AM4",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 138614
+    },
+    {
+     "code": "AM5",
+     "libelle": "Agent de maîtrise AM5",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 139645
+    },
+    {
+     "code": "P1A",
+     "libelle": "Ingénieur / cadre P1A",
+     "classification": "CADRE",
+     "salaire_base": 142258
+    },
+    {
+     "code": "P1B",
+     "libelle": "Ingénieur / cadre P1B",
+     "classification": "CADRE",
+     "salaire_base": 144873
+    },
+    {
+     "code": "P2A",
+     "libelle": "Ingénieur / cadre P2A",
+     "classification": "CADRE",
+     "salaire_base": 158139
+    },
+    {
+     "code": "P2B",
+     "libelle": "Ingénieur / cadre P2B",
+     "classification": "CADRE",
+     "salaire_base": 178013
+    },
+    {
+     "code": "P3A",
+     "libelle": "Ingénieur / cadre P3A",
+     "classification": "CADRE",
+     "salaire_base": 189340
+    },
+    {
+     "code": "P3B",
+     "libelle": "Ingénieur / cadre P3B",
+     "classification": "CADRE",
+     "salaire_base": 268840
+    },
+    {
+     "code": "P4",
+     "libelle": "Ingénieur / cadre P4",
+     "classification": "CADRE",
+     "salaire_base": 308589
+    },
+    {
+     "code": "P5",
+     "libelle": "Ingénieur / cadre P5",
+     "classification": "CADRE",
+     "salaire_base": 348720
+    }
+   ],
+   "notes": "Barème des salaires catégoriels du secteur privé applicable au 1er juillet 2023 (Direction générale du travail et de la sécurité sociale). Vérifiez l'ancienneté et les majorations d'heures supplémentaires dans votre convention."
+  },
+  {
+   "code": "COMMERCE",
+   "libelle": "Commerce",
+   "ordre": 2,
+   "anciennete": [
+    {
+     "annees": 2,
+     "taux": 2
+    },
+    {
+     "annees": 3,
+     "taux": 3
+    },
+    {
+     "annees": 4,
+     "taux": 4
+    },
+    {
+     "annees": 5,
+     "taux": 5
+    },
+    {
+     "annees": 6,
+     "taux": 6
+    },
+    {
+     "annees": 7,
+     "taux": 7
+    },
+    {
+     "annees": 8,
+     "taux": 8
+    },
+    {
+     "annees": 9,
+     "taux": 9
+    },
+    {
+     "annees": 10,
+     "taux": 10
+    },
+    {
+     "annees": 11,
+     "taux": 11
+    },
+    {
+     "annees": 12,
+     "taux": 12
+    },
+    {
+     "annees": 13,
+     "taux": 13
+    },
+    {
+     "annees": 14,
+     "taux": 14
+    },
+    {
+     "annees": 15,
+     "taux": 15
+    },
+    {
+     "annees": 16,
+     "taux": 16
+    },
+    {
+     "annees": 17,
+     "taux": 17
+    },
+    {
+     "annees": 18,
+     "taux": 18
+    },
+    {
+     "annees": 19,
+     "taux": 19
+    },
+    {
+     "annees": 20,
+     "taux": 20
+    },
+    {
+     "annees": 21,
+     "taux": 21
+    },
+    {
+     "annees": 22,
+     "taux": 22
+    },
+    {
+     "annees": 23,
+     "taux": 23
+    },
+    {
+     "annees": 24,
+     "taux": 24
+    },
+    {
+     "annees": 25,
+     "taux": 25
+    },
+    {
+     "annees": 26,
+     "taux": 25
+    },
+    {
+     "annees": 27,
+     "taux": 25
+    },
+    {
+     "annees": 28,
+     "taux": 25
+    },
+    {
+     "annees": 29,
+     "taux": 25
+    },
+    {
+     "annees": 30,
+     "taux": 25
+    },
+    {
+     "annees": 31,
+     "taux": 25
+    },
+    {
+     "annees": 32,
+     "taux": 25
+    },
+    {
+     "annees": 33,
+     "taux": 25
+    },
+    {
+     "annees": 34,
+     "taux": 25
+    },
+    {
+     "annees": 35,
+     "taux": 25
+    },
+    {
+     "annees": 36,
+     "taux": 25
+    },
+    {
+     "annees": 37,
+     "taux": 25
+    },
+    {
+     "annees": 38,
+     "taux": 25
+    },
+    {
+     "annees": 39,
+     "taux": 25
+    },
+    {
+     "annees": 40,
+     "taux": 25
+    }
+   ],
+   "majorations": [
+    {
+     "code": "HS_15",
+     "libelle": "Heures supplémentaires majorées de 15 %",
+     "taux": 15
+    },
+    {
+     "code": "HS_40",
+     "libelle": "Heures supplémentaires majorées de 40 %",
+     "taux": 40
+    },
+    {
+     "code": "HS_60",
+     "libelle": "Heures supplémentaires de nuit majorées de 60 %",
+     "taux": 60
+    },
+    {
+     "code": "HS_100",
+     "libelle": "Heures supplémentaires dimanche / jours fériés majorées de 100 %",
+     "taux": 100
+    }
+   ],
+   "categories": [
+    {
+     "code": "1A",
+     "libelle": "1ère A catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 70706
+    },
+    {
+     "code": "1B",
+     "libelle": "1ère B catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 74870
+    },
+    {
+     "code": "2",
+     "libelle": "2ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 75361
+    },
+    {
+     "code": "3",
+     "libelle": "3ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 77840
+    },
+    {
+     "code": "4",
+     "libelle": "4ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 82272
+    },
+    {
+     "code": "5",
+     "libelle": "5ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 89244
+    },
+    {
+     "code": "6",
+     "libelle": "6ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 93790
+    },
+    {
+     "code": "7A",
+     "libelle": "7ème A catégorie",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 105342
+    },
+    {
+     "code": "7B",
+     "libelle": "7ème B catégorie",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 113984
+    },
+    {
+     "code": "8A",
+     "libelle": "8ème A catégorie",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 115718
+    },
+    {
+     "code": "8B",
+     "libelle": "8ème B catégorie",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 123484
+    },
+    {
+     "code": "8C",
+     "libelle": "8ème C catégorie",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 124255
+    },
+    {
+     "code": "9A",
+     "libelle": "9ème A catégorie",
+     "classification": "CADRE",
+     "salaire_base": 125543
+    },
+    {
+     "code": "9B",
+     "libelle": "9ème B catégorie",
+     "classification": "CADRE",
+     "salaire_base": 132498
+    },
+    {
+     "code": "10A",
+     "libelle": "10ème A catégorie",
+     "classification": "CADRE",
+     "salaire_base": 141024
+    },
+    {
+     "code": "10B",
+     "libelle": "10ème B catégorie",
+     "classification": "CADRE",
+     "salaire_base": 157097
+    },
+    {
+     "code": "10C",
+     "libelle": "10ème C catégorie",
+     "classification": "CADRE",
+     "salaire_base": 174049
+    },
+    {
+     "code": "11",
+     "libelle": "11ème catégorie",
+     "classification": "CADRE",
+     "salaire_base": 195119
+    }
+   ],
+   "notes": "Barème applicable au 1er juillet 2023. La convention du commerce peut prévoir des majorations d'heures supplémentaires différentes (10 % / 35 %) : à vérifier et à ajuster ci-dessous."
+  },
+  {
+   "code": "HOTELLERIE",
+   "libelle": "Industries hôtelières",
+   "ordre": 3,
+   "anciennete": [
+    {
+     "annees": 2,
+     "taux": 2
+    },
+    {
+     "annees": 3,
+     "taux": 3
+    },
+    {
+     "annees": 4,
+     "taux": 4
+    },
+    {
+     "annees": 5,
+     "taux": 5
+    },
+    {
+     "annees": 6,
+     "taux": 6
+    },
+    {
+     "annees": 7,
+     "taux": 7
+    },
+    {
+     "annees": 8,
+     "taux": 8
+    },
+    {
+     "annees": 9,
+     "taux": 9
+    },
+    {
+     "annees": 10,
+     "taux": 10
+    },
+    {
+     "annees": 11,
+     "taux": 11
+    },
+    {
+     "annees": 12,
+     "taux": 12
+    },
+    {
+     "annees": 13,
+     "taux": 13
+    },
+    {
+     "annees": 14,
+     "taux": 14
+    },
+    {
+     "annees": 15,
+     "taux": 15
+    },
+    {
+     "annees": 16,
+     "taux": 16
+    },
+    {
+     "annees": 17,
+     "taux": 17
+    },
+    {
+     "annees": 18,
+     "taux": 18
+    },
+    {
+     "annees": 19,
+     "taux": 19
+    },
+    {
+     "annees": 20,
+     "taux": 20
+    },
+    {
+     "annees": 21,
+     "taux": 21
+    },
+    {
+     "annees": 22,
+     "taux": 22
+    },
+    {
+     "annees": 23,
+     "taux": 23
+    },
+    {
+     "annees": 24,
+     "taux": 24
+    },
+    {
+     "annees": 25,
+     "taux": 25
+    },
+    {
+     "annees": 26,
+     "taux": 25
+    },
+    {
+     "annees": 27,
+     "taux": 25
+    },
+    {
+     "annees": 28,
+     "taux": 25
+    },
+    {
+     "annees": 29,
+     "taux": 25
+    },
+    {
+     "annees": 30,
+     "taux": 25
+    },
+    {
+     "annees": 31,
+     "taux": 25
+    },
+    {
+     "annees": 32,
+     "taux": 25
+    },
+    {
+     "annees": 33,
+     "taux": 25
+    },
+    {
+     "annees": 34,
+     "taux": 25
+    },
+    {
+     "annees": 35,
+     "taux": 25
+    },
+    {
+     "annees": 36,
+     "taux": 25
+    },
+    {
+     "annees": 37,
+     "taux": 25
+    },
+    {
+     "annees": 38,
+     "taux": 25
+    },
+    {
+     "annees": 39,
+     "taux": 25
+    },
+    {
+     "annees": 40,
+     "taux": 25
+    }
+   ],
+   "majorations": [
+    {
+     "code": "HS_15",
+     "libelle": "Heures supplémentaires majorées de 15 %",
+     "taux": 15
+    },
+    {
+     "code": "HS_40",
+     "libelle": "Heures supplémentaires majorées de 40 %",
+     "taux": 40
+    },
+    {
+     "code": "HS_60",
+     "libelle": "Heures supplémentaires de nuit majorées de 60 %",
+     "taux": 60
+    },
+    {
+     "code": "HS_100",
+     "libelle": "Heures supplémentaires dimanche / jours fériés majorées de 100 %",
+     "taux": 100
+    }
+   ],
+   "categories": [
+    {
+     "code": "1",
+     "libelle": "1ère catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 70710
+    },
+    {
+     "code": "2",
+     "libelle": "2ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 71729
+    },
+    {
+     "code": "3",
+     "libelle": "3ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 73008
+    },
+    {
+     "code": "4",
+     "libelle": "4ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 78210
+    },
+    {
+     "code": "5",
+     "libelle": "5ème catégorie",
+     "classification": "EMPLOYE",
+     "salaire_base": 78890
+    },
+    {
+     "code": "6A",
+     "libelle": "6ème catégorie A",
+     "classification": "EMPLOYE",
+     "salaire_base": 83646
+    },
+    {
+     "code": "6B",
+     "libelle": "6ème catégorie B",
+     "classification": "EMPLOYE",
+     "salaire_base": 93503
+    },
+    {
+     "code": "7",
+     "libelle": "7ème catégorie",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 101204
+    },
+    {
+     "code": "8A",
+     "libelle": "8ème catégorie A",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 107477
+    },
+    {
+     "code": "8B",
+     "libelle": "8ème catégorie B",
+     "classification": "AGENT_MAITRISE",
+     "salaire_base": 114015
+    },
+    {
+     "code": "9A",
+     "libelle": "9ème catégorie A",
+     "classification": "CADRE",
+     "salaire_base": 116089
+    },
+    {
+     "code": "9B",
+     "libelle": "9ème catégorie B",
+     "classification": "CADRE",
+     "salaire_base": 123769
+    },
+    {
+     "code": "10A",
+     "libelle": "10ème catégorie A",
+     "classification": "CADRE",
+     "salaire_base": 131450
+    },
+    {
+     "code": "10B",
+     "libelle": "10ème catégorie B",
+     "classification": "CADRE",
+     "salaire_base": 144428
+    },
+    {
+     "code": "11A",
+     "libelle": "11ème catégorie A",
+     "classification": "CADRE",
+     "salaire_base": 158151
+    },
+    {
+     "code": "11B",
+     "libelle": "11ème catégorie B",
+     "classification": "CADRE",
+     "salaire_base": 176799
+    }
+   ],
+   "notes": "Barème applicable au 1er juillet 2023 (même grille que le classeur de paie). Ancienneté : 2 % à 2 ans, +1 point par année, plafonnée à 25 %."
+  }
+ ]
+}

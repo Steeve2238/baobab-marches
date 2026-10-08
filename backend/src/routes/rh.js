@@ -5,6 +5,7 @@ const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
+const rhFiche = require("../services/rhFiche");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -27,25 +28,30 @@ const uploadExcel = multer({
 // RH designe par tenant) une fois perimetre_json branche.
 // ----------------------------------------------------------------------------
 
+function peutGererRH(req) {
+  const p = req.user && req.user.permissions;
+  return Boolean(p && (p.admin || (p.modules || []).includes("rh")));
+}
+
 const SELECT_FICHE = `
-  SELECT e.id, e.tenant_id, e.utilisateur_id, e.poste, e.type_contrat,
-         e.date_embauche, e.date_fin_contrat, e.telephone,
-         e.contact_urgence_nom, e.contact_urgence_telephone,
-         e.solde_conges, e.statut,
-         u.nom, u.prenom, u.email
+  SELECT e.*,
+         COALESCE(e.nom, u.nom) AS nom,
+         COALESCE(e.prenom, u.prenom) AS prenom,
+         u.email, u.actif AS compte_actif
   FROM employe e
-  JOIN utilisateur u ON u.id = e.utilisateur_id
+  LEFT JOIN utilisateur u ON u.id = e.utilisateur_id
   WHERE e.tenant_id = $1
 `;
 
 async function chargerRolesParEmploye(tenantId, utilisateurIds) {
-  if (utilisateurIds.length === 0) return {};
+  const ids = utilisateurIds.filter(Boolean);
+  if (ids.length === 0) return {};
   const result = await db.query(
     `SELECT ur.utilisateur_id, r.code, r.libelle
      FROM utilisateur_role ur
      JOIN role r ON r.id = ur.role_id
      WHERE ur.utilisateur_id = ANY($1::uuid[]) AND r.tenant_id = $2`,
-    [utilisateurIds, tenantId]
+    [ids, tenantId]
   );
   const map = {};
   for (const row of result.rows) {
@@ -55,19 +61,108 @@ async function chargerRolesParEmploye(tenantId, utilisateurIds) {
   return map;
 }
 
-// GET /api/rh/personnel - liste complete. Reserve au module "rh" du
-// perimetre de role (case a cocher ecran Roles, ajoutee le 05/09/2026 a la
-// demande de Steeve) - ADMIN passe toujours via requireModule, mais un role
-// non-ADMIN peut desormais aussi y avoir acces si Steeve le lui accorde
-// explicitement (ex un futur role "Responsable RH").
+async function chargerEnfants(tenantId, employeId) {
+  const r = await db.query(
+    `SELECT id, nom, prenom, sexe, date_naissance, etudiant, infirme, revenus_propres, adopte
+     FROM employe_enfant WHERE tenant_id = $1 AND employe_id = $2 ORDER BY date_naissance ASC NULLS LAST, prenom ASC`,
+    [tenantId, employeId]
+  );
+  return r.rows;
+}
+
+// Fiche complete : roles, enfants, parts calculees, completude (et historique pour la RH).
+async function composerFiche(tenantId, ligne, avecHistorique) {
+  const roles = await chargerRolesParEmploye(tenantId, [ligne.utilisateur_id]);
+  const enfants = await chargerEnfants(tenantId, ligne.id);
+  const fiche = { ...ligne, roles: roles[ligne.utilisateur_id] || [], enfants };
+  fiche.parts = rhFiche.calculerParts(ligne, enfants);
+  fiche.completude = rhFiche.completude(ligne);
+  if (avecHistorique) {
+    const h = await db.query(
+      `SELECT h.champ, h.ancienne_valeur, h.nouvelle_valeur, h.date_modification,
+              u.prenom AS auteur_prenom, u.nom AS auteur_nom
+       FROM employe_historique h LEFT JOIN utilisateur u ON u.id = h.modifie_par
+       WHERE h.tenant_id = $1 AND h.employe_id = $2 ORDER BY h.date_modification DESC LIMIT 100`,
+      [tenantId, ligne.id]
+    );
+    fiche.historique = h.rows;
+  }
+  return fiche;
+}
+
+async function genererMatricule(tenantId) {
+  const r = await db.query(
+    `SELECT COALESCE(MAX(SUBSTRING(matricule FROM '^EMP-([0-9]+)$')::int), 0) + 1 AS suivant
+     FROM employe WHERE tenant_id = $1`,
+    [tenantId]
+  );
+  return `EMP-${String(r.rows[0].suivant).padStart(4, "0")}`;
+}
+
+function valeurTexte(v) {
+  if (v == null) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v);
+}
+
+async function enregistrerHistorique(tenantId, employeId, ancien, nouvellesValeurs, auteurId) {
+  for (const champ of rhFiche.CHAMPS_HISTORISES) {
+    if (!(champ in nouvellesValeurs)) continue;
+    const a = valeurTexte(ancien[champ]);
+    const n = valeurTexte(nouvellesValeurs[champ]);
+    if (a === n) continue;
+    await db.query(
+      `INSERT INTO employe_historique (id, tenant_id, employe_id, champ, ancienne_valeur, nouvelle_valeur, modifie_par)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [uuidv4(), tenantId, employeId, champ, a, n, auteurId || null]
+    );
+  }
+}
+
+function normaliserEnfants(liste) {
+  const enfants = [];
+  for (const e of Array.isArray(liste) ? liste : []) {
+    const prenom = e && e.prenom ? String(e.prenom).trim() : "";
+    if (!prenom) continue;
+    const dn = e.date_naissance ? String(e.date_naissance).slice(0, 10) : null;
+    if (dn && Number.isNaN(Date.parse(dn))) return null;
+    enfants.push({
+      nom: e.nom ? String(e.nom).trim() : null,
+      prenom,
+      sexe: e.sexe === "M" || e.sexe === "F" ? e.sexe : null,
+      date_naissance: dn,
+      etudiant: e.etudiant === true || e.etudiant === "true",
+      infirme: e.infirme === true || e.infirme === "true",
+      revenus_propres: e.revenus_propres === true || e.revenus_propres === "true",
+      adopte: e.adopte === true || e.adopte === "true",
+    });
+  }
+  return enfants;
+}
+
+async function remplacerEnfants(tenantId, employeId, enfants) {
+  await db.query(`DELETE FROM employe_enfant WHERE tenant_id = $1 AND employe_id = $2`, [tenantId, employeId]);
+  for (const e of enfants) {
+    await db.query(
+      `INSERT INTO employe_enfant (id, tenant_id, employe_id, nom, prenom, sexe, date_naissance, etudiant, infirme, revenus_propres, adopte)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [uuidv4(), tenantId, employeId, e.nom, e.prenom, e.sexe, e.date_naissance, e.etudiant, e.infirme, e.revenus_propres, e.adopte]
+    );
+  }
+}
+
+// GET /api/rh/personnel - liste complete (module "rh"). Les fiches sans compte utilisateur y figurent.
 router.get("/personnel", requireModule("rh"), async (req, res) => {
   try {
-    const result = await db.query(`${SELECT_FICHE} ORDER BY u.nom ASC, u.prenom ASC`, [req.user.tenantId]);
-    const rolesParUtilisateur = await chargerRolesParEmploye(
-      req.user.tenantId,
-      result.rows.map((r) => r.utilisateur_id)
-    );
-    const personnel = result.rows.map((row) => ({ ...row, roles: rolesParUtilisateur[row.utilisateur_id] || [] }));
+    const result = await db.query(`${SELECT_FICHE} ORDER BY COALESCE(e.nom, u.nom) ASC, COALESCE(e.prenom, u.prenom) ASC`, [req.user.tenantId]);
+    const personnel = result.rows.map((row) => ({
+      id: row.id, utilisateur_id: row.utilisateur_id, matricule: row.matricule, nom: row.nom, prenom: row.prenom,
+      email: row.email, poste: row.poste, type_contrat: row.type_contrat, categorie: row.categorie,
+      convention_collective: row.convention_collective, date_embauche: row.date_embauche,
+      solde_conges: row.solde_conges, statut: row.statut, telephone: row.telephone,
+      a_compte: Boolean(row.utilisateur_id),
+      completude: rhFiche.completude(row),
+    }));
     res.json(personnel);
   } catch (err) {
     console.error(err);
@@ -78,23 +173,18 @@ router.get("/personnel", requireModule("rh"), async (req, res) => {
 // GET /api/rh/personnel/moi - sa propre fiche (tout utilisateur authentifie)
 router.get("/personnel/moi", async (req, res) => {
   try {
-    const result = await db.query(
-      `${SELECT_FICHE} AND e.utilisateur_id = $2`,
-      [req.user.tenantId, req.user.sub]
-    );
+    const result = await db.query(`${SELECT_FICHE} AND e.utilisateur_id = $2`, [req.user.tenantId, req.user.sub]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
     }
-    res.json(result.rows[0]);
+    res.json(await composerFiche(req.user.tenantId, result.rows[0], false));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "RH_PERSONNEL_FETCH_ERROR") });
   }
 });
 
-// GET /api/rh/personnel/utilisateurs-disponibles - utilisateurs du tenant
-// n'ayant pas encore de fiche employe (pour le formulaire de creation).
-// Module "rh" uniquement (meme perimetre que la creation elle-meme).
+// GET /api/rh/personnel/utilisateurs-disponibles - comptes sans fiche (pour lier un compte a une fiche).
 router.get("/personnel/utilisateurs-disponibles", requireModule("rh"), async (req, res) => {
   try {
     const result = await db.query(
@@ -112,143 +202,151 @@ router.get("/personnel/utilisateurs-disponibles", requireModule("rh"), async (re
   }
 });
 
-// GET /api/rh/personnel/:id - une fiche (ADMIN, ou la personne elle-meme)
+// GET /api/rh/personnel/:id - une fiche (module "rh"/ADMIN, ou la personne elle-meme)
 router.get("/personnel/:id", async (req, res) => {
   try {
     const result = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
     }
-    const fiche = result.rows[0];
+    const ligne = result.rows[0];
     const estAdmin = req.user.roles.includes("ADMIN");
-    if (!estAdmin && fiche.utilisateur_id !== req.user.sub) {
-      return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
+    const estSoiMeme = ligne.utilisateur_id && ligne.utilisateur_id === req.user.sub;
+    if (!estAdmin && !estSoiMeme) {
+      // Meme perimetre que la liste : un role "rh" doit pouvoir ouvrir les fiches d'autrui.
+      const autorise = peutGererRH(req);
+      if (!autorise) return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
     }
-    const rolesParUtilisateur = await chargerRolesParEmploye(req.user.tenantId, [fiche.utilisateur_id]);
-    res.json({ ...fiche, roles: rolesParUtilisateur[fiche.utilisateur_id] || [] });
+    res.json(await composerFiche(req.user.tenantId, ligne, estAdmin || !estSoiMeme));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "RH_PERSONNEL_FETCH_ERROR") });
   }
 });
 
-// POST /api/rh/personnel - creation d'une fiche employe pour un utilisateur
-// existant du tenant. Module "rh" (voir plus haut).
+// POST /api/rh/personnel - creation d'une fiche employe. Le compte utilisateur est FACULTATIF.
 router.post("/personnel", requireModule("rh"), async (req, res) => {
-  const {
-    utilisateur_id,
-    poste,
-    type_contrat,
-    date_embauche,
-    telephone,
-    contact_urgence_nom,
-    contact_urgence_telephone,
-    solde_conges,
-  } = req.body;
-
-  if (!utilisateur_id) {
-    return res.status(400).json({ error: t(req, "RH_UTILISATEUR_REQUIRED") });
-  }
-
   try {
-    const utilisateurCheck = await db.query(
-      `SELECT id FROM utilisateur WHERE id = $1 AND tenant_id = $2`,
-      [utilisateur_id, req.user.tenantId]
-    );
-    if (utilisateurCheck.rows.length === 0) {
-      return res.status(400).json({ error: t(req, "RH_UTILISATEUR_INVALID") });
+    const { utilisateur_id } = req.body;
+    const enfants = normaliserEnfants(req.body.enfants);
+    if (enfants === null) return res.status(400).json({ error: t(req, "RH_FICHE_CHAMP_INVALIDE") });
+
+    let compte = null;
+    if (utilisateur_id) {
+      const c = await db.query(`SELECT id, nom, prenom FROM utilisateur WHERE id = $1 AND tenant_id = $2`, [
+        utilisateur_id,
+        req.user.tenantId,
+      ]);
+      if (c.rows.length === 0) return res.status(400).json({ error: t(req, "RH_UTILISATEUR_INVALID") });
+      compte = c.rows[0];
     }
 
-    const insertResult = await db.query(
-      `INSERT INTO employe (id, tenant_id, utilisateur_id, poste, type_contrat, date_embauche,
-                             telephone, contact_urgence_nom, contact_urgence_telephone, solde_conges)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-       RETURNING id`,
-      [
-        uuidv4(),
-        req.user.tenantId,
-        utilisateur_id,
-        poste || null,
-        type_contrat || null,
-        date_embauche || null,
-        telephone || null,
-        contact_urgence_nom || null,
-        contact_urgence_telephone || null,
-        solde_conges != null && solde_conges !== "" ? Number(solde_conges) : 0,
-      ]
-    );
+    const { valeurs, erreurs } = rhFiche.normaliser(req.body);
+    if (erreurs.length > 0) {
+      return res.status(400).json({ error: t(req, "RH_FICHE_CHAMP_INVALIDE"), champs: erreurs });
+    }
+    if (compte) {
+      valeurs.nom = valeurs.nom || compte.nom;
+      valeurs.prenom = valeurs.prenom || compte.prenom;
+    }
+    const manquants = ["nom", "prenom", "sexe", "date_naissance", "date_embauche"].filter((c) => !valeurs[c]);
+    if (manquants.length > 0) {
+      return res.status(400).json({ error: t(req, "RH_FICHE_CHAMPS_REQUIS"), champs: manquants });
+    }
+    if (!valeurs.matricule) valeurs.matricule = await genererMatricule(req.user.tenantId);
+    if (!valeurs.nationalite) valeurs.nationalite = "Sénégalaise";
+    if (!valeurs.nationalite_categorie && valeurs.nationalite === "Sénégalaise") valeurs.nationalite_categorie = "S";
 
-    const fiche = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, insertResult.rows[0].id]);
-    const rolesParUtilisateur = await chargerRolesParEmploye(req.user.tenantId, [fiche.rows[0].utilisateur_id]);
-    res.status(201).json({ ...fiche.rows[0], roles: rolesParUtilisateur[fiche.rows[0].utilisateur_id] || [] });
+    const id = uuidv4();
+    const colonnes = ["id", "tenant_id", "utilisateur_id", ...Object.keys(valeurs)];
+    const params = [id, req.user.tenantId, utilisateur_id || null, ...Object.values(valeurs)];
+    const marques = colonnes.map((_, i) => `$${i + 1}`);
+    await db.query(`INSERT INTO employe (${colonnes.join(", ")}) VALUES (${marques.join(", ")})`, params);
+    if (enfants.length > 0) await remplacerEnfants(req.user.tenantId, id, enfants);
+
+    const fiche = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, id]);
+    res.status(201).json(await composerFiche(req.user.tenantId, fiche.rows[0], true));
   } catch (err) {
     if (err.code === "23505") {
-      return res.status(409).json({ error: t(req, "RH_FICHE_ALREADY_EXISTS") });
+      const matricule = String(err.constraint || "").includes("matricule");
+      return res.status(409).json({ error: t(req, matricule ? "RH_MATRICULE_EXISTE" : "RH_FICHE_ALREADY_EXISTS") });
     }
     console.error(err);
     res.status(500).json({ error: t(req, "RH_FICHE_CREATE_ERROR") });
   }
 });
 
-// PATCH /api/rh/personnel/:id - mise a jour (ADMIN, ou la personne elle-meme
-// pour ses seuls champs de contact - pas poste/type_contrat/solde_conges/statut).
+// PATCH /api/rh/personnel/:id - mise a jour (module "rh"/ADMIN : tous les champs ; la personne elle-meme :
+// ses coordonnees uniquement). Les changements de situation sont traces dans l'historique.
 router.patch("/personnel/:id", async (req, res) => {
   try {
-    const ficheActuelle = await db.query(`SELECT utilisateur_id FROM employe WHERE id = $1 AND tenant_id = $2`, [
+    const actuelle = await db.query(`SELECT * FROM employe WHERE id = $1 AND tenant_id = $2`, [
       req.params.id,
       req.user.tenantId,
     ]);
-    if (ficheActuelle.rows.length === 0) {
+    if (actuelle.rows.length === 0) {
       return res.status(404).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
     }
-    const estAdmin = req.user.roles.includes("ADMIN");
-    const estSoiMeme = ficheActuelle.rows[0].utilisateur_id === req.user.sub;
-    if (!estAdmin && !estSoiMeme) {
+    const ancien = actuelle.rows[0];
+    const estRH = req.user.roles.includes("ADMIN") || (peutGererRH(req));
+    const estSoiMeme = ancien.utilisateur_id && ancien.utilisateur_id === req.user.sub;
+    if (!estRH && !estSoiMeme) {
       return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
     }
 
-    const { poste, type_contrat, date_embauche, date_fin_contrat, telephone,
-            contact_urgence_nom, contact_urgence_telephone, solde_conges, statut } = req.body;
+    const { valeurs, erreurs } = rhFiche.normaliser(req.body, estRH ? undefined : rhFiche.CHAMPS_SALARIE);
+    if (erreurs.length > 0) {
+      return res.status(400).json({ error: t(req, "RH_FICHE_CHAMP_INVALIDE"), champs: erreurs });
+    }
+    for (const c of ["nom", "prenom"]) {
+      if (c in valeurs && !valeurs[c]) {
+        return res.status(400).json({ error: t(req, "RH_FICHE_CHAMPS_REQUIS"), champs: [c] });
+      }
+    }
+    const cles = Object.keys(valeurs);
+    if (cles.length > 0) {
+      const sets = cles.map((c, i) => `${c} = $${i + 1}`);
+      await db.query(
+        `UPDATE employe SET ${sets.join(", ")} WHERE id = $${cles.length + 1} AND tenant_id = $${cles.length + 2}`,
+        [...Object.values(valeurs), req.params.id, req.user.tenantId]
+      );
+      await enregistrerHistorique(req.user.tenantId, req.params.id, ancien, valeurs, req.user.sub);
+    }
+    if (estRH && "enfants" in req.body) {
+      const enfants = normaliserEnfants(req.body.enfants);
+      if (enfants === null) return res.status(400).json({ error: t(req, "RH_FICHE_CHAMP_INVALIDE") });
+      await remplacerEnfants(req.user.tenantId, req.params.id, enfants);
+    }
 
-    // Une personne non-ADMIN ne peut modifier que ses coordonnees de contact,
-    // pas son poste, son contrat, son solde de conges ni son statut.
-    const champsAutorises = estAdmin
-      ? { poste, type_contrat, date_embauche, date_fin_contrat, telephone,
-          contact_urgence_nom, contact_urgence_telephone, solde_conges, statut }
-      : { telephone, contact_urgence_nom, contact_urgence_telephone };
-
-    const result = await db.query(
-      `UPDATE employe
-       SET poste = COALESCE($1, poste),
-           type_contrat = COALESCE($2, type_contrat),
-           date_embauche = COALESCE($3, date_embauche),
-           date_fin_contrat = COALESCE($4, date_fin_contrat),
-           telephone = COALESCE($5, telephone),
-           contact_urgence_nom = COALESCE($6, contact_urgence_nom),
-           contact_urgence_telephone = COALESCE($7, contact_urgence_telephone),
-           solde_conges = COALESCE($8, solde_conges),
-           statut = COALESCE($9, statut)
-       WHERE id = $10 AND tenant_id = $11
-       RETURNING id`,
-      [
-        champsAutorises.poste || null,
-        champsAutorises.type_contrat || null,
-        champsAutorises.date_embauche || null,
-        champsAutorises.date_fin_contrat || null,
-        champsAutorises.telephone || null,
-        champsAutorises.contact_urgence_nom || null,
-        champsAutorises.contact_urgence_telephone || null,
-        champsAutorises.solde_conges != null && champsAutorises.solde_conges !== "" ? Number(champsAutorises.solde_conges) : null,
-        champsAutorises.statut || null,
-        req.params.id,
-        req.user.tenantId,
-      ]
-    );
-
-    const fiche = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, result.rows[0].id]);
-    const rolesParUtilisateur = await chargerRolesParEmploye(req.user.tenantId, [fiche.rows[0].utilisateur_id]);
-    res.json({ ...fiche.rows[0], roles: rolesParUtilisateur[fiche.rows[0].utilisateur_id] || [] });
+    const fiche = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, req.params.id]);
+    res.json(await composerFiche(req.user.tenantId, fiche.rows[0], estRH));
   } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: t(req, "RH_MATRICULE_EXISTE") });
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_FICHE_UPDATE_ERROR") });
+  }
+});
+
+// PATCH /api/rh/personnel/:id/compte - lier ou delier un compte utilisateur ({ utilisateur_id } ou null).
+router.patch("/personnel/:id/compte", requireModule("rh"), async (req, res) => {
+  try {
+    const { utilisateur_id } = req.body;
+    if (utilisateur_id) {
+      const c = await db.query(`SELECT id FROM utilisateur WHERE id = $1 AND tenant_id = $2`, [
+        utilisateur_id,
+        req.user.tenantId,
+      ]);
+      if (c.rows.length === 0) return res.status(400).json({ error: t(req, "RH_UTILISATEUR_INVALID") });
+    }
+    const r = await db.query(
+      `UPDATE employe SET utilisateur_id = $1 WHERE id = $2 AND tenant_id = $3 RETURNING id`,
+      [utilisateur_id || null, req.params.id, req.user.tenantId]
+    );
+    if (r.rows.length === 0) return res.status(404).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
+    const fiche = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, req.params.id]);
+    res.json(await composerFiche(req.user.tenantId, fiche.rows[0], true));
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: t(req, "RH_FICHE_ALREADY_EXISTS") });
     console.error(err);
     res.status(500).json({ error: t(req, "RH_FICHE_UPDATE_ERROR") });
   }

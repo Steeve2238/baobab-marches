@@ -82,6 +82,12 @@ const TX = {
       `${p.banque} avance davantage immédiatement (${fmt(p.flux)} XOF, soit ${fmt(p.plus)} XOF de plus) mais coûte ${fmt(p.surcout)} XOF de plus.`,
     pointRetenue: (p) => `${fmt(p.retenue)} XOF restent retenus en garantie chez ${p.banque} et vous reviennent à l'échéance.`,
     pointNonComparable: (p) => `${p.banque} ne peut pas être retenue : ${p.raison}`,
+    retenueIncoherente: (p) =>
+      `Le fonds de garantie / la retenue (${fmt(p.retenue)} XOF) dépasse la part non avancée de la créance (${fmt(p.part)} XOF, soit ${fmtPct(p.partPct, "fr")} %). Vérifiez le taux saisi : « encours garantis par créance » dans une proposition désigne en général le taux d'avance, pas le fonds de garantie.`,
+    retenueElevee: (p) => `Le fonds de garantie représente ${fmtPct(p.pct, "fr")} % de la créance : c'est inhabituel, vérifiez la saisie.`,
+    pointsAConfirmer: (p) => `${p.n} point(s) non précisé(s) par la banque : ${p.liste}. Les chiffres peuvent changer une fois confirmés.`,
+    libVersement: () => "Versement à l'entreprise",
+    libTaxeSur: (p) => `Taxe sur ${p.libelle}`,
     vigilanceIndicatif: () => "Au moins une proposition est encore en négociation : confirmez les chiffres par écrit avant de signer.",
     questionRetenue: (p) =>
       `Chez ${p.banque} : la retenue / le fonds de garantie de ${fmtTaux(p.pct, "fr")} % est-il compris dans l'avance de ${fmtTaux(p.avance, "fr")} % ou vient-il en plus ?`,
@@ -187,6 +193,12 @@ const TX = {
     pointTresorerie: (p) => `${p.banque} advances more cash up front (${fmt(p.flux)} XOF, ${fmt(p.plus)} XOF more) but costs ${fmt(p.surcout)} XOF more.`,
     pointRetenue: (p) => `${fmt(p.retenue)} XOF stay withheld as guarantee at ${p.banque} and come back to you at maturity.`,
     pointNonComparable: (p) => `${p.banque} cannot be selected: ${p.raison}`,
+    retenueIncoherente: (p) =>
+      `The guarantee fund / retention (${fmt(p.retenue)} XOF) exceeds the part of the receivable that is not advanced (${fmt(p.part)} XOF, i.e. ${fmtPct(p.partPct, "en")}%). Check the rate entered: "guaranteed exposure per receivable" in a proposal usually means the advance rate, not the guarantee fund.`,
+    retenueElevee: (p) => `The guarantee fund is ${fmtPct(p.pct, "en")}% of the receivable: this is unusual, please check the entry.`,
+    pointsAConfirmer: (p) => `${p.n} point(s) not specified by the bank: ${p.liste}. Figures may change once confirmed.`,
+    libVersement: () => "Payment to the company",
+    libTaxeSur: (p) => `Tax on ${p.libelle}`,
     vigilanceIndicatif: () => "At least one proposal is still under negotiation: confirm the figures in writing before signing.",
     questionRetenue: (p) => `${p.banque}: is the ${fmtTaux(p.pct, "en")}% guarantee retention included in the ${fmtTaux(p.avance, "en")}% advance, or on top of it?`,
     questionTaxe: (p) => `${p.banque}: does the ${p.taxe} of ${fmtTaux(p.taux, "en")}% apply to all commissions, interest included?`,
@@ -283,6 +295,60 @@ function normaliserEntree(brut) {
   };
 }
 
+
+// ---------------------------------------------------------------------------
+// Points a confirmer avec la banque (8/10/2026) : ce que la proposition ne dit pas.
+// ---------------------------------------------------------------------------
+const POINTS = {
+  fr: {
+    BASE_COMMISSION: { titre: "base de la commission flat (créance ou avance)", question: (p) => `Sur quel montant la commission de ${fmtTaux(p.taux, "fr")} % est-elle calculée : la créance entière (HT ou TTC) ou seulement le montant avancé ?`, contexte: "Sur la créance entière, elle coûte plus cher que sur l'avance seule." },
+    TAXE: { titre: "taxe applicable et taux (TOB, TVA…)", question: () => "Quelle taxe s'applique à chaque commission et frais (TOB, TVA, autre), à quel taux, et les montants annoncés sont-ils hors taxes ou toutes taxes comprises ?", contexte: "Le taux réellement appliqué peut différer du taux par défaut de la plateforme." },
+    BASE_JOURS: { titre: "base de jours (360 ou 365)", question: () => "Les intérêts sont-ils calculés sur 360 ou 365 jours, et à partir de quelle date de valeur ?", contexte: "Quelques jours de différence modifient les intérêts." },
+    PRELEVEMENT_INTERETS: { titre: "date de prélèvement des intérêts", question: () => "Quand la commission de financement est-elle prélevée (au déblocage, à l'encaissement de la facture, chaque mois) et sur quel solde et combien de jours réels ?", contexte: "Prélevée à l'échéance, elle ne réduit pas la somme reçue au déblocage." },
+    FRAIS_UNIQUES: { titre: "frais ponctuels ou à chaque opération (dossier, avenant, mise en place)", question: () => "Les frais de dossier, d'avenant ou de mise en place sont-ils dus une seule fois par contrat, ou à chaque bordereau ou nouveau débiteur ?", contexte: "Ponctuels, ils ne pèsent que sur la première opération." },
+    LIBERATION_FONDS: { titre: "libération du fonds de garantie", question: () => "Quand et comment le fonds de garantie est-il restitué (à l'encaissement de la facture ?) et peut-il être diminué des retards, impayés ou frais ?", contexte: "Cette somme reste immobilisée tant qu'elle n'est pas libérée." },
+    RETARD_PAIEMENT: { titre: "pénalités si le débiteur paie en retard", question: () => "Que se passe-t-il si le débiteur paie après l'échéance : taux ou pénalités, délai de grâce, recours contre nous ?", contexte: "Avec recours, un retard ou un impayé peut vous être refacturé." },
+    VALIDITE: { titre: "date de validité de l'offre", question: () => "Jusqu'à quelle date l'offre est-elle valable, et les conditions du contrat signé sont-elles identiques à la proposition ?", contexte: "Une proposition indicative peut changer au contrat." },
+    DUREE_MAX: { titre: "durée maximale de financement", question: () => "Quelle est la durée maximale de financement d'une facture ?", contexte: "Au-delà, la banque peut refuser ou facturer davantage." },
+  },
+  en: {
+    BASE_COMMISSION: { titre: "base of the flat commission (receivable or advance)", question: (p) => `What amount is the ${fmtTaux(p.taux, "en")}% commission calculated on: the whole receivable (excl. or incl. tax) or only the advanced amount?`, contexte: "On the whole receivable it costs more than on the advance alone." },
+    TAXE: { titre: "applicable tax and rate (bank tax, VAT…)", question: () => "Which tax applies to each commission and fee, at what rate, and are the quoted amounts before or after tax?", contexte: "The rate actually applied may differ from the platform's default." },
+    BASE_JOURS: { titre: "day-count basis (360 or 365)", question: () => "Is interest calculated on 360 or 365 days, and from which value date?", contexte: "A few days' difference changes the interest." },
+    PRELEVEMENT_INTERETS: { titre: "when interest is charged", question: () => "When is the financing commission charged (at drawdown, when the invoice is collected, monthly) and on which balance and how many actual days?", contexte: "Charged at maturity, it does not reduce the amount received at drawdown." },
+    FRAIS_UNIQUES: { titre: "one-off or per-operation fees (file, amendment, set-up)", question: () => "Are file, amendment or set-up fees due once per contract, or with every batch or new debtor?", contexte: "If one-off, they only weigh on the first operation." },
+    LIBERATION_FONDS: { titre: "release of the guarantee fund", question: () => "When and how is the guarantee fund returned (when the invoice is collected?) and can it be reduced by delays, unpaid items or fees?", contexte: "This money stays tied up until released." },
+    RETARD_PAIEMENT: { titre: "penalties if the debtor pays late", question: () => "What happens if the debtor pays after maturity: rate or penalties, grace period, recourse against us?", contexte: "With recourse, a delay or default can be charged back to you." },
+    VALIDITE: { titre: "offer validity date", question: () => "Until when is the offer valid, and are the signed contract terms identical to the proposal?", contexte: "An indicative proposal may change at contract stage." },
+    DUREE_MAX: { titre: "maximum financing period", question: () => "What is the maximum financing period for an invoice?", contexte: "Beyond it the bank may refuse or charge more." },
+  },
+};
+const CODES_POINTS = Object.keys(POINTS.fr);
+
+/** Points pertinents pour cette condition et non confirmes par l'utilisateur. */
+function pointsAConfirmer(condition, frais, fam, lang) {
+  const confirmes = condition.points_confirmes_json && typeof condition.points_confirmes_json === "object" ? condition.points_confirmes_json : {};
+  const actifs = (frais || []).filter((f) => f.actif !== false);
+  const couts = actifs.filter((f) => f.nature !== "RETENUE");
+  const flat = couts.find((f) => f.mode_calcul === "POURCENT_FLAT" && num(f.taux_pct) !== null);
+  const pertinents = [];
+  if (fam === "CREANCE" && flat) pertinents.push(["BASE_COMMISSION", { taux: num(flat.taux_pct) }]);
+  if (couts.some((f) => f.soumis_taxe !== false)) pertinents.push(["TAXE", {}]);
+  if (couts.some((f) => f.mode_calcul === "POURCENT_ANNUEL")) {
+    pertinents.push(["BASE_JOURS", {}]);
+    pertinents.push(["PRELEVEMENT_INTERETS", {}]);
+  }
+  if (fam === "CREANCE" && couts.some((f) => f.mode_calcul === "FORFAIT")) pertinents.push(["FRAIS_UNIQUES", {}]);
+  if (actifs.some((f) => f.nature === "RETENUE")) pertinents.push(["LIBERATION_FONDS", {}]);
+  if (fam === "CREANCE") pertinents.push(["RETARD_PAIEMENT", {}]);
+  if (!condition.date_validite) pertinents.push(["VALIDITE", {}]);
+  if (fam !== "GARANTIE" && num(condition.duree_max_jours) === null) pertinents.push(["DUREE_MAX", {}]);
+  const L = POINTS[lang] || POINTS.fr;
+  return pertinents
+    .filter(([code]) => confirmes[code] !== true)
+    .map(([code, p]) => ({ code, titre: L[code].titre, question: L[code].question(p), contexte: L[code].contexte }));
+}
+
 // ---------------------------------------------------------------------------
 // Releve d'une banque
 // ---------------------------------------------------------------------------
@@ -342,6 +408,7 @@ function calculerReleve(condition, frais, entree, opts = {}) {
   let taxes = 0;
   let deduitCouts = 0;
   let aPayerEcheance = 0;
+  let fraisUniquesTtc = 0;
   let retenueMontant = 0;
   let retenueDeduiteMontant = 0;
 
@@ -413,6 +480,7 @@ function calculerReleve(condition, frais, entree, opts = {}) {
       total: montantHt,
       prelevement,
       incomplete: manque,
+      frequence: f.frequence === "UNIQUE_CONTRAT" ? "UNIQUE_CONTRAT" : "PAR_OPERATION",
     };
 
     if (f.nature === "RETENUE") {
@@ -427,12 +495,16 @@ function calculerReleve(condition, frais, entree, opts = {}) {
     let soumis = f.soumis_taxe !== false;
     if (opts.taxeTout) soumis = true;
     if (opts.sansTaxe) soumis = false;
-    const taxe = soumis ? rond((montantHt * taxeTaux) / 100) : 0;
+    const tauxLigne = num(f.taxe_taux_pct) !== null ? num(f.taxe_taux_pct) : taxeTaux;
+    const taxe = soumis ? rond((montantHt * tauxLigne) / 100) : 0;
     ligne.taxe = taxe;
+    ligne.taxe_taux_pct = soumis ? tauxLigne : 0;
+    ligne.taxe_libelle = f.taxe_libelle || condition.taxe_libelle || "TOB";
     ligne.total = montantHt + taxe;
     ligne.soumis_taxe = soumis;
     coutHt += montantHt;
     taxes += taxe;
+    if (ligne.frequence === "UNIQUE_CONTRAT") fraisUniquesTtc += ligne.total;
     if (prelevement === "A_L_ECHEANCE") aPayerEcheance += ligne.total;
     else deduitCouts += ligne.total;
     lignes.push(ligne);
@@ -475,6 +547,25 @@ function calculerReleve(condition, frais, entree, opts = {}) {
   if (df && ech && df < ech) avertissements.push({ code: "CONVENTION_TERMINEE", texte: T.terminee({ date: df }) });
   if (condition.statut === "EN_NEGOCIATION") avertissements.push({ code: "EN_NEGOCIATION", texte: T.negociation() });
 
+  // ----- coherence du fonds de garantie / retenue (fiche creance)
+  if (fam === "CREANCE" && retenueMontant > 0 && baseCreance > 0) {
+    const partNonAvancee = rond(baseCreance - avance);
+    if (retenueMode === "INCLUSE" && retenueMontant > partNonAvancee + 1) {
+      avertissements.push({
+        code: "RETENUE_INCOHERENTE",
+        texte: T.retenueIncoherente({ retenue: retenueMontant, part: partNonAvancee, partPct: (partNonAvancee / baseCreance) * 100 }),
+      });
+    } else if ((retenueMontant / baseCreance) * 100 > 30) {
+      avertissements.push({ code: "RETENUE_ELEVEE", texte: T.retenueElevee({ pct: (retenueMontant / baseCreance) * 100 }) });
+    }
+  }
+
+  // ----- points que la banque n'a pas precises
+  const aConfirmer = pointsAConfirmer(condition, frais, fam, lang);
+  if (aConfirmer.length) {
+    avertissements.push({ code: "POINTS_A_CONFIRMER", texte: T.pointsAConfirmer({ n: aConfirmer.length, liste: aConfirmer.map((x) => x.titre).join(" ; ") }) });
+  }
+
   // ----- variante prudente quand la retenue est a confirmer
   let varianteRetenue = null;
   if (fam === "CREANCE" && retenueMontant > 0 && !opts.retenueMode && condition.retenue_incluse_avance === "A_CONFIRMER") {
@@ -514,11 +605,14 @@ function calculerReleve(condition, frais, entree, opts = {}) {
       retenue_totale: retenueMontant,
       retenue_deduite: retenueDeduiteMontant,
       flux_mise_en_place: fluxMiseEnPlace,
+      frais_uniques_ttc: fraisUniquesTtc,
+      cout_courant_ttc: coutTtc - fraisUniquesTtc,
       net_final: fam === "CREANCE" ? baseCreance - coutTtc : null,
       part_du_montant_pct: entree.montant > 0 ? (coutTtc / entree.montant) * 100 : 0,
       taux_effectif_annuel_pct: tauxEffectif,
     },
     variante_retenue_en_plus: varianteRetenue,
+    points_a_confirmer: aConfirmer,
     justificatifs: condition.justificatifs || null,
     conditions_particulieres: condition.conditions_particulieres || null,
     recours: condition.recours || null,
@@ -624,7 +718,10 @@ function commenter(releves, entree, lang) {
       questions.push(T.questionTaxe({ banque: r.partenaire_nom, taxe: r.taxe_libelle, taux: r.taxe_taux_pct }));
     }
   }
-  return { titre, resume, points, vigilance, questions_avant_signature: questions.slice(0, 6) };
+  for (const r of eligibles) {
+    for (const pt of r.points_a_confirmer || []) questions.push(`${r.partenaire_nom} — ${pt.question}`);
+  }
+  return { titre, resume, points, vigilance, questions_avant_signature: questions.slice(0, 10) };
 }
 
 /**
@@ -664,15 +761,21 @@ function normaliser(s) {
 }
 
 // Rapproche le libelle d'une ligne du decompte bancaire d'une ligne simulee.
+// Les libelles varient selon les banques : « commission de service » = commission d'affacturage,
+// « frais sur avenant » / « mise en place » = frais de dossier, « transfert vers le fonds de garantie » = fonds de garantie.
 function trouverLigne(libelle, releve, dejaPris) {
   const n = normaliser(libelle);
   const candidates = releve.lignes.filter((l) => !dejaPris.has(l.code + l.libelle));
   const par = (re) => candidates.find((l) => re.test(normaliser(l.libelle + " " + l.code)));
-  if (/(tob|taxe|tva)/.test(n)) return { estTaxe: true };
-  if (/affactur/.test(n)) return par(/affactur/);
+  if (/(paiement emis|versement|virement|net verse|decaissement)/.test(n)) return { estVersement: true };
+  if (/(tob|taxe|tva|impot)/.test(n)) return { estTaxe: true };
+  if (/(affactur|commission de service|frais de service)/.test(n)) {
+    return par(/affactur/) || candidates.find((l) => l.nature === "COUT" && l.mode_calcul === "POURCENT_FLAT");
+  }
   if (/(garantie|retenue|reserve|depot)/.test(n)) return par(/(garantie|retenue|depot)/);
   if (/(financ|interet|agio|escompte)/.test(n)) return candidates.find((l) => l.mode_calcul === "POURCENT_ANNUEL");
-  if (/dossier/.test(n)) return par(/dossier/);
+  if (/avenant|mise en place|ouverture de dossier/.test(n)) return par(/avenant/) || par(/dossier/);
+  if (/dossier/.test(n)) return par(/dossier/) || par(/avenant/);
   if (/timbre/.test(n)) return par(/timbre/);
   if (/(gestion|recouvr)/.test(n)) return par(/(gestion|recouvr)/);
   if (/(caution|aval)/.test(n)) return par(/(caution|aval)/);
@@ -680,54 +783,126 @@ function trouverLigne(libelle, releve, dejaPris) {
   return candidates.find((l) => normaliser(l.libelle).includes(n) || n.includes(normaliser(l.libelle)));
 }
 
-function comparerLignes(lignesBanque, releve, tolerance) {
+const alias = (txt) =>
+  normaliser(txt)
+    .replace(/^(les |des |le |la |l')/, "")
+    .replace(/frais de services?/, "commission de service")
+    .trim();
+
+/** Ligne (deja rapprochee) a laquelle une ligne de taxe du decompte se rattache : « TVA sur frais sur avenant » -> avenant. */
+function parentDeTaxe(libelle, lignes, dernierIdx) {
+  const n = normaliser(libelle);
+  const m = n.match(/\b(?:sur|on)\b\s+(.*)$/);
+  if (m) {
+    const hint = alias(m[1]);
+    const trouve = lignes.findIndex((r) => {
+      const a = alias(r.libelle_banque);
+      return a && (a.includes(hint) || hint.includes(a));
+    });
+    if (trouve >= 0) return trouve;
+  }
+  return dernierIdx;
+}
+
+function comparerLignes(lignesBanque, releve, tolerance, T) {
   const dejaPris = new Set();
-  const res = [];
-  let taxeBanque = 0;
+  const lignes = []; // lignes non taxe, dans l'ordre du decompte
+  const taxes = []; // { libelle, montant, apres }
+  const versements = [];
   for (const lb of lignesBanque) {
     const montant = Math.abs(num(lb.montant) || 0);
     const m = trouverLigne(lb.libelle, releve, dejaPris);
+    if (m && m.estVersement) {
+      versements.push({ libelle: lb.libelle, montant });
+      continue;
+    }
     if (m && m.estTaxe) {
-      taxeBanque += montant;
+      taxes.push({ libelle: lb.libelle, montant, apres: lignes.length - 1 });
       continue;
     }
     if (!m) {
-      res.push({ libelle_banque: lb.libelle, montant_banque: montant, statut: "NON_PREVU", ecart: montant });
+      lignes.push({ libelle_banque: lb.libelle, montant_banque: montant, statut: "NON_PREVU", ecart: montant, taxeBanque: 0 });
       continue;
     }
     dejaPris.add(m.code + m.libelle);
     // Le decompte peut presenter le HT ou le TTC : on retient la lecture la plus proche.
     const ecartHt = montant - m.montant_ht;
     const ecartTtc = montant - m.total;
-    const ecart = Math.abs(ecartHt) <= Math.abs(ecartTtc) ? ecartHt : ecartTtc;
-    res.push({
+    const lectureTtc = Math.abs(ecartTtc) < Math.abs(ecartHt);
+    const ecart = lectureTtc ? ecartTtc : ecartHt;
+    lignes.push({
       libelle_banque: lb.libelle,
       montant_banque: montant,
       code: m.code,
       libelle_simule: m.libelle,
-      montant_simule: Math.abs(ecartHt) <= Math.abs(ecartTtc) ? m.montant_ht : m.total,
+      montant_simule: lectureTtc ? m.total : m.montant_ht,
       ecart: rond(ecart),
       statut: Math.abs(ecart) <= tolerance ? "CONFORME" : "ECART",
+      taxeBanque: 0,
+      ligneSim: m,
+      lectureTtc,
     });
   }
-  if (taxeBanque > 0 || lignesBanque.length) {
-    const taxesSimulees = releve.totaux.taxes;
-    if (taxeBanque > 0) {
-      const ecart = taxeBanque - taxesSimulees;
-      res.push({
-        libelle_banque: releve.taxe_libelle,
-        montant_banque: taxeBanque,
-        code: "TAXE",
-        libelle_simule: releve.taxe_libelle,
-        montant_simule: taxesSimulees,
-        ecart: rond(ecart),
-        statut: Math.abs(ecart) <= tolerance ? "CONFORME" : "ECART",
-      });
+
+  // taxes du decompte : rattachees a leur ligne quand c'est possible
+  let taxeLibre = 0;
+  for (const tx of taxes) {
+    const idx = lignes.length ? parentDeTaxe(tx.libelle, lignes, tx.apres) : -1;
+    if (idx >= 0 && lignes[idx]) lignes[idx].taxeBanque += tx.montant;
+    else taxeLibre += tx.montant;
+  }
+
+  const res = [];
+  let taxesSimRattachees = 0;
+  const statutEcart = (e) => (Math.abs(e) <= tolerance ? "CONFORME" : "ECART");
+  // Une taxe separee sur le decompte prouve que le montant de la ligne est hors taxe : lecture HT imposee.
+  for (const l of lignes) {
+    if (l.ligneSim && l.lectureTtc && l.taxeBanque > 0) {
+      l.lectureTtc = false;
+      l.montant_simule = l.ligneSim.montant_ht;
+      l.ecart = rond(l.montant_banque - l.ligneSim.montant_ht);
+      l.statut = statutEcart(l.ecart);
     }
   }
+  for (const l of lignes) {
+    const { taxeBanque, ligneSim, lectureTtc, ...row } = l;
+    res.push(row);
+    if (ligneSim && !lectureTtc) {
+      taxesSimRattachees += ligneSim.taxe;
+      if (ligneSim.taxe > 0 || taxeBanque > 0) {
+        const ecart = taxeBanque - ligneSim.taxe;
+        res.push({
+          libelle_banque: T.libTaxeSur({ libelle: l.libelle_banque }),
+          libelle_simule: T.libTaxeSur({ libelle: ligneSim.libelle }),
+          code: `TAXE:${ligneSim.code}`,
+          montant_simule: ligneSim.taxe,
+          montant_banque: taxeBanque,
+          ecart: rond(ecart),
+          statut: statutEcart(ecart),
+        });
+      }
+    } else if (ligneSim && lectureTtc) {
+      taxesSimRattachees += ligneSim.taxe;
+    } else if (!ligneSim && taxeBanque > 0) {
+      res.push({ libelle_banque: T.libTaxeSur({ libelle: l.libelle_banque }), montant_banque: taxeBanque, montant_simule: 0, ecart: rond(taxeBanque), statut: "NON_PREVU" });
+    }
+  }
+  if (taxeLibre > 0) {
+    const restantes = Math.max(0, releve.totaux.taxes - taxesSimRattachees);
+    const ecart = taxeLibre - restantes;
+    res.push({ libelle_banque: releve.taxe_libelle, montant_banque: taxeLibre, code: "TAXE", libelle_simule: releve.taxe_libelle, montant_simule: restantes, ecart: rond(ecart), statut: statutEcart(ecart) });
+  }
+  // versement(s) a l'entreprise : comparaison avec le net attendu, ce n'est pas un cout
+  for (const v of versements) {
+    const attendu = releve.totaux.flux_mise_en_place;
+    const ecart = v.montant - attendu;
+    res.push({ libelle_banque: v.libelle, libelle_simule: T.libVersement(), code: "VERSEMENT", montant_banque: v.montant, montant_simule: attendu, ecart: rond(ecart), statut: statutEcart(ecart) });
+  }
+  // lignes simulees absentes du decompte : « a venir » si elles sont prelevees a l'echeance
   for (const l of releve.lignes) {
     if (dejaPris.has(l.code + l.libelle) || l.montant_ht === 0) continue;
-    res.push({ libelle_simule: l.libelle, code: l.code, montant_simule: l.nature === "RETENUE" ? l.montant_ht : l.total, montant_banque: 0, ecart: -(l.nature === "RETENUE" ? l.montant_ht : l.total), statut: "ABSENT" });
+    const aVenir = l.nature === "COUT" && l.prelevement === "A_L_ECHEANCE";
+    res.push({ libelle_simule: l.libelle, code: l.code, montant_simule: l.nature === "RETENUE" ? l.montant_ht : l.total, montant_banque: 0, ecart: -(l.nature === "RETENUE" ? l.montant_ht : l.total), statut: aVenir ? "A_VENIR" : "ABSENT" });
   }
   return res;
 }
@@ -815,7 +990,7 @@ function analyserVersement({ condition, frais, entree, montant_recu, date_prise_
 
   // ---- comparaison ligne a ligne si le decompte de la banque est fourni
   const lignesBanque = Array.isArray(lignes_banque) ? lignes_banque.filter((l) => l && l.libelle && num(l.montant) !== null) : [];
-  const comparaisonLignes = lignesBanque.length ? comparerLignes(lignesBanque, base, tolerance) : [];
+  const comparaisonLignes = lignesBanque.length ? comparerLignes(lignesBanque, base, tolerance, T) : [];
 
   // ---- questions a poser
   const questions = [];
@@ -846,8 +1021,13 @@ function analyserVersement({ condition, frais, entree, montant_recu, date_prise_
     ajouter(T.qDetail());
   }
   for (const c of comparaisonLignes) {
-    if (c.statut === "ECART") ajouter(T.qLigneEcart({ libelle: c.libelle_simule, banque: c.montant_banque, simule: c.montant_simule, ecart: c.ecart }));
+    if (c.statut === "ECART" && c.code !== "VERSEMENT") ajouter(T.qLigneEcart({ libelle: c.libelle_simule, banque: c.montant_banque, simule: c.montant_simule, ecart: c.ecart }));
     else if (c.statut === "NON_PREVU") ajouter(T.qLigneNonPrevue({ libelle: c.libelle_banque, montant: c.montant_banque }));
+  }
+
+  // points que la proposition ne precisait pas : a demander des qu'un ecart apparait
+  if (verdict !== "CONFORME" || comparaisonLignes.some((c) => ["ECART", "NON_PREVU"].includes(c.statut))) {
+    for (const pt of base.points_a_confirmer || []) ajouter({ question: pt.question, contexte: pt.contexte });
   }
 
   // ---- synthese
@@ -892,4 +1072,4 @@ function analyserVersement({ condition, frais, entree, montant_recu, date_prise_
   };
 }
 
-module.exports = { normaliserEntree, calculerReleve, comparer, analyserVersement, joursEntre, fmt };
+module.exports = { normaliserEntree, calculerReleve, comparer, analyserVersement, joursEntre, fmt, CODES_POINTS };

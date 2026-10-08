@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
@@ -11,6 +11,7 @@ export default function PersonnelPage() {
   const [personnel, setPersonnel] = useState([]);
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
+  const [recherche, setRecherche] = useState("");
 
   useEffect(() => {
     api
@@ -20,21 +21,38 @@ export default function PersonnelPage() {
       .finally(() => setChargement(false));
   }, []);
 
+  const filtre = useMemo(() => {
+    const q = recherche.trim().toLowerCase();
+    if (!q) return personnel;
+    return personnel.filter((p) =>
+      [p.nom, p.prenom, p.matricule, p.poste, p.categorie, p.convention_collective].some((v) =>
+        String(v || "").toLowerCase().includes(q)
+      )
+    );
+  }, [personnel, recherche]);
+
+  const lienBouton = {
+    display: "inline-block",
+    padding: "8px 16px",
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "var(--petrol)",
+  };
+
   return (
-    <AppShell title={t("rhPersonnelPageTitle")}>
-      <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: -6, marginBottom: 16 }}>
-        {t("rhPersonnelPageSubtitle")}
+    <AppShell title={t("rhdListTitre")}>
+      <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: -6, marginBottom: 16, maxWidth: 760 }}>
+        {t("rhdListAide")}
       </p>
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
-      <div style={{ marginBottom: 16, display: "flex", gap: 10 }}>
+      <div style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <Link
           href="/rh/personnel/nouveau"
           style={{
             background: "var(--petrol)",
             color: "#fff",
-            border: "none",
             borderRadius: 8,
             padding: "8px 16px",
             fontSize: 12.5,
@@ -43,45 +61,33 @@ export default function PersonnelPage() {
             display: "inline-block",
           }}
         >
-          {t("newFicheEmploye")}
+          + {t("rhdNouveau")}
         </Link>
-        <Link
-          href="/rh/circuit-approbation"
-          className="card"
-          style={{ display: "inline-block", padding: "8px 16px", fontSize: 12.5, fontWeight: 600, color: "var(--petrol)" }}
-        >
-          {t("navCircuitApprobation")} →
-        </Link>
-        <Link
-          href="/rh/planning-conges"
-          className="card"
-          style={{ display: "inline-block", padding: "8px 16px", fontSize: 12.5, fontWeight: 600, color: "var(--petrol)" }}
-        >
-          {t("navPlanningConges")} →
-        </Link>
-        <Link
-          href="/rh/statistiques"
-          className="card"
-          style={{ display: "inline-block", padding: "8px 16px", fontSize: 12.5, fontWeight: 600, color: "var(--petrol)" }}
-        >
-          {t("navStatistiquesRH")} →
-        </Link>
+        <Link href="/rh/circuit-approbation" className="card" style={lienBouton}>{t("navCircuitApprobation")} →</Link>
+        <Link href="/rh/planning-conges" className="card" style={lienBouton}>{t("navPlanningConges")} →</Link>
+        <Link href="/rh/statistiques" className="card" style={lienBouton}>{t("navStatistiquesRH")} →</Link>
+        <input
+          value={recherche}
+          onChange={(e) => setRecherche(e.target.value)}
+          placeholder={t("rhdRecherche")}
+          style={{ marginLeft: "auto", minWidth: 240, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" }}
+        />
       </div>
 
       {chargement ? (
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
-      ) : personnel.length === 0 ? (
-        <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("noPersonnel")}</p>
+      ) : filtre.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rhdAucun")}</p>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
-          {personnel.map((p) => (
+          {filtre.map((p) => (
             <Link
               key={p.id}
               href={`/rh/personnel/${p.id}`}
               className="card"
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.6fr 1fr 1fr auto",
+                gridTemplateColumns: "1.5fr 1.2fr 1fr auto auto",
                 gap: 12,
                 alignItems: "center",
                 textDecoration: "none",
@@ -92,17 +98,20 @@ export default function PersonnelPage() {
                 <div style={{ fontWeight: 700, fontSize: 13.5 }}>
                   {p.prenom} {p.nom}
                 </div>
-                <div style={{ fontSize: 11.5, color: "var(--sub)" }}>{p.email}</div>
-              </div>
-              <div style={{ fontSize: 12, color: "var(--sub)" }}>{p.poste || "—"}</div>
-              <div>
-                <div style={{ fontSize: 9.5, color: "var(--sub)", textTransform: "uppercase" }}>
-                  {t("soldeCongesLabel")}
-                </div>
-                <div className="mono" style={{ fontSize: 13 }}>
-                  {p.solde_conges != null ? Number(p.solde_conges) : 0}
+                <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)" }}>
+                  {p.matricule || "—"}
                 </div>
               </div>
+              <div style={{ fontSize: 12, color: "var(--sub)" }}>
+                {p.poste || "—"}
+                {p.categorie ? <div style={{ fontSize: 11 }}>{p.categorie}</div> : null}
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--sub)" }}>
+                {p.a_compte ? t("rhdAvecCompte") : t("rhdSansCompte")}
+              </div>
+              <span className={p.completude && p.completude.pourcentage === 100 ? "chip ok" : "chip risk"}>
+                {p.completude ? `${p.completude.pourcentage} %` : "—"}
+              </span>
               <span className={p.statut === "ACTIF" ? "chip ok" : "chip risk"}>
                 {statutEmployeLabel(p.statut)}
               </span>

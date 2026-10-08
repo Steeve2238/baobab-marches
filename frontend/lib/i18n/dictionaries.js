@@ -14,6 +14,12 @@ import { ECH_FR, ECH_EN } from "./echeancierDictionary";
 import { PLAN_FR, PLAN_EN } from "./planTresorerieDictionary";
 import { CEX_FR, CEX_EN } from "./compteExploitationDictionary";
 import { OFFRES_FR, OFFRES_EN } from "./offresDictionary";
+import { RHD_FR, RHD_EN } from "./rhDossierDictionary";
+import { RHC_FR, RHC_EN } from "./rhContratsDictionary";
+import { RHE_FR, RHE_EN } from "./rhEspaceDictionary";
+import { RHK_FR, RHK_EN } from "./rhCourriersDictionary";
+import { PAIEK_FR, PAIEK_EN } from "./paieDictionary";
+import { PAIE2_FR, PAIE2_EN } from "./paie2Dictionary";
 
 export const DICTIONARIES = {
   fr: {
@@ -3765,3 +3771,15 @@ export const TYPE_TEMPS_AUTRE_LABELS = {
 };
 Object.assign(DICTIONARIES.fr, OFFRES_FR);
 Object.assign(DICTIONARIES.en, OFFRES_EN);
+Object.assign(DICTIONARIES.fr, RHD_FR);
+Object.assign(DICTIONARIES.en, RHD_EN);
+Object.assign(DICTIONARIES.fr, RHC_FR);
+Object.assign(DICTIONARIES.en, RHC_EN);
+Object.assign(DICTIONARIES.fr, RHE_FR);
+Object.assign(DICTIONARIES.en, RHE_EN);
+Object.assign(DICTIONARIES.fr, RHK_FR);
+Object.assign(DICTIONARIES.en, RHK_EN);
+Object.assign(DICTIONARIES.fr, PAIEK_FR);
+Object.assign(DICTIONARIES.fr, PAIE2_FR);
+Object.assign(DICTIONARIES.en, PAIEK_EN);
+Object.assign(DICTIONARIES.en, PAIE2_EN);

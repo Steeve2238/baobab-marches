@@ -109,4 +109,22 @@ async function envoyerEmailAvecPieceJointe({ destinataire, sujet, message, piece
   });
 }
 
-module.exports = { envoyerEmailReinitialisation, envoyerEmailAvecPieceJointe };
+/** Envoi d'un message simple (texte + html derive du texte) : codes de confirmation, notifications RH. */
+async function envoyerEmailSimple({ destinataire, sujet, message }) {
+  const nomExpediteur = process.env.SMTP_FROM_NAME || "Baobab Marches";
+  const transport = obtenirTransporteur();
+  const echapper = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const html = String(message || "")
+    .split(/\n{2,}/)
+    .map((p) => `<p>${echapper(p).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+  await transport.sendMail({
+    from: `"${nomExpediteur}" <${process.env.SMTP_USER}>`,
+    to: destinataire,
+    subject: sujet,
+    text: message,
+    html,
+  });
+}
+
+module.exports = { envoyerEmailReinitialisation, envoyerEmailAvecPieceJointe, envoyerEmailSimple };

@@ -125,7 +125,8 @@ export default function SuperAdminFactureDetailPage() {
   // apparait sur sa propre ligne (montant_xof reste le total facture).
   const supplementCompta = Number(facture.supplement_comptabilite_xof) || 0;
   const supplementFisc = Number(facture.supplement_fiscalite_xof) || 0;
-  const montantFormule = Number(facture.montant_xof) - supplementCompta - supplementFisc;
+  const supplementPaie = Number(facture.supplement_paie_xof) || 0;
+  const montantFormule = Number(facture.montant_xof) - supplementCompta - supplementFisc - supplementPaie;
 
   const piedDePage = [
     entete?.rccm ? `RCCM ${entete.rccm}` : null,
@@ -257,6 +258,22 @@ export default function SuperAdminFactureDetailPage() {
                 </td>
                 <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
                   {supplementFisc.toLocaleString()}
+                </td>
+              </tr>
+            )}
+            {supplementPaie > 0 && (
+              <tr style={{ borderBottom: "1px solid var(--line-soft)" }}>
+                <td style={{ padding: "6px 4px", fontSize: 12.5 }}>
+                  {t("saModulePaieSection")} — {t("saInvoiceLineSupplementWord")} — {t("saInvoiceLinePeriodLabel")} {facture.periode}
+                </td>
+                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                  1
+                </td>
+                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                  {supplementPaie.toLocaleString()}
+                </td>
+                <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                  {supplementPaie.toLocaleString()}
                 </td>
               </tr>
             )}

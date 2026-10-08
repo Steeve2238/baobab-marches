@@ -170,6 +170,23 @@ async function requestDownload(path, nomFichierParDefaut) {
   window.URL.revokeObjectURL(url);
 }
 
+// Ouvre un PDF genere par l'API dans un nouvel onglet (la requete porte le jeton, d'ou le passage par un Blob).
+async function ouvrirPdf(path) {
+  const token = getToken();
+  const langue = getLangueLocale() || "fr";
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { "Accept-Language": langue, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Erreur ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+}
+
 export const api = {
   login: (email, mot_de_passe) =>
     request("/auth/login", { method: "POST", body: JSON.stringify({ email, mot_de_passe }) }),
@@ -413,6 +430,81 @@ export const api = {
   createFicheEmploye: (data) => request("/rh/personnel", { method: "POST", body: JSON.stringify(data) }),
   patchFicheEmploye: (id, data) =>
     request(`/rh/personnel/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  // RH lot 2 : contrats de travail, modeles, DMT
+  getModelesContrats: () => request("/rh/modeles-contrats"),
+  putModeleContrat: (type, articles) =>
+    request(`/rh/modeles-contrats/${type}`, { method: "PUT", body: JSON.stringify({ articles }) }),
+  deleteModeleContrat: (type) => request(`/rh/modeles-contrats/${type}`, { method: "DELETE" }),
+  getContrats: (employeId) => request(`/rh/contrats${employeId ? `?employe_id=${employeId}` : ""}`),
+  getContratPrefill: (employeId, type) => request(`/rh/contrats/prefill?employe_id=${employeId}&type=${type}`),
+  getContrat: (id) => request(`/rh/contrats/${id}`),
+  createContrat: (data) => request("/rh/contrats", { method: "POST", body: JSON.stringify(data) }),
+  patchContrat: (id, data) => request(`/rh/contrats/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteContrat: (id) => request(`/rh/contrats/${id}`, { method: "DELETE" }),
+  validerContrat: (id) => request(`/rh/contrats/${id}/valider`, { method: "POST" }),
+  annulerContrat: (id) => request(`/rh/contrats/${id}/annuler`, { method: "POST" }),
+  ouvrirPdfRH: (chemin) => ouvrirPdf(chemin),
+  telechargerPdfRH: (chemin, nom) => requestDownload(chemin, nom),
+  getDmts: (employeId) => request(`/rh/dmt${employeId ? `?employe_id=${employeId}` : ""}`),
+  getDmtPrefill: (employeId, objet, contratId) =>
+    request(`/rh/dmt/prefill?employe_id=${employeId}&objet=${objet}${contratId ? `&contrat_id=${contratId}` : ""}`),
+  getDmt: (id) => request(`/rh/dmt/${id}`),
+  createDmt: (data) => request("/rh/dmt", { method: "POST", body: JSON.stringify(data) }),
+  patchDmt: (id, data) => request(`/rh/dmt/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteDmt: (id) => request(`/rh/dmt/${id}`, { method: "DELETE" }),
+  envoyerContratSalarie: (id) => request(`/rh/contrats/${id}/envoyer`, { method: "POST" }),
+  transmettreContratInspection: (id, date) =>
+    request(`/rh/contrats/${id}/transmettre-inspection`, { method: "POST", body: JSON.stringify({ date }) }),
+  viserContrat: (id, data) => request(`/rh/contrats/${id}/viser`, { method: "POST", body: JSON.stringify(data) }),
+  putScanContrat: (id, fichier) => request(`/rh/contrats/${id}/scan`, { method: "PUT", body: JSON.stringify(fichier) }),
+  // RH lot 4 : courriers RH et ordres de virement
+  getCourrierTypes: () => request("/rh/courriers/types"),
+  putModeleCourrier: (type, data) => request(`/rh/modeles-courriers/${type}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteModeleCourrier: (type) => request(`/rh/modeles-courriers/${type}`, { method: "DELETE" }),
+  getCourriers: (filtres = {}) => {
+    const q = new URLSearchParams(Object.entries(filtres).filter(([, v]) => v)).toString();
+    return request(`/rh/courriers${q ? `?${q}` : ""}`);
+  },
+  getCourrierPrefill: (employeId, type) => request(`/rh/courriers/prefill?employe_id=${employeId}&type=${type}`),
+  getCourrier: (id) => request(`/rh/courriers/${id}`),
+  createCourrier: (data) => request("/rh/courriers", { method: "POST", body: JSON.stringify(data) }),
+  patchCourrier: (id, data) => request(`/rh/courriers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteCourrierRH: (id) => request(`/rh/courriers/${id}`, { method: "DELETE" }),
+  emettreCourrier: (id) => request(`/rh/courriers/${id}/emettre`, { method: "POST" }),
+  annulerCourrierRH: (id) => request(`/rh/courriers/${id}/annuler`, { method: "POST" }),
+  publierCourrier: (id, publier) => request(`/rh/courriers/${id}/publier`, { method: "POST", body: JSON.stringify({ publier }) }),
+  remiseCourrier: (id, data) => request(`/rh/courriers/${id}/remise`, { method: "POST", body: JSON.stringify(data) }),
+  getOrdresVirement: () => request("/rh/ordres-virement"),
+  getOrdreVirementPrefill: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+    return request(`/rh/ordres-virement/prefill${q ? `?${q}` : ""}`);
+  },
+  getOrdreVirement: (id) => request(`/rh/ordres-virement/${id}`),
+  createOrdreVirement: (data) => request("/rh/ordres-virement", { method: "POST", body: JSON.stringify(data) }),
+  patchOrdreVirement: (id, data) => request(`/rh/ordres-virement/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteOrdreVirement: (id) => request(`/rh/ordres-virement/${id}`, { method: "DELETE" }),
+  validerOrdreVirement: (id) => request(`/rh/ordres-virement/${id}/valider`, { method: "POST" }),
+  executerOrdreVirement: (id, date) => request(`/rh/ordres-virement/${id}/executer`, { method: "POST", body: JSON.stringify({ date }) }),
+  annulerOrdreVirement: (id) => request(`/rh/ordres-virement/${id}/annuler`, { method: "POST" }),
+  // RH lot 3 : espace employe
+  getEspaceCourriers: () => request("/rh/espace/courriers"),
+  getEspaceCourrier: (id) => request(`/rh/espace/courriers/${id}`),
+  accuserCourrier: (id) => request(`/rh/espace/courriers/${id}/accuse`, { method: "POST" }),
+  repondreCourrier: (id, texte) => request(`/rh/espace/courriers/${id}/reponse`, { method: "POST", body: JSON.stringify({ texte }) }),
+  getEspaceBulletins: () => request("/rh/espace/bulletins"),
+  ouvrirBulletinPaie: (periodeId) => ouvrirPdf(`/rh/espace/bulletins/${periodeId}/pdf`),
+  telechargerBulletinPaie: (periodeId, nom) => requestDownload(`/rh/espace/bulletins/${periodeId}/pdf?telecharger=1`, nom),
+  accuserBulletinPaie: (periodeId) => request(`/rh/espace/bulletins/${periodeId}/accuse`, { method: "POST" }),
+  getEspaceMoi: () => request("/rh/espace/moi"),
+  getEspaceSignature: () => request("/rh/espace/signature"),
+  demanderCodeSignature: () => request("/rh/espace/signature/code", { method: "POST" }),
+  enregistrerSignature: (data) => request("/rh/espace/signature", { method: "PUT", body: JSON.stringify(data) }),
+  getEspaceContrats: () => request("/rh/espace/contrats"),
+  getEspaceContrat: (id) => request(`/rh/espace/contrats/${id}`),
+  demanderCodeContrat: (id) => request(`/rh/espace/contrats/${id}/code`, { method: "POST" }),
+  signerContrat: (id, data) => request(`/rh/espace/contrats/${id}/signer`, { method: "POST", body: JSON.stringify(data) }),
+  lierCompteEmploye: (id, utilisateur_id) =>
+    request(`/rh/personnel/${id}/compte`, { method: "PATCH", body: JSON.stringify({ utilisateur_id }) }),
 
   // Module 9 - RH (etape 2/5 : moteur de demandes RH + circuit d'approbation)
   getReglesApprobationRH: () => request("/rh/regles-approbation"),
@@ -768,6 +860,91 @@ export const api = {
   fiscaliteImports: () => request("/fiscalite/import"),
   fiscaliteImportModele: (type) => requestDownload(`/fiscalite/import/modele/${type}`, `modele_${type}_fiscalite.xlsx`),
   fiscaliteImportApercu: (type, formData) => requestUpload(`/fiscalite/import/${type}/apercu`, formData),
+  // ---- Paie (module payant) : parametres, dossiers de paie, simulateur ----
+  paieEtat: () => request("/paie/etat"),
+  paieReglages: () => request("/paie/reglages"),
+  paieEnregistrerReglages: (d) => request("/paie/reglages", { method: "PUT", body: JSON.stringify(d) }),
+  paieCotisations: () => request("/paie/cotisations"),
+  paieSauverCotisation: (d) => request("/paie/cotisations", { method: "POST", body: JSON.stringify(d) }),
+  paieSupprimerCotisation: (id) => request(`/paie/cotisations/${id}`, { method: "DELETE" }),
+  paieFormuleIr: () => request("/paie/formule-ir"),
+  paieEnregistrerFormuleIr: (d) => request("/paie/formule-ir", { method: "PUT", body: JSON.stringify(d) }),
+  paieSupprimerFormuleIr: (id) => request(`/paie/formule-ir/${id}`, { method: "DELETE" }),
+  paieBaremes: () => request("/paie/baremes"),
+  paieImporterBareme: (formData) => requestUpload("/paie/baremes/import", formData),
+  paieSupprimerBareme: (id) => request(`/paie/baremes/${id}`, { method: "DELETE" }),
+  paieControleBareme: (q) => request(`/paie/baremes/controle?${new URLSearchParams(q).toString()}`),
+  paieConventions: () => request("/paie/conventions"),
+  paieCreerConvention: (d) => request("/paie/conventions", { method: "POST", body: JSON.stringify(d) }),
+  paieModifierConvention: (id, d) => request(`/paie/conventions/${id}`, { method: "PATCH", body: JSON.stringify(d) }),
+  paieSupprimerConvention: (id) => request(`/paie/conventions/${id}`, { method: "DELETE" }),
+  paieGrille: (id, date) => request(`/paie/conventions/${id}/grille${date ? `?date=${date}` : ""}`),
+  paieSauverCategorie: (id, d) => request(`/paie/conventions/${id}/categories`, { method: "POST", body: JSON.stringify(d) }),
+  paieSupprimerCategorie: (id) => request(`/paie/categories/${id}`, { method: "DELETE" }),
+  paieRevaloriser: (id, d) => request(`/paie/conventions/${id}/revalorisation`, { method: "POST", body: JSON.stringify(d) }),
+  paieTelechargerGabarit: (id, code) => requestDownload(`/paie/conventions/${id}/gabarit`, `convention_${code || "grille"}.xlsx`),
+  paieImporterGrille: (id, formData) => requestUpload(`/paie/conventions/${id}/import`, formData),
+  paieRubriques: () => request("/paie/rubriques"),
+  paieCreerRubrique: (d) => request("/paie/rubriques", { method: "POST", body: JSON.stringify(d) }),
+  paieModifierRubrique: (id, d) => request(`/paie/rubriques/${id}`, { method: "PATCH", body: JSON.stringify(d) }),
+  paieSupprimerRubrique: (id) => request(`/paie/rubriques/${id}`, { method: "DELETE" }),
+  paieTypesAbsence: () => request("/paie/types-absence"),
+  paieCreerTypeAbsence: (d) => request("/paie/types-absence", { method: "POST", body: JSON.stringify(d) }),
+  paieModifierTypeAbsence: (id, d) => request(`/paie/types-absence/${id}`, { method: "PATCH", body: JSON.stringify(d) }),
+  paieSupprimerTypeAbsence: (id) => request(`/paie/types-absence/${id}`, { method: "DELETE" }),
+  paieComptes: () => request("/paie/comptes"),
+  paieEnregistrerComptes: (d) => request("/paie/comptes", { method: "PUT", body: JSON.stringify(d) }),
+  paieDossiers: () => request("/paie/dossiers"),
+  paieDossier: (employeId) => request(`/paie/dossiers/${employeId}`),
+  paieEnregistrerDossier: (employeId, d) => request(`/paie/dossiers/${employeId}`, { method: "PUT", body: JSON.stringify(d) }),
+  paieAjouterElement: (employeId, d) => request(`/paie/dossiers/${employeId}/elements`, { method: "POST", body: JSON.stringify(d) }),
+  paieModifierElement: (id, d) => request(`/paie/elements/${id}`, { method: "PATCH", body: JSON.stringify(d) }),
+  paieSupprimerElement: (id) => request(`/paie/elements/${id}`, { method: "DELETE" }),
+  paieSimuler: (d) => request("/paie/simulation", { method: "POST", body: JSON.stringify(d) }),
+  // ---- Paie : periodes, variables du mois, generation, etats, ordre de virement (PAIE-2) ----
+  paiePeriodes: () => request("/paie/periodes"),
+  paieOuvrirPeriode: (d) => request("/paie/periodes", { method: "POST", body: JSON.stringify(d || {}) }),
+  paiePeriode: (id) => request(`/paie/periodes/${id}`),
+  paieAnnulerPeriode: (id) => request(`/paie/periodes/${id}`, { method: "DELETE" }),
+  paieGenerer: (id) => request(`/paie/periodes/${id}/generer`, { method: "POST" }),
+  paieReferentielsVariables: () => request("/paie/referentiels-variables"),
+  paiePeriodeEmployes: (id) => request(`/paie/periodes/${id}/employes`),
+  paieVariablesEmploye: (id, employeId) => request(`/paie/periodes/${id}/variables/${employeId}`),
+  paieEnregistrerVariables: (id, employeId, d) => request(`/paie/periodes/${id}/variables/${employeId}`, { method: "PUT", body: JSON.stringify(d) }),
+  paieGabaritVariables: (id) => requestDownload(`/paie/periodes/${id}/variables-gabarit`, "variables_paie.xlsx"),
+  paieImporterVariables: (id, formData) => requestUpload(`/paie/periodes/${id}/variables-import`, formData),
+  paieCopierVariables: (id, types) => request(`/paie/periodes/${id}/variables-copie`, { method: "POST", body: JSON.stringify({ types }) }),
+  paieDemandesRh: (id) => request(`/paie/periodes/${id}/demandes-rh`),
+  paieAppliquerDemandesRh: (id, codeHs) => request(`/paie/periodes/${id}/demandes-rh`, { method: "POST", body: JSON.stringify({ code_hs: codeHs }) }),
+  paieBulletin: (id, employeId) => request(`/paie/periodes/${id}/bulletins/${employeId}`),
+  paieControles: (id) => request(`/paie/periodes/${id}/controles`),
+  paieEtats: (id) => request(`/paie/periodes/${id}/etats`),
+  paieExporterEtats: (id, langue) => requestDownload(`/paie/periodes/${id}/etats.xlsx?lang=${langue === "en" ? "en" : "fr"}`, "etats_paie.xlsx"),
+  paieOrdreVirement: (id, d) => request(`/paie/periodes/${id}/ordre-virement`, { method: "POST", body: JSON.stringify(d || {}) }),
+  paieValider: (id) => request(`/paie/periodes/${id}/valider`, { method: "POST" }),
+  paieRouvrir: (id, motif) => request(`/paie/periodes/${id}/rouvrir`, { method: "POST", body: JSON.stringify({ motif }) }),
+  paieCloturer: (id) => request(`/paie/periodes/${id}/cloturer`, { method: "POST", body: JSON.stringify({}) }),
+  paieComptabilite: (id) => request(`/paie/periodes/${id}/comptabilite`),
+  paieComptabiliser: (id) => request(`/paie/periodes/${id}/comptabiliser`, { method: "POST" }),
+  paieEtatPeriodique: (annee, trimestre) => request(`/paie/etats-periodiques/${annee}?trimestre=${trimestre || 0}`),
+  paieExporterEtatPeriodique: (annee, trimestre, langue) => requestDownload(`/paie/etats-periodiques/${annee}/export.xlsx?trimestre=${trimestre || 0}&lang=${langue === "en" ? "en" : "fr"}`, `etat_paie_${annee}.xlsx`),
+  paieOuvrirEtatPeriodiquePdf: (annee, trimestre) => ouvrirPdf(`/paie/etats-periodiques/${annee}/export.pdf?trimestre=${trimestre || 0}`),
+  paieProvision: (q) => request(`/paie/retraite/provision?${new URLSearchParams(q).toString()}`),
+  paieSauverProvisionLigne: (d) => request("/paie/retraite/provision/ligne", { method: "PUT", body: JSON.stringify(d) }),
+  paieSupprimerProvisionLigne: (id) => request(`/paie/retraite/provision/ligne/${id}`, { method: "DELETE" }),
+  paieModeleBaremeRetraite: () => request("/paie/retraite/baremes/modele", { method: "POST", body: "{}" }),
+  paieExporterProvision: (q, langue) => requestDownload(`/paie/retraite/provision/export.xlsx?${new URLSearchParams({ ...q, lang: langue === "en" ? "en" : "fr" }).toString()}`, `provision_retraite_${q.date_arrete}.xlsx`),
+  paieOuvrirProvisionPdf: (q) => ouvrirPdf(`/paie/retraite/provision/export.pdf?${new URLSearchParams(q).toString()}`),
+  paieBaremesRetraite: () => request("/paie/retraite/baremes"),
+  paieSauverBaremeRetraite: (d) => request("/paie/retraite/baremes", { method: "PUT", body: JSON.stringify(d) }),
+  paieSupprimerBaremeRetraite: (id) => request(`/paie/retraite/baremes/${id}`, { method: "DELETE" }),
+  paieCalculRetraite: (d) => request("/paie/retraite/calcul", { method: "POST", body: JSON.stringify(d) }),
+  paieAppliquerRetraite: (d) => request("/paie/retraite/appliquer", { method: "POST", body: JSON.stringify(d) }),
+  paieArchives: () => request("/paie/archives"),
+  paieArchive: (id) => request(`/paie/periodes/${id}/archive`),
+  paieVerifierArchive: (id) => request(`/paie/periodes/${id}/archive/verification`),
+  paieTelechargerArchiveZip: (id) => requestDownload(`/paie/periodes/${id}/archive.zip`, "archive_paie.zip"),
+  paieTelechargerFichierArchive: (id, fid, nom) => requestDownload(`/paie/periodes/${id}/archive/fichiers/${fid}?telecharger=1`, nom || "document"),
   fiscaliteImporter: (type, formData) => requestUpload(`/fiscalite/import/${type}`, formData),
   fiscaliteImportSupprimer: (id) => request(`/fiscalite/import/${id}`, { method: "DELETE" }),
   fiscaliteImportAssociesApercu: (formData) => requestUpload("/fiscalite/import/associes/apercu", formData),

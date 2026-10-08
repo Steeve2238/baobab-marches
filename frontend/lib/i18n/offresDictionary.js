@@ -143,7 +143,10 @@ export const OFFRES_FR = {
   "saOffRemisePct": "Remise (%)",
   "saModuleFiscSection": "Module Fiscalité",
   "saModuleFiscDescription": "Module vendu en option, verrouillé par défaut. Verrouillé, le client n'y a plus accès du tout ; ses données sont conservées.",
-  "saModuleFiscLockConfirm": "Verrouiller la fiscalité pour ce client ? Il n'y aura plus accès, mais ses données sont conservées."
+  "saModuleFiscLockConfirm": "Verrouiller la fiscalité pour ce client ? Il n'y aura plus accès, mais ses données sont conservées.",
+  "saModulePaieSection": "Module Paie",
+  "saModulePaieDescription": "Module vendu en option, verrouillé par défaut. Verrouillé, le client n'y a plus accès du tout ; ses données sont conservées.",
+  "saModulePaieLockConfirm": "Verrouiller la paie pour ce client ? Il n'y aura plus accès, mais ses données sont conservées."
 };
 
 export const OFFRES_EN = {
@@ -287,5 +290,8 @@ export const OFFRES_EN = {
   "saOffRemisePct": "Discount (%)",
   "saModuleFiscSection": "Taxation module",
   "saModuleFiscDescription": "Optional paid module, locked by default. When locked, the client has no access at all; their data is kept.",
-  "saModuleFiscLockConfirm": "Lock taxation for this client? They will lose access, but their data is kept."
+  "saModuleFiscLockConfirm": "Lock taxation for this client? They will lose access, but their data is kept.",
+  "saModulePaieSection": "Payroll module",
+  "saModulePaieDescription": "Optional paid module, locked by default. When locked, the client has no access at all; their data is kept.",
+  "saModulePaieLockConfirm": "Lock payroll for this client? They will lose access, but their data is kept."
 };

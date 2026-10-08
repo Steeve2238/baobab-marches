@@ -150,6 +150,8 @@ export const superAdminApi = {
     request(`/super-admin/clients/${id}/module-comptabilite`, { method: "PATCH", body: JSON.stringify(data) }),
   patchModuleFiscalite: (id, data) =>
     request(`/super-admin/clients/${id}/module-fiscalite`, { method: "PATCH", body: JSON.stringify(data) }),
+  patchModulePaie: (id, data) =>
+    request(`/super-admin/clients/${id}/module-paie`, { method: "PATCH", body: JSON.stringify(data) }),
 
   patchModeHebergement: (id, mode) =>
     request(`/super-admin/clients/${id}/mode-hebergement`, { method: "PATCH", body: JSON.stringify({ mode }) }),

@@ -21,7 +21,11 @@ const utilisateursRoutes = require("./routes/utilisateurs");
 const maitresOuvrageRoutes = require("./routes/maitresOuvrage");
 const concurrenceRoutes = require("./routes/concurrence");
 const parcAutoRoutes = require("./routes/parcAuto");
+const rhEspaceRoutes = require("./routes/rhEspace");
 const rhRoutes = require("./routes/rh");
+const rhContratsRoutes = require("./routes/rhContrats");
+const rhCourriersRoutes = require("./routes/rhCourriers");
+const rhOrdresVirementRoutes = require("./routes/rhOrdresVirement");
 const superAdminRoutes = require("./routes/superAdmin");
 const ventesRoutes = require("./routes/ventes");
 const calculPrixRoutes = require("./routes/calculPrix");
@@ -34,11 +38,15 @@ const incotermsRoutes = require("./routes/incoterms");
 const livraisonsDossierRoutes = require("./routes/livraisonsDossier");
 const comptabiliteRoutes = require("./routes/comptabilite");
 const fiscaliteRoutes = require("./routes/fiscalite");
+const paieRoutes = require("./routes/paie");
 const { t } = require("./utils/i18n");
 
 const app = express();
 
 app.use(cors());
+// RH : signature (image) et exemplaires scannes du contrat voyagent en base64 dans le JSON : limites dediees.
+app.use("/api/rh/espace/signature", express.json({ limit: "1mb" }));
+app.use(/^\/api\/rh\/contrats\/[^/]+\/(scan|viser)$/, express.json({ limit: "12mb" }));
 app.use(express.json());
 
 app.get("/api/health", (req, res) => {
@@ -66,7 +74,11 @@ app.use("/api/utilisateurs", utilisateursRoutes);
 app.use("/api/maitres-ouvrage", maitresOuvrageRoutes);
 app.use("/api/concurrence", concurrenceRoutes);
 app.use("/api/parc-auto", parcAutoRoutes);
+app.use("/api/rh/espace", rhEspaceRoutes);
 app.use("/api/rh", rhRoutes);
+app.use("/api/rh", rhContratsRoutes);
+app.use("/api/rh", rhCourriersRoutes);
+app.use("/api/rh", rhOrdresVirementRoutes);
 app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/ventes", ventesRoutes);
 app.use("/api/calcul-prix", calculPrixRoutes);
@@ -79,6 +91,7 @@ app.use("/api/incoterms", incotermsRoutes);
 app.use("/api/livraisons-dossier", livraisonsDossierRoutes);
 app.use("/api/comptabilite", comptabiliteRoutes);
 app.use("/api/fiscalite", fiscaliteRoutes);
+app.use("/api/paie", paieRoutes);
 
 // Gestionnaire d'erreur generique (dernier recours)
 app.use((err, req, res, next) => {
