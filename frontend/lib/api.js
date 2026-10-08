@@ -111,6 +111,7 @@ async function request(path, options = {}) {
   if (!res.ok) {
     const erreur = new Error(data.error || `Erreur ${res.status}`);
     erreur.status = res.status;
+    erreur.data = data;
     throw erreur;
   }
   return data;
@@ -913,6 +914,7 @@ export const api = {
   paieModifierElement: (id, d) => request(`/paie/elements/${id}`, { method: "PATCH", body: JSON.stringify(d) }),
   paieSupprimerElement: (id) => request(`/paie/elements/${id}`, { method: "DELETE" }),
   paieSimuler: (d) => request("/paie/simulation", { method: "POST", body: JSON.stringify(d) }),
+  paieSimulerInverse: (d) => request("/paie/simulation-inverse", { method: "POST", body: JSON.stringify(d) }),
   // ---- Paie : periodes, variables du mois, generation, etats, ordre de virement (PAIE-2) ----
   paiePeriodes: () => request("/paie/periodes"),
   paieOuvrirPeriode: (d) => request("/paie/periodes", { method: "POST", body: JSON.stringify(d || {}) }),

@@ -7,11 +7,13 @@ import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
 import PaieSousNav from "../../../lib/components/PaieSousNav";
 import BulletinVue from "../../../lib/components/paie/BulletinVue";
+import SimulationInverse from "../../../lib/components/paie/SimulationInverse";
 import { Champ, Section, inputStyle, boutonPrincipal, boutonLeger, boutonDanger, libelleHs, cellule, enteteCellule, droite, fmt, fmtDec, Pastille, useStatut, Statut, MOIS_FR } from "../../../lib/components/paieUi";
 
 function Contenu() {
   const { t } = useLangue();
   const params = useSearchParams();
+  const [mode, setMode] = useState(params.get("mode") === "inverse" ? "inverse" : "direct");
   const maintenant = new Date();
   const [salaries, setSalaries] = useState([]);
   const [convs, setConvs] = useState([]);
@@ -80,6 +82,15 @@ function Contenu() {
 
   return (
     <AppShell title={t("paieSimTitre")} subNav={<PaieSousNav />}>
+      <div style={{ display: "inline-flex", gap: 4, padding: 3, border: "1px solid var(--line)", borderRadius: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        {[["direct", t("paieSimModeDirect")], ["inverse", t("paieSimModeInverse")]].map(([k, libelle]) => (
+          <button key={k} type="button" onClick={() => setMode(k)}
+            style={{ border: "none", borderRadius: 8, padding: "7px 16px", fontSize: 12.5, fontWeight: mode === k ? 700 : 500, cursor: "pointer", fontFamily: "inherit", background: mode === k ? "var(--petrol)" : "transparent", color: mode === k ? "#fff" : "var(--petrol)" }}>
+            {libelle}
+          </button>
+        ))}
+      </div>
+      {mode === "inverse" ? <SimulationInverse /> : (<>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 14, maxWidth: 780, lineHeight: 1.5 }}>{t("paieSimAide")}</p>
       <Statut s={s} />
       <div style={{ display: "grid", gridTemplateColumns: "minmax(320px, 420px) 1fr", gap: 14, alignItems: "start" }} className="paie-sim">
@@ -179,6 +190,7 @@ function Contenu() {
         </div>
       </div>
       <style>{`@media (max-width: 900px) { .paie-sim { grid-template-columns: 1fr !important; } }`}</style>
+      </>)}
     </AppShell>
   );
 }

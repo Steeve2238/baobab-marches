@@ -766,9 +766,7 @@ router.delete("/elements/:id", gerer(async (req, res) => {
  * Corps : { employe_id?, annee, mois, convention_id?, categorie_code?, salaire_base?, sursalaire?, regime_rc?, parts_ir?, parts_trimf?,
  *           annees_anciennete?, elements:[{rubrique_code, montant, quantite}], variables:{absences, heures_sup, gains, retenues}, mode_ir?, arrondi_net? }
  */
-router.post("/simulation", gerer(async (req, res) => {
-  const tid = tenant(req);
-  const b = req.body || {};
+async function contexteSimulation(tid, b) {
   const annee = entier(b.annee) || new Date().getUTCFullYear();
   const mois = entier(b.mois) || new Date().getUTCMonth() + 1;
   if (!(annee >= 2000 && annee <= 2100) || !(mois >= 1 && mois <= 12)) throw new PaieError("PAIE_SIMULATION_INVALIDE", 400);
@@ -816,10 +814,92 @@ router.post("/simulation", gerer(async (req, res) => {
       options.elementsFixes = options.elementsFixes || [];
     }
   }
-  const ctx = await P.construireContexte(tid, employeId, annee, mois, options);
-  const bulletin = M.calculerBulletin(ctx);
-  res.json({ bulletin, sources_baremes: ctx.bareme.sources, reglages: ctx.parametres, convention: ctx.convention ? { code: ctx.convention.code, libelle: ctx.convention.libelle, majorations: ctx.convention.majorations } : null });
+  return P.construireContexte(tid, employeId, annee, mois, options);
+}
+
+const vueSimulation = (ctx, bulletin) => ({ bulletin, sources_baremes: ctx.bareme.sources, reglages: ctx.parametres, convention: ctx.convention ? { code: ctx.convention.code, libelle: ctx.convention.libelle, majorations: ctx.convention.majorations } : null });
+
+router.post("/simulation", gerer(async (req, res) => {
+  const ctx = await contexteSimulation(tenant(req), req.body || {});
+  res.json(vueSimulation(ctx, M.calculerBulletin(ctx)));
 }));
+
+// ---- Simulation inverse : net a payer souhaite -> brut detaille (PAIE-3E).
+router.post("/simulation-inverse", gerer(async (req, res) => {
+  const tid = tenant(req);
+  const b = req.body || {};
+  const net = entier(b.net_cible);
+  if (!(net > 0) || net > 1e10) throw new PaieError("PAIE_INVERSE_NET_INVALIDE", 400);
+  const annee = entier(b.annee) || new Date().getUTCFullYear();
+  const sit = ["CELIBATAIRE", "MARIE", "DIVORCE", "VEUF"].includes(b.situation_familiale) ? b.situation_familiale : "CELIBATAIRE";
+  const nbEnfants = Math.max(0, Math.min(20, entier(b.nb_enfants) || 0));
+  const parts = require("../services/rhFiche").calculerParts(
+    { situation_familiale: sit, conjoint_a_revenus: !!b.conjoint_a_revenus, resident_senegal: b.resident_senegal !== false, titulaire_invalidite_40: !!b.invalidite_40 },
+    Array.from({ length: nbEnfants }, () => ({ date_naissance: `${annee - 5}-06-01` })),
+    annee
+  );
+  const partsIr = b.parts_ir !== undefined && b.parts_ir !== "" && b.parts_ir !== null ? decimal(b.parts_ir) : parts.parts_ir;
+  const partsTrimf = b.parts_trimf !== undefined && b.parts_trimf !== "" && b.parts_trimf !== null ? decimal(b.parts_trimf) : parts.parts_trimf;
+  const ajust = b.ajustement && typeof b.ajustement === "object" ? b.ajustement : { type: "SURSALAIRE" };
+  const type = ["SURSALAIRE", "SALAIRE_BASE", "RUBRIQUE", "REPARTITION"].includes(ajust.type) ? ajust.type : "SURSALAIRE";
+  const code = type === "RUBRIQUE" ? codeNettoye(ajust.rubrique_code) : null;
+  const partBase = type === "REPARTITION" ? decimal(ajust.part_base_pct) : null;
+  if (type === "REPARTITION" && !(partBase > 0 && partBase <= 100)) throw new PaieError("PAIE_INVERSE_REPARTITION_INVALIDE", 400);
+  const fixes = (Array.isArray(b.elements) ? b.elements : []).map((e) => ({ rubrique_code: codeNettoye(e.rubrique_code), montant: decimal(e.montant) || 0, quantite: null })).filter((e) => e.rubrique_code && e.rubrique_code !== code);
+  const ctx = await contexteSimulation(tid, {
+    ...b, employe_id: undefined, annee, parts_ir: partsIr, parts_trimf: partsTrimf, elements: fixes, variables: {},
+    sursalaire: type === "SURSALAIRE" || type === "REPARTITION" ? 0 : b.sursalaire,
+    salaire_base: type === "SALAIRE_BASE" || type === "REPARTITION" ? null : b.salaire_base,
+  });
+  for (const e of fixes) {
+    const r = ctx.rubriques[e.rubrique_code];
+    if (!r || r.sens === "RETENUE") throw new PaieError("PAIE_INVERSE_ELEMENT_INVALIDE", 400);
+  }
+  if (type === "RUBRIQUE") {
+    const r = ctx.rubriques[code];
+    if (!r || r.sens === "RETENUE") throw new PaieError("PAIE_INVERSE_ELEMENT_INVALIDE", 400);
+  }
+  const calc = (x) => {
+    const c = { ...ctx, dossier: { ...ctx.dossier }, elementsFixes: ctx.elementsFixes.map((e) => ({ ...e })) };
+    if (type === "SURSALAIRE") c.dossier.sursalaire = x;
+    else if (type === "SALAIRE_BASE") c.dossier.salaire_base_manuel = x;
+    else if (type === "REPARTITION") { const base = Math.round((x * partBase) / 100); c.dossier.salaire_base_manuel = base; c.dossier.sursalaire = x - base; }
+    else c.elementsFixes.push({ rubrique_code: code, montant: x, quantite: null });
+    return M.calculerBulletin(c);
+  };
+  const netDe = (x) => calc(x).net_a_payer;
+  const plancher = calc(0);
+  let x = 0;
+  let iterations = 1;
+  if (plancher.net_a_payer >= net) {
+    if (plancher.net_a_payer > net) {
+      return res.status(422).json({ error: t(req, "PAIE_INVERSE_NET_TROP_BAS"), code: "NET_TROP_BAS", net_minimum: plancher.net_a_payer, ...vueSimulation(ctx, plancher) });
+    }
+  } else {
+    let hi = Math.max(1000000, net * 2);
+    while (netDe(hi) < net && hi < 1e11) { hi *= 2; iterations++; }
+    if (netDe(hi) < net) throw new PaieError("PAIE_INVERSE_INTROUVABLE", 422);
+    let lo = 0;
+    while (hi - lo > 1) { // plus petit montant dont le net arrondi atteint la cible
+      const mid = Math.floor((lo + hi) / 2);
+      iterations++;
+      if (netDe(mid) >= net) hi = mid; else lo = mid;
+    }
+    x = hi;
+  }
+  const bulletin = calc(x);
+  const rub = type === "RUBRIQUE" ? ctx.rubriques[code] : null;
+  res.json({
+    ...vueSimulation(ctx, bulletin),
+    inverse: {
+      net_cible: net, net_atteint: bulletin.net_a_payer, ecart: bulletin.net_a_payer - net, iterations,
+      ajustement: { type, rubrique_code: code, libelle: rub ? rub.libelle : null, montant: x, part_base_pct: partBase },
+      parts: { parts_ir: partsIr, parts_trimf: partsTrimf, enfants_a_charge: parts.enfants_a_charge, calculees_ir: parts.parts_ir, calculees_trimf: parts.parts_trimf },
+      synthese: { brut: bulletin.totaux.brut, imposable: bulletin.totaux.imposable, non_imposable: bulletin.totaux.non_imposable, total_retenues: bulletin.total_retenues, ir: bulletin.ir, trimf: bulletin.trimf, charges_patronales: bulletin.total_charges_patronales, cout_employeur: bulletin.cout_employeur },
+    },
+  });
+}));
+
 
 // ============================================================================================ periodes de paie (PAIE-2)
 // Ouverture sequentielle : le mois suivant ne s'ouvre qu'une fois le precedent cloture (cloture : lot PAIE-3).
