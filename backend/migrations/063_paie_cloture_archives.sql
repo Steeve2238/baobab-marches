@@ -38,7 +38,7 @@ END;
 $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_paie_variable_verrou ON paie_variable;
 CREATE TRIGGER trg_paie_variable_verrou BEFORE INSERT OR UPDATE OR DELETE ON paie_variable
-    FOR EACH ROW EXECUTE FUNCTION paie_verrou_variable();
+    FOR EACH ROW EXECUTE PROCEDURE paie_verrou_variable();
 
 CREATE OR REPLACE FUNCTION paie_verrou_bulletin() RETURNS trigger AS $$
 DECLARE
@@ -58,7 +58,7 @@ END;
 $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_paie_bulletin_verrou ON paie_bulletin;
 CREATE TRIGGER trg_paie_bulletin_verrou BEFORE INSERT OR UPDATE OR DELETE ON paie_bulletin
-    FOR EACH ROW EXECUTE FUNCTION paie_verrou_bulletin();
+    FOR EACH ROW EXECUTE PROCEDURE paie_verrou_bulletin();
 
 CREATE OR REPLACE FUNCTION paie_verrou_archive() RETURNS trigger AS $$
 BEGIN
@@ -71,7 +71,7 @@ END;
 $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_paie_archive_verrou ON paie_archive_fichier;
 CREATE TRIGGER trg_paie_archive_verrou BEFORE UPDATE OR DELETE ON paie_archive_fichier
-    FOR EACH ROW EXECUTE FUNCTION paie_verrou_archive();
+    FOR EACH ROW EXECUTE PROCEDURE paie_verrou_archive();
 
 -- Une periode cloturee ne change plus (ni statut, ni suppression).
 CREATE OR REPLACE FUNCTION paie_verrou_periode() RETURNS trigger AS $$
@@ -90,4 +90,4 @@ END;
 $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS trg_paie_periode_verrou ON paie_periode;
 CREATE TRIGGER trg_paie_periode_verrou BEFORE UPDATE OR DELETE ON paie_periode
-    FOR EACH ROW EXECUTE FUNCTION paie_verrou_periode();
+    FOR EACH ROW EXECUTE PROCEDURE paie_verrou_periode();
