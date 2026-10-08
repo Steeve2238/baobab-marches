@@ -72,7 +72,7 @@ export default function SuperAdminClientDetailPage() {
     if (valeur === client.profil_activite) return;
     try {
       const maj = await superAdminApi.patchProfilActivite(client.id, valeur);
-      setClient(maj);
+      setClient((prev) => ({ ...prev, ...maj }));
     } catch (err) {
       setErreur(err.message);
     }
