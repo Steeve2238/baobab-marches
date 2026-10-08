@@ -113,7 +113,14 @@ async function chargerCommande(tenantId, id) {
       [id]
     )
   ).rows.map((r) => ({ ...r, total_xof: arr2(Number(r.total_xof)) }));
-  return { ...enrichir(c, lignes), receptions };
+  const historique = (
+    await db.query(
+      `SELECT id, date_correction, utilisateur_nom, motif, modifications, total_avant_devise, total_apres_devise
+       FROM commande_fournisseur_historique WHERE commande_id = $1 AND tenant_id = $2 ORDER BY date_correction DESC`,
+      [id, tenantId]
+    )
+  ).rows.map((h) => ({ ...h, total_avant_devise: Number(h.total_avant_devise), total_apres_devise: Number(h.total_apres_devise) }));
+  return { ...enrichir(c, lignes), receptions, historique };
 }
 
 // Corps d'une commande (creation et modification d'un brouillon).
@@ -681,6 +688,128 @@ router.patch("/:id", async (req, res) => {
        e.consultation_id, e.transitaire_id, e.cotation_id, req.user.tenantId, id]
     );
     if (Array.isArray(b.lignes)) await remplacerLignes(client, req.user.tenantId, id, net.lignes);
+    await client.query("COMMIT");
+    res.json(await chargerCommande(req.user.tenantId, id));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: t(req, "COMMANDE_SAVE_ERROR") });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /:id/corriger - correction ADMINISTRATEUR d'une commande confirmee (prix unitaires, Incoterm, quantites,
+// suppression de lignes), avec motif obligatoire et historique. Les receptions deja faites ne sont pas touchees.
+// Corps : { motif, incoterm?, lignes?: [{ id, prix_unitaire_devise?, quantite?, supprimer? }] }
+router.post("/:id/corriger", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "COMMANDE_NOT_FOUND") });
+  if (!req.user.permissions || !req.user.permissions.admin) {
+    return res.status(403).json({ error: t(req, "COMMANDE_CORRECTION_ADMIN") });
+  }
+  const b = req.body || {};
+  const motif = String(b.motif || "").trim();
+  if (motif.length < 3) return res.status(400).json({ error: t(req, "COMMANDE_CORRECTION_MOTIF") });
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const cmd = (await client.query(`SELECT * FROM commande_fournisseur WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [id, req.user.tenantId])).rows[0];
+    if (!cmd) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: t(req, "COMMANDE_NOT_FOUND") });
+    }
+    if (cmd.statut !== "CONFIRMEE") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "COMMANDE_CORRECTION_STATUT") });
+    }
+    // Lignes avec les quantites deja engagees en reception (toute reception non annulee, validee ou en brouillon).
+    const lignes = (
+      await client.query(
+        `SELECT l.*, COALESCE((SELECT SUM(rl.quantite) FROM reception_ligne rl JOIN reception_marchandise r ON r.id = rl.reception_id
+                               WHERE rl.commande_ligne_id = l.id AND r.statut <> 'ANNULEE'), 0) AS quantite_en_reception
+         FROM commande_fournisseur_ligne l WHERE l.commande_id = $1 ORDER BY l.ordre`,
+        [id]
+      )
+    ).rows;
+    const parId = new Map(lignes.map((l) => [l.id, l]));
+    const totalAvant = arr2(lignes.reduce((s, l) => s + Number(l.quantite) * Number(l.prix_unitaire_devise), 0));
+    const modifs = [];
+    const aSupprimer = [];
+    const majLignes = [];
+    for (const demande of Array.isArray(b.lignes) ? b.lignes : []) {
+      const l = parId.get(demande && demande.id);
+      if (!l) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: t(req, "COMMANDE_INVALID") });
+      }
+      if (demande.supprimer) {
+        if (Number(l.quantite_en_reception) > 0) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: t(req, "COMMANDE_CORRECTION_LIGNE_RECUE") });
+        }
+        aSupprimer.push(l.id);
+        modifs.push({ type: "LIGNE_SUPPRIMEE", ligne_id: l.id, designation: l.designation, avant: { quantite: Number(l.quantite), prix_unitaire_devise: Number(l.prix_unitaire_devise) }, apres: null });
+        continue;
+      }
+      let prix = Number(l.prix_unitaire_devise);
+      let quantite = Number(l.quantite);
+      if (demande.prix_unitaire_devise !== undefined && demande.prix_unitaire_devise !== null && demande.prix_unitaire_devise !== "") {
+        const p = Math.round(Number(demande.prix_unitaire_devise) * 10000) / 10000;
+        if (!Number.isFinite(p) || p < 0) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: t(req, "COMMANDE_INVALID") });
+        }
+        if (p !== prix) {
+          modifs.push({ type: "PRIX", ligne_id: l.id, designation: l.designation, avant: prix, apres: p });
+          prix = p;
+        }
+      }
+      if (demande.quantite !== undefined && demande.quantite !== null && demande.quantite !== "") {
+        const q = Math.round(Number(demande.quantite) * 1000) / 1000;
+        if (!Number.isFinite(q) || q <= 0) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: t(req, "COMMANDE_INVALID") });
+        }
+        if (q < Number(l.quantite_en_reception)) {
+          await client.query("ROLLBACK");
+          return res.status(409).json({ error: t(req, "COMMANDE_CORRECTION_QUANTITE_RECUE") });
+        }
+        if (q !== quantite) {
+          modifs.push({ type: "QUANTITE", ligne_id: l.id, designation: l.designation, avant: quantite, apres: q });
+          quantite = q;
+        }
+      }
+      if (prix !== Number(l.prix_unitaire_devise) || quantite !== Number(l.quantite)) majLignes.push({ id: l.id, prix, quantite });
+    }
+    if (aSupprimer.length >= lignes.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "COMMANDE_CORRECTION_DERNIERE_LIGNE") });
+    }
+    if (b.incoterm !== undefined) {
+      const inco = String(b.incoterm || "").trim().toUpperCase().slice(0, 10) || null;
+      if (inco !== (cmd.incoterm || null)) {
+        modifs.push({ type: "INCOTERM", ligne_id: null, designation: null, avant: cmd.incoterm || null, apres: inco });
+        await client.query(`UPDATE commande_fournisseur SET incoterm = $1 WHERE id = $2`, [inco, id]);
+      }
+    }
+    if (modifs.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, "COMMANDE_CORRECTION_AUCUN_CHANGEMENT") });
+    }
+    for (const m of majLignes) {
+      await client.query(`UPDATE commande_fournisseur_ligne SET prix_unitaire_devise = $1, quantite = $2 WHERE id = $3`, [m.prix, m.quantite, m.id]);
+    }
+    if (aSupprimer.length) await client.query(`DELETE FROM commande_fournisseur_ligne WHERE id = ANY($1)`, [aSupprimer]);
+    const totalApres = arr2(
+      (await client.query(`SELECT COALESCE(SUM(quantite * prix_unitaire_devise), 0) AS t FROM commande_fournisseur_ligne WHERE commande_id = $1`, [id])).rows[0].t
+    );
+    const u = (await client.query(`SELECT prenom, nom FROM utilisateur WHERE id = $1`, [req.user.sub])).rows[0];
+    await client.query(
+      `INSERT INTO commande_fournisseur_historique (id, tenant_id, commande_id, utilisateur_id, utilisateur_nom, motif, modifications, total_avant_devise, total_apres_devise)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [uuidv4(), req.user.tenantId, id, req.user.sub, u ? `${u.prenom} ${u.nom}`.trim() : req.user.email || null, motif, JSON.stringify(modifs), totalAvant, totalApres]
+    );
     await client.query("COMMIT");
     res.json(await chargerCommande(req.user.tenantId, id));
   } catch (err) {

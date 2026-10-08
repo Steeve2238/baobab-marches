@@ -774,6 +774,7 @@ export const api = {
   getCommandePourReception: (id) => request(`/commandes/${id}/pour-reception`),
   createCommande: (data) => request("/commandes", { method: "POST", body: JSON.stringify(data) }),
   patchCommande: (id, data) => request(`/commandes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  corrigerCommande: (id, data) => request(`/commandes/${id}/corriger`, { method: "POST", body: JSON.stringify(data) }),
   confirmerCommande: (id) => request(`/commandes/${id}/confirmer`, { method: "POST" }),
   annulerCommande: (id) => request(`/commandes/${id}/annuler`, { method: "POST" }),
   supprimerCommande: (id) => request(`/commandes/${id}`, { method: "DELETE" }),

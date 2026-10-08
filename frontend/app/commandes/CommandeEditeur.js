@@ -52,6 +52,10 @@ export default function CommandeEditeur({ id }) {
   });
   const [lignes, setLignes] = useState([{ ...LIGNE_VIDE }]);
   const [echeancier, setEcheancier] = useState([]);
+  // Correction administrateur d'une commande confirmee (prix, Incoterm, quantites, suppression de lignes) avec motif + historique.
+  const [estAdmin, setEstAdmin] = useState(false);
+  const [modeCorrection, setModeCorrection] = useState(false);
+  const [motif, setMotif] = useState("");
 
   const statut = commande ? commande.statut : "BROUILLON";
   const brouillon = statut === "BROUILLON";
@@ -96,6 +100,7 @@ export default function CommandeEditeur({ id }) {
   }
 
   useEffect(() => {
+    api.getPermissions().then((p) => setEstAdmin(!!(p && p.admin))).catch(() => {});
     api.getFournisseursReception().then(setFournisseurs).catch(() => {});
     api.getTransitairesPerf().then(setTransitaires).catch(() => {});
     api.getCotationsTransitaires().then(setCotations).catch(() => {});
@@ -110,7 +115,7 @@ export default function CommandeEditeur({ id }) {
   }, [id]);
 
   const coursNum = form.devise.trim().toUpperCase() === "XOF" ? 1 : num(form.cours_devise);
-  const totalDevise = arr2(lignes.reduce((s, l) => s + arr2(num(l.quantite) * num(l.prix_unitaire_devise)), 0));
+  const totalDevise = arr2(lignes.filter((l) => !l.supprimee).reduce((s, l) => s + arr2(num(l.quantite) * num(l.prix_unitaire_devise)), 0));
   const majLigne = (i, champ, valeur) => setLignes((prev) => prev.map((l, k) => (k === i ? { ...l, [champ]: valeur } : l)));
   const maj = (champ, valeur) => setForm((f) => ({ ...f, [champ]: valeur }));
   const cotationsProposees = cotations.filter(
@@ -218,6 +223,44 @@ export default function CommandeEditeur({ id }) {
     }
   }
 
+  function demarrerCorrection() {
+    setErreur("");
+    setInfo("");
+    setMotif("");
+    setModeCorrection(true);
+  }
+
+  function annulerCorrection() {
+    setModeCorrection(false);
+    setMotif("");
+    appliquer(commande);
+  }
+
+  async function handleCorriger() {
+    if (motif.trim().length < 3) {
+      setErreur(t("cmdCorrMotifRequis"));
+      return;
+    }
+    const lignesEnvoyees = lignes
+      .filter((l) => l.id)
+      .map((l) => (l.supprimee ? { id: l.id, supprimer: true } : { id: l.id, prix_unitaire_devise: num(l.prix_unitaire_devise), quantite: num(l.quantite) }));
+    const msg = t("cmdCorrConfirm") + (commande.receptions && commande.receptions.some((r) => r.statut === "VALIDEE") ? `\n\n${t("cmdCorrAvertReceptions")}` : "");
+    if (!window.confirm(msg)) return;
+    setEnCours(true);
+    setErreur("");
+    try {
+      const c = await api.corrigerCommande(id, { motif: motif.trim(), incoterm: form.incoterm, lignes: lignesEnvoyees });
+      setModeCorrection(false);
+      setMotif("");
+      appliquer(c);
+      setInfo(t("cmdCorrOk"));
+    } catch (e) {
+      setErreur(e.message);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
   if (chargement) {
     return (
       <AppShell title={t("cmdTitle")} backHref="/commandes" backLabelKey="cmdRetour">
@@ -227,6 +270,7 @@ export default function CommandeEditeur({ id }) {
   }
 
   const desactiveEntete = !editable;
+  const enCorrection = confirmee && modeCorrection;
   const titre = commande ? commande.numero : t("cmdNouvelle");
 
   return (
@@ -305,7 +349,7 @@ export default function CommandeEditeur({ id }) {
           </div>
           <div>
             <label style={labelStyle}>{t("receptionsIncoterm")}</label>
-            <select disabled={desactiveEntete} value={form.incoterm} onChange={(e) => maj("incoterm", e.target.value)} style={inputStyle}>
+            <select disabled={desactiveEntete && !enCorrection} value={form.incoterm} onChange={(e) => maj("incoterm", e.target.value)} style={inputStyle}>
               <option value="">{t("receptionsIncotermAucun")}</option>
               {codesAvec(incoterms.codes, form.incoterm).map((i) => (
                 <option key={i} value={i}>{i}</option>
@@ -358,18 +402,18 @@ export default function CommandeEditeur({ id }) {
                 {!brouillon && <th style={{ ...th, width: 96, textAlign: "right" }}>{t("cmdColPaye")}</th>}
                 {!brouillon && <th style={{ ...th, width: 76, textAlign: "right" }}>{t("cmdColRecue")}</th>}
                 {!brouillon && <th style={{ ...th, width: 76, textAlign: "right" }}>{t("cmdColRestant")}</th>}
-                {editable && <th style={{ width: 28 }}></th>}
+                {(editable || enCorrection) && <th style={{ width: 28 }}></th>}
               </tr>
             </thead>
             <tbody>
               {lignes.map((l, i) => (
-                <tr key={i} style={{ borderTop: "1px solid var(--line-soft, var(--line))" }}>
+                <tr key={i} style={{ borderTop: "1px solid var(--line-soft, var(--line))", ...(l.supprimee ? { opacity: 0.45, textDecoration: "line-through" } : {}) }}>
                   <td style={td}><input disabled={!editable} value={l.reference_fournisseur} onChange={(e) => majLigne(i, "reference_fournisseur", e.target.value)} style={inputCompact} /></td>
                   <td style={td}><input disabled={!editable} value={l.designation} onChange={(e) => majLigne(i, "designation", e.target.value)} style={inputCompact} /></td>
                   <td style={td}><input disabled={!editable} value={l.unite} onChange={(e) => majLigne(i, "unite", e.target.value)} style={inputCompact} /></td>
-                  <td style={td}><input disabled={!editable} inputMode="decimal" value={l.quantite} onChange={(e) => majLigne(i, "quantite", e.target.value)} style={inputCompact} /></td>
+                  <td style={td}><input disabled={!editable && !(enCorrection && !l.supprimee)} inputMode="decimal" value={l.quantite} onChange={(e) => majLigne(i, "quantite", e.target.value)} style={inputCompact} /></td>
                   <td style={td}>
-                    <input disabled={!editable} inputMode="decimal" value={l.prix_unitaire_devise} onChange={(e) => majLigne(i, "prix_unitaire_devise", e.target.value)} style={inputCompact} />
+                    <input disabled={!editable && !(enCorrection && !l.supprimee)} inputMode="decimal" value={l.prix_unitaire_devise} onChange={(e) => majLigne(i, "prix_unitaire_devise", e.target.value)} style={inputCompact} />
                     {l.prix_offert_devise != null && (
                       <div style={{ fontSize: 10.5, color: "var(--sub)", marginTop: 3, whiteSpace: "nowrap" }}>
                         {t("cmdColOffert")} {nf(l.prix_offert_devise)}
@@ -398,6 +442,19 @@ export default function CommandeEditeur({ id }) {
                   {!brouillon && (
                     <td className="mono" style={{ ...td, textAlign: "right", paddingTop: 11, color: (l.quantite_restante ?? 0) > 0 ? "var(--brique)" : "var(--vert)" }}>
                       {nf(l.quantite_restante ?? 0)}
+                    </td>
+                  )}
+                  {enCorrection && (
+                    <td style={td}>
+                      <button
+                        type="button"
+                        disabled={(l.quantite_recue ?? 0) > 0}
+                        title={(l.quantite_recue ?? 0) > 0 ? t("cmdCorrLigneRecue") : t("cmdCorrSupprimerLigne")}
+                        onClick={() => majLigne(i, "supprimee", !l.supprimee)}
+                        style={{ ...boutonSupprimerStyle, opacity: (l.quantite_recue ?? 0) > 0 ? 0.3 : 1 }}
+                      >
+                        {l.supprimee ? "↺" : "×"}
+                      </button>
                     </td>
                   )}
                   {editable && (
@@ -449,8 +506,54 @@ export default function CommandeEditeur({ id }) {
         </section>
       )}
 
+      {enCorrection && (
+        <section className="card" style={{ marginBottom: 16, borderLeft: "3px solid var(--ocre)" }}>
+          <h2 style={h2Style}>{t("cmdCorrTitre")}</h2>
+          <p style={{ fontSize: 12, color: "var(--sub)", marginTop: 0 }}>{t("cmdCorrAide")}</p>
+          <label style={labelStyle}>{t("cmdCorrMotif")}</label>
+          <input value={motif} onChange={(e) => setMotif(e.target.value)} placeholder={t("cmdCorrMotifPlaceholder")} style={inputStyle} />
+          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+            <button type="button" disabled={enCours} onClick={handleCorriger} style={boutonPrincipalStyle}>{t("cmdCorrEnregistrer")}</button>
+            <button type="button" disabled={enCours} onClick={annulerCorrection} style={boutonSecondaireStyle}>{t("cancel")}</button>
+          </div>
+        </section>
+      )}
+
+      {commande && commande.historique && commande.historique.length > 0 && (
+        <section className="card" style={{ marginBottom: 16 }}>
+          <h2 style={h2Style}>{t("cmdHistoriqueTitre")}</h2>
+          <div style={{ display: "grid", gap: 14 }}>
+            {commande.historique.map((h) => (
+              <div key={h.id} style={{ fontSize: 12.5 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "baseline" }}>
+                  <strong>{new Date(h.date_correction).toLocaleString(dict.dateLocale)}</strong>
+                  <span style={{ color: "var(--sub)" }}>{h.utilisateur_nom || "—"}</span>
+                  <span className="mono" style={{ marginLeft: "auto", color: "var(--sub)" }}>
+                    {t("cmdTotalDevise")} : {nf(h.total_avant_devise)} → {nf(h.total_apres_devise)} {commande.devise}
+                  </span>
+                </div>
+                <div style={{ color: "var(--sub)", margin: "2px 0 4px" }}>{t("cmdCorrMotif")} : {h.motif}</div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {(h.modifications || []).map((m, k) => (
+                    <li key={k}>
+                      {m.type === "INCOTERM" && `${t("receptionsIncoterm")} : ${m.avant || "—"} → ${m.apres || "—"}`}
+                      {m.type === "PRIX" && `${m.designation} — ${t("cmdColPu")} : ${nf(m.avant)} → ${nf(m.apres)}`}
+                      {m.type === "QUANTITE" && `${m.designation} — ${t("cmdColQuantite")} : ${nf(m.avant)} → ${nf(m.apres)}`}
+                      {m.type === "LIGNE_SUPPRIMEE" && `${m.designation} — ${t("cmdCorrLigneSupprimee")}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-        {statut !== "ANNULEE" && (
+        {confirmee && estAdmin && !modeCorrection && (
+          <button type="button" onClick={demarrerCorrection} style={{ ...boutonSecondaireStyle, borderColor: "var(--ocre)", color: "var(--ocre)" }}>{t("cmdCorrBouton")}</button>
+        )}
+        {statut !== "ANNULEE" && !enCorrection && (
           <button type="button" disabled={enCours} onClick={handleEnregistrer} style={boutonSecondaireStyle}>{t("cmdEnregistrer")}</button>
         )}
         {brouillon && (
