@@ -575,17 +575,23 @@ router.get("/clients/:id/compte", async (req, res) => {
 // ----------------------------------------------------------------------------
 
 router.get("/consultations", async (req, res) => {
-  const { statut } = req.query;
+  const { statut, type } = req.query;
   try {
+    const conditions = ["c.tenant_id = $1"];
+    const valeurs = [req.user.tenantId];
+    if (statut) {
+      valeurs.push(statut);
+      conditions.push(`c.statut = $${valeurs.length}`);
+    }
+    if (type === "CONSULTATION" || type === "VENTE") {
+      valeurs.push(type);
+      conditions.push(`c.type = $${valeurs.length}`);
+    }
     const result = await db.query(
-      statut
-        ? `SELECT c.*, cl.nom AS client_nom
-           FROM consultation c JOIN client_commercial cl ON cl.id = c.client_commercial_id
-           WHERE c.tenant_id = $1 AND c.statut = $2 ORDER BY c.date_reception DESC`
-        : `SELECT c.*, cl.nom AS client_nom
-           FROM consultation c JOIN client_commercial cl ON cl.id = c.client_commercial_id
-           WHERE c.tenant_id = $1 ORDER BY c.date_reception DESC`,
-      statut ? [req.user.tenantId, statut] : [req.user.tenantId]
+      `SELECT c.*, cl.nom AS client_nom
+       FROM consultation c JOIN client_commercial cl ON cl.id = c.client_commercial_id
+       WHERE ${conditions.join(" AND ")} ORDER BY c.date_reception DESC`,
+      valeurs
     );
     res.json(result.rows);
   } catch (err) {
@@ -599,11 +605,15 @@ router.post("/consultations", async (req, res) => {
   if (!client_commercial_id || !objet || !objet.trim()) {
     return res.status(400).json({ error: t(req, "VENTE_CONSULTATION_FIELDS_REQUIRED") });
   }
+  // Type de dossier (migration 068) : une VENTE directe n'a pas de phase « demande recue » ; elle demarre
+  // directement au statut DEVIS_EN_COURS. Sans precision, le circuit historique (CONSULTATION) s'applique.
+  const type = req.body.type === "VENTE" ? "VENTE" : "CONSULTATION";
   try {
     const result = await db.query(
-      `INSERT INTO consultation (id, tenant_id, client_commercial_id, objet, date_reception, notes, cree_par)
-       VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7) RETURNING *`,
-      [uuidv4(), req.user.tenantId, client_commercial_id, objet.trim(), date_reception || null, notes || null, req.user.sub]
+      `INSERT INTO consultation (id, tenant_id, client_commercial_id, objet, date_reception, notes, cree_par, type, statut)
+       VALUES ($1, $2, $3, $4, COALESCE($5, CURRENT_DATE), $6, $7, $8, $9) RETURNING *`,
+      [uuidv4(), req.user.tenantId, client_commercial_id, objet.trim(), date_reception || null, notes || null, req.user.sub,
+       type, type === "VENTE" ? "DEVIS_EN_COURS" : "RECUE"]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -691,6 +701,9 @@ router.post("/consultations/:id/chronogramme/generer", async (req, res) => {
     const consultation = consultationResult.rows[0];
     if (!consultation) {
       return res.status(404).json({ error: t(req, "VENTE_CONSULTATION_NOT_FOUND") });
+    }
+    if (consultation.type === "VENTE") {
+      return res.status(400).json({ error: t(req, "VENTE_DIRECTE_SANS_CHRONOGRAMME") });
     }
 
     const existantResult = await db.query(
@@ -1120,6 +1133,28 @@ router.post("/devis", async (req, res) => {
   try {
     await client.query("BEGIN");
 
+    // Vente automatique (V3, 08/10/2026) : un devis cree sans dossier est rattache a une VENTE creee a la volee
+    // (client + objet du devis), pour que marge, compte d'exploitation et financement soient disponibles partout.
+    // Desactivee pour un client au profil MARCHES (le devis seul reste possible, comme avant).
+    let consultationDevisId = consultation_id || null;
+    let venteAutoCreee = false;
+    if (!consultationDevisId) {
+      const profil = (await client.query(`SELECT profil_activite FROM tenant WHERE id = $1`, [req.user.tenantId])).rows[0];
+      if (profil && profil.profil_activite !== "MARCHES") {
+        const nomClient = (await client.query(`SELECT nom FROM client_commercial WHERE id = $1 AND tenant_id = $2`, [client_commercial_id, req.user.tenantId])).rows[0];
+        if (nomClient) {
+          const intitule = (objet && String(objet).trim()) || `${nomClient.nom} - ${new Date().toLocaleDateString("fr-FR")}`;
+          const vente = await client.query(
+            `INSERT INTO consultation (id, tenant_id, client_commercial_id, objet, date_reception, cree_par, type, statut)
+             VALUES ($1, $2, $3, $4, CURRENT_DATE, $5, 'VENTE', 'DEVIS_EN_COURS') RETURNING id`,
+            [uuidv4(), req.user.tenantId, client_commercial_id, intitule, req.user.sub]
+          );
+          consultationDevisId = vente.rows[0].id;
+          venteAutoCreee = true;
+        }
+      }
+    }
+
     // TVA : taux parametre du tenant, ou 0 si le client est exonere de TVA.
     const tauxTva = await tauxTvaApplicable(client, req.user.tenantId, client_commercial_id);
 
@@ -1164,7 +1199,7 @@ router.post("/devis", async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        RETURNING *`,
       [
-        uuidv4(), req.user.tenantId, numero, consultation_id || null, client_commercial_id, objet || null, date_devis || null,
+        uuidv4(), req.user.tenantId, numero, consultationDevisId, client_commercial_id, objet || null, date_devis || null,
         conditions_paiement || null, delai_livraison || null, validite_offre || null, tauxTva,
         calcul.total_ht, calcul.pourcentage_remise, calcul.montant_remise, calcul.montant_tva, calcul.total_ttc, req.user.sub,
         calcul.nb_lignes_non_chiffrees,
@@ -1206,7 +1241,7 @@ router.post("/devis", async (req, res) => {
     }
 
     await client.query("COMMIT");
-    res.status(201).json({ ...devis, lignes: calcul.lignes });
+    res.status(201).json({ ...devis, lignes: calcul.lignes, vente_auto_creee: venteAutoCreee });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error(err);
@@ -1593,7 +1628,7 @@ router.delete("/devis/:id", async (req, res) => {
       );
       if (autresDevis.rows.length === 0) {
         await client.query(
-          `UPDATE consultation SET statut = 'RECUE' WHERE id = $1 AND tenant_id = $2 AND statut = 'DEVIS_EN_COURS'`,
+          `UPDATE consultation SET statut = 'RECUE' WHERE id = $1 AND tenant_id = $2 AND statut = 'DEVIS_EN_COURS' AND type = 'CONSULTATION'`,
           [devis.consultation_id, req.user.tenantId]
         );
       }

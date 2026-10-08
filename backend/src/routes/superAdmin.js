@@ -393,7 +393,7 @@ const SELECT_CLIENT = `
          te.module_comptabilite_actif, te.module_comptabilite_prix_mensuel_xof, te.module_comptabilite_date_activation,
          te.module_fiscalite_actif, te.module_fiscalite_prix_mensuel_xof, te.module_fiscalite_date_activation,
          te.module_paie_actif, te.module_paie_prix_mensuel_xof, te.module_paie_date_activation,
-         te.mode_hebergement,
+         te.mode_hebergement, te.profil_activite,
          (SELECT MAX(l.date_fin) FROM licence_emise l WHERE l.tenant_id = te.id) AS licence_date_fin,
          fa.nom AS formule_nom, fa.prix_mensuel_xof AS formule_prix_mensuel_xof,
          fa.prix_licence_annuelle_xof AS formule_prix_licence_annuelle_xof,
@@ -695,6 +695,26 @@ router.patch("/clients/:id/module-paie", async (req, res) => {
        WHERE id = $4`,
       [actif, prix, etaitActif, req.params.id]
     );
+    const clientResult = await db.query(`${SELECT_CLIENT} WHERE te.id = $1`, [req.params.id]);
+    res.json(clientResult.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "SUPER_ADMIN_CLIENT_UPDATE_ERROR") });
+  }
+});
+
+// PATCH /api/super-admin/clients/:id/profil-activite - profil d'activite du client (MARCHES | NEGOCE | LES_DEUX),
+// qui adapte menus et libelles (migration 068). Aucune donnee ni permission n'est modifiee.
+router.patch("/clients/:id/profil-activite", async (req, res) => {
+  const profil = req.body && req.body.profil_activite;
+  if (!["MARCHES", "NEGOCE", "LES_DEUX"].includes(profil)) {
+    return res.status(400).json({ error: t(req, "PROFIL_ACTIVITE_INVALIDE") });
+  }
+  try {
+    const result = await db.query(`UPDATE tenant SET profil_activite = $1 WHERE id = $2 RETURNING id`, [profil, req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: t(req, "SUPER_ADMIN_CLIENT_NOT_FOUND") });
+    }
     const clientResult = await db.query(`${SELECT_CLIENT} WHERE te.id = $1`, [req.params.id]);
     res.json(clientResult.rows[0]);
   } catch (err) {

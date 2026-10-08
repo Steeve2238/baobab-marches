@@ -193,9 +193,27 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
 
   // Elements du menu a afficher : acces directs visibles + groupes dont au
   // moins une entree est visible (la liste d'entrees du groupe est deja filtree).
-  const navItems = NAV_ITEMS.map((entry) =>
-    entry.items ? { ...entry, items: entry.items.filter(itemVisible) } : entry
-  ).filter((entry) => (entry.items ? entry.items.length > 0 : itemVisible(entry)));
+  // Profil d'activite du client (migration 068) : NEGOCE = menu « Ventes » (acces direct a la liste des
+  // ventes, sans Appel d'offres ni Dossiers). MARCHES et LES_DEUX gardent le menu actuel. Aucune permission
+  // n'est modifiee : seuls l'intitule et la destination des entrees changent.
+  const profilActivite = permissions?.profilActivite || "LES_DEUX";
+  function adapterProfil(entry) {
+    if (profilActivite !== "NEGOCE" || entry.id !== "marches-ventes") return entry;
+    return {
+      ...entry,
+      key: "navGroupVentes",
+      items: entry.items
+        .filter((i) => i.href !== "/dossiers")
+        .map((i) =>
+          i.href === "/marches"
+            ? { ...i, href: "/marches/consultation-restreinte/consultations", key: "navVentes", alsoActive: ["/marches"] }
+            : i
+        ),
+    };
+  }
+  const navItems = NAV_ITEMS.map(adapterProfil)
+    .map((entry) => (entry.items ? { ...entry, items: entry.items.filter(itemVisible) } : entry))
+    .filter((entry) => (entry.items ? entry.items.length > 0 : itemVisible(entry)));
 
   // Un seul groupe ouvert a la fois : celui de la page en cours par defaut
   // (et a chaque changement de page), sinon celui choisi par un clic.

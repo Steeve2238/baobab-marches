@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useLangue } from "../i18n/LanguageContext";
+import { useProfilActivite } from "../useProfilActivite";
 
 // Sous-navigation de la branche "Consultation restreinte" du module Marche
 // (anciennement module Ventes/Negoce autonome, fusionne le 04/09/2026 avec
@@ -26,15 +27,20 @@ const ONGLETS = [
 export default function ConsultationRestreinteSousNav() {
   const pathname = usePathname();
   const { t } = useLangue();
+  const profil = useProfilActivite();
+  const negoce = profil === "NEGOCE";
 
   return (
     <div>
-      <Link
-        href="/marches"
-        style={{ fontSize: 11.5, color: "var(--sub)", display: "inline-block", marginBottom: 8 }}
-      >
-        ← {t("backToMarches")}
-      </Link>
+      {/* Profil NEGOCE : pas de choix Marche (consultation / appel d'offres), on reste dans « Ventes ». */}
+      {!negoce && (
+        <Link
+          href="/marches"
+          style={{ fontSize: 11.5, color: "var(--sub)", display: "inline-block", marginBottom: 8 }}
+        >
+          ← {t("backToMarches")}
+        </Link>
+      )}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", borderBottom: "1px solid var(--line)", paddingBottom: 12 }}>
         {ONGLETS.map((onglet) => {
           const actif = pathname === onglet.href;
@@ -52,7 +58,7 @@ export default function ConsultationRestreinteSousNav() {
                 textDecoration: "none",
               }}
             >
-              {t(onglet.key)}
+              {negoce && onglet.key === "navVentesConsultations" ? t("navVentes") : t(onglet.key)}
             </Link>
           );
         })}

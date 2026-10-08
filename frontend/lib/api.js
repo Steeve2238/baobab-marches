@@ -591,7 +591,10 @@ export const api = {
   // GET /api/ventes/clients/:id/compte.
   getCompteClient: (id) => request(`/ventes/clients/${id}/compte`),
 
-  getConsultations: (statut) => request(`/ventes/consultations${statut ? `?statut=${statut}` : ""}`),
+  getConsultations: (statut, type) => {
+    const q = [statut ? `statut=${statut}` : "", type ? `type=${type}` : ""].filter(Boolean).join("&");
+    return request(`/ventes/consultations${q ? `?${q}` : ""}`);
+  },
   getConsultation: (id) => request(`/ventes/consultations/${id}`),
   createConsultation: (data) => request("/ventes/consultations", { method: "POST", body: JSON.stringify(data) }),
   patchConsultation: (id, data) => request(`/ventes/consultations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -663,6 +666,9 @@ export const api = {
   // GET/PATCH /api/parametres/calcul-prix cote backend. La TVA de vente
   // n'est PAS ici : elle reste getParametresVentes/patchParametresVentes
   // ci-dessus (meme taux que le reste de la plateforme).
+  getProfilActivite: () => request("/parametres/profil-activite"),
+  patchProfilActivite: (profil_activite) =>
+    request("/parametres/profil-activite", { method: "PATCH", body: JSON.stringify({ profil_activite }) }),
   getParametresCalculPrix: () => request("/parametres/calcul-prix"),
   patchParametresCalculPrix: (data) =>
     request("/parametres/calcul-prix", { method: "PATCH", body: JSON.stringify(data) }),

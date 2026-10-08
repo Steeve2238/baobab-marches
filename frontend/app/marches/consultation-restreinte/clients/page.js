@@ -8,12 +8,14 @@ import EcheancierEditor, { EcheancierFiche } from "../../../../lib/components/Ec
 import { echeancierValide, pourApi } from "../../../../lib/echeancier";
 import AppShell from "../../../../lib/components/AppShell";
 import ConsultationRestreinteSousNav from "../../../../lib/components/ConsultationRestreinteSousNav";
+import { useProfilActivite } from "../../../../lib/useProfilActivite";
 
 // Clients COMMERCIAUX du tenant (ex: ses propres clients a lui, comme SETER,
 // DKM...) - a ne pas confondre avec les "tenants" de la plateforme Baobab.
 // Utilises par les Consultations/Devis/Factures/BL du module Ventes.
 export default function ClientsCommerciauxPage() {
   const { t } = useLangue();
+  const profil = useProfilActivite();
   const [clients, setClients] = useState([]);
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
@@ -264,6 +266,14 @@ export default function ClientsCommerciauxPage() {
                   >
                     {c.actif ? t("activeLabel") : t("inactiveLabel")}
                   </span>
+                  {c.actif && profil !== "MARCHES" && (
+                    <Link
+                      href={`/marches/consultation-restreinte/consultations?nouveau=1&client_id=${c.id}`}
+                      style={{ ...boutonSecondaireStyle, background: "var(--petrol)", color: "#fff", borderColor: "var(--petrol)" }}
+                    >
+                      {t("venteNewVenteForClient")}
+                    </Link>
+                  )}
                   <Link href={`/marches/consultation-restreinte/clients/${c.id}`} style={boutonSecondaireStyle}>
                     {t("venteAccountButton")}
                   </Link>

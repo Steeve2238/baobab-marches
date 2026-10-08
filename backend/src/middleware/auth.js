@@ -36,7 +36,7 @@ async function requireAuth(req, res, next) {
 
   try {
     const userResult = await db.query(
-      `SELECT u.id, u.tenant_id, u.email, u.actif, te.module_comptabilite_actif, te.module_fiscalite_actif, te.module_paie_actif
+      `SELECT u.id, u.tenant_id, u.email, u.actif, te.module_comptabilite_actif, te.module_fiscalite_actif, te.module_paie_actif, te.profil_activite
        FROM utilisateur u
        JOIN tenant te ON te.id = u.tenant_id
        WHERE u.id = $1`,
@@ -94,6 +94,8 @@ async function requireAuth(req, res, next) {
     permissions.comptabiliteActive = !!user.module_comptabilite_actif;
     permissions.fiscaliteActive = !!user.module_fiscalite_actif;
     permissions.paieActive = !!user.module_paie_actif;
+    // Profil d'activite (migration 068) : adapte menus et libelles cote frontend (MARCHES | NEGOCE | LES_DEUX).
+    permissions.profilActivite = user.profil_activite || "LES_DEUX";
 
     req.user = {
       sub: user.id,

@@ -79,6 +79,8 @@ export default function EnteteSettingsPage() {
   // convertis en nombre uniquement a l'enregistrement (meme approche que
   // formMarge plus bas dans la page dossier detail).
   const [formCalculPrix, setFormCalculPrix] = useState({});
+  // Profil d'activite du client (MARCHES | NEGOCE | LES_DEUX, migration 068) : adapte menu et libelles.
+  const [profilActivite, setProfilActivite] = useState("LES_DEUX");
   const [enregistrementCalculPrix, setEnregistrementCalculPrix] = useState(false);
   const [confirmationCalculPrix, setConfirmationCalculPrix] = useState(false);
 
@@ -113,6 +115,11 @@ export default function EnteteSettingsPage() {
             : null
         );
       })
+      .catch(() => {});
+
+    api
+      .getProfilActivite()
+      .then((d) => setProfilActivite(d.profil_activite || "LES_DEUX"))
       .catch(() => {});
 
     api
@@ -166,6 +173,20 @@ export default function EnteteSettingsPage() {
       setErreur(err.message);
     } finally {
       setEnregistrementTva(false);
+    }
+  }
+
+  async function handleChangerProfil(valeur) {
+    const ancien = profilActivite;
+    setProfilActivite(valeur);
+    setErreur("");
+    try {
+      await api.patchProfilActivite(valeur);
+      // Le menu est construit au chargement : on recharge la page pour l'appliquer tout de suite.
+      window.location.reload();
+    } catch (err) {
+      setProfilActivite(ancien);
+      setErreur(err.message);
     }
   }
 
@@ -489,6 +510,22 @@ export default function EnteteSettingsPage() {
               )}
             </div>
           </form>
+        </div>
+      )}
+
+      {!chargement && (
+        <div className="card" style={{ maxWidth: 560, marginTop: 16 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 4 }}>{t("profilActiviteSection")}</h3>
+          <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 12 }}>{t("profilActiviteDescription")}</p>
+          <select
+            value={profilActivite}
+            onChange={(e) => handleChangerProfil(e.target.value)}
+            style={inputStyle}
+          >
+            <option value="LES_DEUX">{t("profilActiviteLES_DEUX")}</option>
+            <option value="NEGOCE">{t("profilActiviteNEGOCE")}</option>
+            <option value="MARCHES">{t("profilActiviteMARCHES")}</option>
+          </select>
         </div>
       )}
 

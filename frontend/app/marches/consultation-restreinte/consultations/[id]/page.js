@@ -207,9 +207,13 @@ export default function ConsultationDetailPage() {
   }
 
   const style = STATUT_STYLE[consultation.statut] || {};
+  // Vente directe (migration 068) : pas de date limite de reponse ni de chronogramme, statuts commerciaux.
+  const estVente = consultation.type === "VENTE";
+  const prefixeStatut = estVente ? "venteVenteStatut_" : "venteConsultationStatut_";
+  const codesStatut = estVente ? ["DEVIS_EN_COURS", "CONVERTIE", "SANS_SUITE"] : Object.keys(STATUT_STYLE);
 
   return (
-    <AppShell backHref="/marches/consultation-restreinte/consultations" backLabelKey="backToConsultations">
+    <AppShell backHref="/marches/consultation-restreinte/consultations" backLabelKey={estVente ? "backToVentes" : "backToConsultations"}>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 19, color: "var(--petrol)" }}>{consultation.objet}</h1>
         <a href="#dossier-calcul" style={{ fontSize: 12, color: "var(--petrol)", fontWeight: 600, textDecoration: "underline" }}>
@@ -228,7 +232,7 @@ export default function ConsultationDetailPage() {
               ...style,
             }}
           >
-            {t(`venteConsultationStatut_${consultation.statut}`)}
+            {t(`${prefixeStatut}${consultation.statut}`)}
           </span>
         </div>
       </div>
@@ -239,24 +243,26 @@ export default function ConsultationDetailPage() {
       <section style={{ marginBottom: 30 }}>
         <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 12 }}>{t("venteInfoSectionTitle")}</h2>
         <form onSubmit={handleEnregistrerInfo} className="card">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: estVente ? "1fr 1fr" : "1fr 1fr 1fr", gap: 12 }}>
             <div>
-              <label style={labelStyle}>{t("venteDateReceptionLabel")}</label>
+              <label style={labelStyle}>{t(estVente ? "venteVenteDateLabel" : "venteDateReceptionLabel")}</label>
               <div style={{ ...inputStyle, background: "var(--line-soft)" }}>
                 {consultation.date_reception
                   ? new Date(consultation.date_reception).toLocaleDateString(dict.dateLocale)
                   : "—"}
               </div>
             </div>
-            <div>
-              <label style={labelStyle}>{t("venteDateLimiteReponseLabel")}</label>
-              <input
-                type="date"
-                value={formInfo.date_limite_reponse}
-                onChange={(e) => setFormInfo((f) => ({ ...f, date_limite_reponse: e.target.value }))}
-                style={inputStyle}
-              />
-            </div>
+            {!estVente && (
+              <div>
+                <label style={labelStyle}>{t("venteDateLimiteReponseLabel")}</label>
+                <input
+                  type="date"
+                  value={formInfo.date_limite_reponse}
+                  onChange={(e) => setFormInfo((f) => ({ ...f, date_limite_reponse: e.target.value }))}
+                  style={inputStyle}
+                />
+              </div>
+            )}
             <div>
               <label style={labelStyle}>{t("venteStatutLabel")}</label>
               <select
@@ -264,9 +270,9 @@ export default function ConsultationDetailPage() {
                 onChange={(e) => setFormInfo((f) => ({ ...f, statut: e.target.value }))}
                 style={inputStyle}
               >
-                {Object.keys(STATUT_STYLE).map((code) => (
+                {codesStatut.map((code) => (
                   <option key={code} value={code}>
-                    {t(`venteConsultationStatut_${code}`)}
+                    {t(`${prefixeStatut}${code}`)}
                   </option>
                 ))}
               </select>
@@ -297,7 +303,7 @@ export default function ConsultationDetailPage() {
         </div>
         {consultation.devis.length === 0 ? (
           <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>
-            {t("venteNoLinkedDevis")}
+            {t(estVente ? "venteNoLinkedDevisVente" : "venteNoLinkedDevis")}
           </p>
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
@@ -374,7 +380,8 @@ export default function ConsultationDetailPage() {
       {/* ---------------- FINANCEMENT ---------------- */}
       <FinancementDossierSection type="consultation" id={id} />
 
-      {/* ---------------- CHRONOGRAMME ---------------- */}
+      {/* ---------------- CHRONOGRAMME (consultations uniquement) ---------------- */}
+      {!estVente && (
       <section style={{ marginBottom: 30 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("chronogramSection")}</h2>
@@ -556,6 +563,7 @@ export default function ConsultationDetailPage() {
           </div>
         )}
       </section>
+      )}
 
       {/* ---------------- COURRIERS ---------------- */}
       <CourrierSection dossierType="CONSULTATION" dossierId={id} />

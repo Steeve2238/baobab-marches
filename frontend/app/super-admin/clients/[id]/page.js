@@ -68,6 +68,16 @@ export default function SuperAdminClientDetailPage() {
 
   useEffect(charger, [params.id, router]);
 
+  async function handleChangerProfilActivite(valeur) {
+    if (valeur === client.profil_activite) return;
+    try {
+      const maj = await superAdminApi.patchProfilActivite(client.id, valeur);
+      setClient(maj);
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
   async function handleChangerMode(mode) {
     if (mode === client.mode_hebergement) return;
     const message = mode === "LOCAL" ? t("saModeSwitchToLocalConfirm") : t("saModeSwitchToHebergeConfirm");
@@ -343,6 +353,20 @@ export default function SuperAdminClientDetailPage() {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>
+        <h3 style={{ fontSize: 13.5, color: "var(--petrol)", marginBottom: 6 }}>{t("profilActiviteSection")}</h3>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 0, marginBottom: 10 }}>{t("profilActiviteDescription")}</p>
+        <select
+          value={client.profil_activite || "LES_DEUX"}
+          onChange={(e) => handleChangerProfilActivite(e.target.value)}
+          style={inputStyle}
+        >
+          <option value="LES_DEUX">{t("profilActiviteLES_DEUX")}</option>
+          <option value="NEGOCE">{t("profilActiviteNEGOCE")}</option>
+          <option value="MARCHES">{t("profilActiviteMARCHES")}</option>
+        </select>
       </div>
 
       <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>

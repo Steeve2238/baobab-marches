@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useLangue } from "../../lib/i18n/LanguageContext";
+import { useProfilActivite } from "../../lib/useProfilActivite";
 import AppShell from "../../lib/components/AppShell";
 
 // Ecran de choix du module "Marche", qui regroupe depuis le 04/09/2026 les
@@ -29,6 +32,13 @@ const BRANCHES = [
 
 export default function MarchesPage() {
   const { t } = useLangue();
+  const router = useRouter();
+  const profil = useProfilActivite();
+  // Profil NEGOCE : pas d'ecran de choix, on ouvre directement la liste des ventes.
+  useEffect(() => {
+    if (profil === "NEGOCE") router.replace("/marches/consultation-restreinte/consultations");
+  }, [profil, router]);
+  // Profil MARCHES : un seul circuit de vente (consultation) reste propose avec l'appel d'offres, inchange.
 
   return (
     <AppShell title={t("marchesPageTitle")}>

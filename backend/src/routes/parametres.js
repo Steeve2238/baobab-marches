@@ -322,6 +322,38 @@ router.patch("/calcul-prix", requireRole("ADMIN"), async (req, res) => {
 });
 
 // ----------------------------------------------------------------------------
+// Profil d'activite (migration 068) : MARCHES | NEGOCE | LES_DEUX. Adapte le menu
+// et les libelles (NEGOCE : « Ventes », sans Appel d'offres ni Dossiers). Ne change
+// aucune permission. Modifiable par l'ADMIN du client (et par le Super Admin).
+// ----------------------------------------------------------------------------
+
+const PROFILS_ACTIVITE = ["MARCHES", "NEGOCE", "LES_DEUX"];
+
+router.get("/profil-activite", async (req, res) => {
+  try {
+    const r = await db.query(`SELECT profil_activite FROM tenant WHERE id = $1`, [req.user.tenantId]);
+    res.json({ profil_activite: (r.rows[0] && r.rows[0].profil_activite) || "LES_DEUX" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "CALCUL_PARAMETRES_FETCH_ERROR") });
+  }
+});
+
+router.patch("/profil-activite", requireRole("ADMIN"), async (req, res) => {
+  const profil = req.body && req.body.profil_activite;
+  if (!PROFILS_ACTIVITE.includes(profil)) {
+    return res.status(400).json({ error: t(req, "PROFIL_ACTIVITE_INVALIDE") });
+  }
+  try {
+    await db.query(`UPDATE tenant SET profil_activite = $1 WHERE id = $2`, [profil, req.user.tenantId]);
+    res.json({ profil_activite: profil });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "CALCUL_PARAMETRES_UPDATE_ERROR") });
+  }
+});
+
+// ----------------------------------------------------------------------------
 // Reprise de numerotation (Devis / Facture-BL) : permet a un tenant qui avait
 // deja une sequence utilisee ailleurs (ex Excel) de renseigner le dernier
 // numero deja utilise, pour que le prochain document genere continue a partir
