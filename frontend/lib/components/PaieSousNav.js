@@ -13,6 +13,10 @@ const ELEMENTS = [
   { href: "/paie/retraite", key: "paieNavRetraite" },
   { href: "/paie/provision-retraite", key: "paieNavProvision" },
   { href: "/paie/dossiers", key: "paieNavDossiers" },
+  // Anciennement dans le menu Ressources humaines : relevent du module Paie (08/10/2026).
+  { href: "/rh/contrats", key: "navContratsRH", also: ["/rh/modeles-contrats"] },
+  { href: "/rh/dmt", key: "navDmtRH" },
+  { href: "/rh/ordres-virement", key: "navOrdresVirementRH" },
   { href: "/paie/simulateur", key: "paieNavSimulateur" },
   { href: "/paie/parametres", key: "paieNavParametres" },
 ];
@@ -36,7 +40,7 @@ export default function PaieSousNav() {
   return (
     <nav style={{ display: "flex", gap: 4, flexWrap: "wrap", borderBottom: "1px solid var(--line-soft)", paddingBottom: 10 }}>
       {ELEMENTS.map((e) => {
-        const actif = e.exact ? pathname === e.href : pathname === e.href || pathname.startsWith(e.href + "/");
+        const actif = e.exact ? pathname === e.href : [e.href, ...(e.also || [])].some((h) => pathname === h || pathname.startsWith(h + "/"));
         return (
           <Link key={e.href} href={e.href} style={pilule(actif)}>
             {t(e.key)}

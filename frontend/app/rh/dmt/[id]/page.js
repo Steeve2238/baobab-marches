@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import PaieSousNav from "../../../../lib/components/PaieSousNav";
 import DmtForm, { donneesVersApi } from "../../../../lib/components/DmtForm";
 import { boutonPrincipal, boutonLeger, Champ, Section, grille, inputStyle } from "../../../../lib/components/rhUi";
 
@@ -72,12 +73,12 @@ export default function DmtPage() {
     }
   }
 
-  if (erreur && !dmt) return <AppShell title={t("rhdmTitre")}><p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p></AppShell>;
-  if (!dmt || !donnees) return <AppShell title={t("rhdmTitre")}><p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p></AppShell>;
+  if (erreur && !dmt) return <AppShell title={t("rhdmTitre")} subNav={<PaieSousNav />}><p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p></AppShell>;
+  if (!dmt || !donnees) return <AppShell title={t("rhdmTitre")} subNav={<PaieSousNav />}><p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p></AppShell>;
 
   const majSuivi = (k, v) => setSuivi((s) => ({ ...s, [k]: v }));
   return (
-    <AppShell title={dmt.numero}>
+    <AppShell title={dmt.numero} subNav={<PaieSousNav />}>
       <Link href="/rh/dmt" style={{ fontSize: 12, color: "var(--petrol)", display: "inline-block", marginBottom: 12 }}>{t("rhdmRetour")}</Link>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       {message && <p style={{ color: "var(--petrol)", fontSize: 12.5, marginBottom: 14 }}>{message}</p>}

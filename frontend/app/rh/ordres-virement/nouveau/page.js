@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import PaieSousNav from "../../../../lib/components/PaieSousNav";
 import OrdreVirementForm, { ovFormInitial, ovFormVersCorps } from "../../../../lib/components/OrdreVirementForm";
 import { boutonPrincipal } from "../../../../lib/components/rhUi";
 
@@ -47,7 +48,7 @@ export default function NouvelOrdreVirementPage() {
   }
 
   return (
-    <AppShell title={t("rhovNouveau")}>
+    <AppShell title={t("rhovNouveau")} subNav={<PaieSousNav />}>
       <Link href="/rh/ordres-virement" style={{ fontSize: 12, color: "var(--petrol)", display: "inline-block", marginBottom: 12 }}>{t("rhovRetour")}</Link>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       {!form ? (

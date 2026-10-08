@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import PaieSousNav from "../../../../lib/components/PaieSousNav";
 import ContratForm, { contratFormInitial, contratFormVersCorps } from "../../../../lib/components/ContratForm";
 import { boutonPrincipal, boutonLeger, Section, fmtMontant } from "../../../../lib/components/rhUi";
 import CircuitContrat from "../../../../lib/components/CircuitContrat";
@@ -79,15 +80,15 @@ export default function ContratPage() {
   };
 
   if (erreur && !contrat) {
-    return <AppShell title={t("rhcTitre")}><p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p></AppShell>;
+    return <AppShell title={t("rhcTitre")} subNav={<PaieSousNav />}><p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p></AppShell>;
   }
   if (!contrat || !form) {
-    return <AppShell title={t("rhcTitre")}><p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p></AppShell>;
+    return <AppShell title={t("rhcTitre")} subNav={<PaieSousNav />}><p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p></AppShell>;
   }
 
   const contenu = contrat.contenu;
   return (
-    <AppShell title={contrat.numero}>
+    <AppShell title={contrat.numero} subNav={<PaieSousNav />}>
       <Link href="/rh/contrats" style={{ fontSize: 12, color: "var(--petrol)", display: "inline-block", marginBottom: 12 }}>{t("rhcRetour")}</Link>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       {message && <p style={{ color: "var(--petrol)", fontSize: 12.5, marginBottom: 14 }}>{message}</p>}

@@ -86,12 +86,9 @@ const NAV_ITEMS = [
         moduleKey: "rh",
         alsoActive: ["/rh/circuit-approbation", "/rh/planning-conges", "/rh/statistiques"],
       },
-      { href: "/rh/contrats", key: "navContratsRH", moduleKey: "rh", alsoActive: ["/rh/modeles-contrats"] },
-      { href: "/rh/dmt", key: "navDmtRH", moduleKey: "rh" },
       { href: "/rh/courriers", key: "navCourriersRH", moduleKey: "rh", alsoActive: ["/rh/modeles-courriers"] },
-      { href: "/rh/ordres-virement", key: "navOrdresVirementRH", moduleKey: "rh" },
       // Paie : module payant (migration 061), meme principe de verrou que la Fiscalite.
-      { href: "/paie", key: "navPaie", moduleKeyStrictAny: ["paie", "paie-validation"], requiresFlag: "paieActive" },
+      { href: "/paie", key: "navPaie", moduleKeyStrictAny: ["paie", "paie-validation"], requiresFlag: "paieActive", alsoActive: ["/rh/contrats", "/rh/modeles-contrats", "/rh/dmt", "/rh/ordres-virement"] },
     ],
   },
   {

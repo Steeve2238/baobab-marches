@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import PaieSousNav from "../../../lib/components/PaieSousNav";
 import { boutonPrincipal } from "../../../lib/components/rhUi";
 import { fmtMontant } from "../../../lib/components/rhUi";
 
@@ -19,7 +20,7 @@ export default function OrdresVirementPage() {
   }, []);
 
   return (
-    <AppShell title={t("rhovTitre")}>
+    <AppShell title={t("rhovTitre")} subNav={<PaieSousNav />}>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: -6, marginBottom: 16, maxWidth: 780 }}>{t("rhovAide")}</p>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       <div style={{ marginBottom: 16 }}>

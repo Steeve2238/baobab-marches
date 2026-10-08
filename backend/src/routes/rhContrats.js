@@ -2,7 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const db = require("../db");
-const { requireAuth, requireModule } = require("../middleware/auth");
+const { requireAuth, requireModuleAny, exigerModulePaieActif } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const rhFiche = require("../services/rhFiche");
 const modeles = require("../services/rhContratModeles");
@@ -17,7 +17,11 @@ const mailer = require("../utils/mailer");
  */
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireModule("rh"));
+// Contrats de travail, modeles de contrat et DMT : relevent du module Paie (payant, 08/10/2026). ATTENTION : ce routeur est
+// monte sur /api/rh en entier, donc le verrou est limite a ses propres chemins (sinon il bloquerait Personnel, Courriers...).
+const CHEMINS_PAIE = ["/modeles-contrats", "/contrats", "/dmt"];
+router.use(CHEMINS_PAIE, exigerModulePaieActif);
+router.use(CHEMINS_PAIE, requireModuleAny("rh", "paie", "paie-validation"));
 
 const TYPES_CONTRAT = ["CDI", "CDD", "JOURNALIER"];
 const dateOuNull = (v) => {

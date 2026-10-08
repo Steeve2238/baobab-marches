@@ -2,7 +2,7 @@ const express = require("express");
 const XLSX = require("xlsx");
 const { v4: uuidv4 } = require("uuid");
 const db = require("../db");
-const { requireAuth, requireModule } = require("../middleware/auth");
+const { requireAuth, requireModuleAny, exigerModulePaieActif } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { chargerEntete, prochainNumero, dateOuNull } = require("../services/rhCommun");
 const { ordreVirementPdf } = require("../services/rhDocumentsPdf");
@@ -14,7 +14,9 @@ const { ordreVirementPdf } = require("../services/rhDocumentsPdf");
  */
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireModule("rh"));
+// Ordres de virement : module Paie (payant). Verrou limite au chemin (routeur monte sur /api/rh).
+router.use("/ordres-virement", exigerModulePaieActif);
+router.use("/ordres-virement", requireModuleAny("rh", "paie", "paie-validation"));
 
 const TYPES = ["SALAIRE", "SOLDE_TOUT_COMPTE", "AUTRE"];
 const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];

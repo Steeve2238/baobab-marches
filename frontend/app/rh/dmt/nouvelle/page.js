@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import PaieSousNav from "../../../../lib/components/PaieSousNav";
 import DmtForm, { donneesVersApi } from "../../../../lib/components/DmtForm";
 import { boutonPrincipal } from "../../../../lib/components/rhUi";
 
@@ -42,7 +43,7 @@ export default function NouvelleDmtPage() {
   }
 
   return (
-    <AppShell title={t("rhdmNouvelleTitre")}>
+    <AppShell title={t("rhdmNouvelleTitre")} subNav={<PaieSousNav />}>
       <Link href="/rh/dmt" style={{ fontSize: 12, color: "var(--petrol)", display: "inline-block", marginBottom: 12 }}>{t("rhdmRetour")}</Link>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       {donnees ? (

@@ -4,8 +4,10 @@ const XLSX = require("xlsx");
 const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule } = require("../middleware/auth");
-const { t } = require("../utils/i18n");
+const { t, resolveLangue } = require("../utils/i18n");
 const rhFiche = require("../services/rhFiche");
+const rhImport = require("../services/rhImportFiche");
+const { chargerEntete } = require("../services/rhCommun");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -167,6 +169,129 @@ router.get("/personnel", requireModule("rh"), async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "RH_PERSONNEL_FETCH_ERROR") });
+  }
+});
+
+// ------------------------------------------------------------------------------------------------------------
+// Fiche de renseignements : modeles Excel, export, import (apercu puis confirmation), fiche PDF imprimable.
+// Module RH de base (gratuit) : le salarie remplit sa fiche, le RH la reimporte. Chemins declares AVANT /personnel/:id.
+// ------------------------------------------------------------------------------------------------------------
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const uploadFiche = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+
+async function employesPourExport(tenantId, id) {
+  const r = await db.query(`${SELECT_FICHE} ${id ? "AND e.id = $2" : ""} ORDER BY COALESCE(e.nom, u.nom), COALESCE(e.prenom, u.prenom)`, id ? [tenantId, id] : [tenantId]);
+  const enf = await db.query(`SELECT * FROM employe_enfant WHERE tenant_id = $1 ORDER BY date_naissance NULLS LAST, prenom`, [tenantId]);
+  const parEmp = {};
+  for (const e of enf.rows) (parEmp[e.employe_id] = parEmp[e.employe_id] || []).push(e);
+  return { employes: r.rows, enfants: parEmp };
+}
+
+router.get("/personnel/modele-import", requireModule("rh"), (req, res) => {
+  try {
+    const lang = resolveLangue(req);
+    res.setHeader("Content-Type", XLSX_MIME);
+    res.setHeader("Content-Disposition", `attachment; filename="${lang === "en" ? "employee_import_template" : "modele_import_salaries"}.xlsx"`);
+    res.send(rhImport.classeurMasse({ lang, modele: true }));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_FICHE_IMPORT_ERREUR") });
+  }
+});
+
+router.get("/personnel/export", requireModule("rh"), async (req, res) => {
+  try {
+    const lang = resolveLangue(req);
+    const { employes, enfants } = await employesPourExport(req.user.tenantId);
+    res.setHeader("Content-Type", XLSX_MIME);
+    res.setHeader("Content-Disposition", `attachment; filename="${lang === "en" ? "employees" : "salaries"}.xlsx"`);
+    res.send(rhImport.classeurMasse({ lang, employes, enfantsParEmploye: enfants }));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_FICHE_IMPORT_ERREUR") });
+  }
+});
+
+// Fiche individuelle vierge (sans :id) ou pre-remplie
+router.get("/personnel/fiche-vierge.xlsx", requireModule("rh"), (req, res) => {
+  try {
+    const lang = resolveLangue(req);
+    res.setHeader("Content-Type", XLSX_MIME);
+    res.setHeader("Content-Disposition", `attachment; filename="${lang === "en" ? "employee_information_sheet" : "fiche_renseignements"}.xlsx"`);
+    res.send(rhImport.classeurIndividuel({ lang }));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_FICHE_IMPORT_ERREUR") });
+  }
+});
+
+router.get("/personnel/fiche-vierge.pdf", requireModule("rh"), async (req, res) => {
+  try {
+    const lang = resolveLangue(req);
+    const buf = await rhImport.fichePdf(await chargerEntete(req.user.tenantId), { lang });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="fiche_renseignements.pdf"');
+    res.send(buf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_FICHE_IMPORT_ERREUR") });
+  }
+});
+
+router.get("/personnel/:id/fiche-renseignements.:format", requireModule("rh"), async (req, res) => {
+  try {
+    const lang = resolveLangue(req);
+    const { employes, enfants } = await employesPourExport(req.user.tenantId, req.params.id);
+    if (!employes.length) return res.status(404).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
+    const e = employes[0];
+    const liste = enfants[e.id] || [];
+    const nom = `fiche_${e.matricule || "salarie"}`;
+    if (req.params.format === "xlsx") {
+      res.setHeader("Content-Type", XLSX_MIME);
+      res.setHeader("Content-Disposition", `attachment; filename="${nom}.xlsx"`);
+      return res.send(rhImport.classeurIndividuel({ lang, employe: e, enfants: liste }));
+    }
+    if (req.params.format === "pdf") {
+      const buf = await rhImport.fichePdf(await chargerEntete(req.user.tenantId), { lang, employe: e, enfants: liste });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${nom}.pdf"`);
+      return res.send(buf);
+    }
+    res.status(404).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_FICHE_IMPORT_ERREUR") });
+  }
+});
+
+// POST /api/rh/personnel/import?apercu=1 (fichier) -> analyse seule ; sans apercu -> applique (CREER / MAJ), erreurs ignorees.
+router.post("/personnel/import", requireModule("rh"), uploadFiche.single("fichier"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: t(req, "RH_FICHE_IMPORT_FICHIER") });
+    const lang = resolveLangue(req);
+    let lu;
+    try {
+      lu = rhImport.lireClasseur(req.file.buffer);
+    } catch (e) {
+      return res.status(400).json({ error: t(req, "RH_FICHE_IMPORT_ILLISIBLE") });
+    }
+    if (lu.erreur || !lu.lignes.length) return res.status(400).json({ error: t(req, "RH_FICHE_IMPORT_VIDE") });
+    if (lu.lignes.length > 2000) return res.status(400).json({ error: t(req, "RH_FICHE_IMPORT_TROP") });
+    const analyse = await rhImport.analyser(db, req.user.tenantId, lu.lignes, lang);
+    const vue = {
+      individuel: lu.individuel,
+      resume: analyse.resume,
+      lignes: analyse.lignes.map(({ valeurs, enfants_valeurs, ...r }) => r),
+    };
+    if (req.query.apercu === "1" || req.query.apercu === "true") return res.json(vue);
+    const sortie = await rhImport.appliquer(db, req.user.tenantId, req.user.sub, analyse, {
+      genererMatricule, enregistrerHistorique, remplacerEnfants, uuid: uuidv4,
+      enfantsComplets: (l) => normaliserEnfants(l) || [],
+    });
+    res.json({ ...vue, resultat: sortie });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_FICHE_IMPORT_ERREUR") });
   }
 });
 

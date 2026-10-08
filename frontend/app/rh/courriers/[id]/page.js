@@ -23,6 +23,8 @@ export default function CourrierRHDetailPage() {
   const [erreur, setErreur] = useState("");
   const [message, setMessage] = useState("");
   const [avert, setAvert] = useState([]);
+  const [paieActive, setPaieActive] = useState(false);
+  useEffect(() => { api.getPermissions().then((p) => setPaieActive(!!p?.paieActive)).catch(() => {}); }, []);
 
   function appliquer(x) {
     setC(x);
@@ -186,7 +188,7 @@ export default function CourrierRHDetailPage() {
               </Section>
             )}
 
-            {c.type === "SOLDE_TOUT_COMPTE" && (
+            {c.type === "SOLDE_TOUT_COMPTE" && paieActive && (
               <Section titre={t("rhovCreerDepuisSolde")} aide={t("rhkCreerOrdreAide")}>
                 <Link href={`/rh/ordres-virement/nouveau?courrier_id=${c.id}`} style={boutonPrincipal}>{t("rhkCreerOrdre")}</Link>
               </Section>

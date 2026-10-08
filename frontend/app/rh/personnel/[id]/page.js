@@ -21,6 +21,7 @@ export default function FicheEmployePage() {
   const [contrats, setContrats] = useState([]);
   const [courriers, setCourriers] = useState([]);
   const [dmts, setDmts] = useState([]);
+  const [paieActive, setPaieActive] = useState(false);
 
   function appliquer(f) {
     setFiche(f);
@@ -30,9 +31,8 @@ export default function FicheEmployePage() {
   useEffect(() => {
     api.getFicheEmploye(id).then(appliquer).catch((err) => setErreur(err.message));
     api.getUtilisateursDisponiblesRH().then(setComptes).catch(() => {});
-    api.getContrats(id).then(setContrats).catch(() => {});
+    api.getPermissions().then((p) => { const ok = !!p?.paieActive; setPaieActive(ok); if (ok) { api.getContrats(id).then(setContrats).catch(() => {}); api.getDmts(id).then(setDmts).catch(() => {}); } }).catch(() => {});
     api.getCourriers({ employe_id: id }).then(setCourriers).catch(() => {});
-    api.getDmts(id).then(setDmts).catch(() => {});
   }, [id]);
 
   const estSalarieSeul = fiche && fiche.historique === undefined;
@@ -113,6 +113,13 @@ export default function FicheEmployePage() {
           )}
         </div>
 
+        {!estSalarieSeul && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" style={boutonLeger} onClick={() => api.rhFicheSalariePdf(id).catch((e) => setErreur(e.message))}>{t("rhiFicheSalariePdf")}</button>
+            <button type="button" style={boutonLeger} onClick={() => api.rhFicheSalarieExcel(id, fiche.matricule).catch((e) => setErreur(e.message))}>{t("rhiFicheSalarieExcel")}</button>
+          </div>
+        )}
+
         {comp && comp.manquants.length > 0 && !estSalarieSeul && (
           <div className="card">
             <h2 style={{ fontSize: 14, margin: "0 0 8px" }}>{t("rhdSecCompletude")}</h2>
@@ -145,7 +152,7 @@ export default function FicheEmployePage() {
           </button>
         </form>
 
-        {!estSalarieSeul && (
+        {!estSalarieSeul && paieActive && (
           <section className="card">
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
               <h2 style={{ fontSize: 14, margin: 0 }}>{t("rhcDocs")}</h2>

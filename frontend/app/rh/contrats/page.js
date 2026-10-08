@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import PaieSousNav from "../../../lib/components/PaieSousNav";
 import { boutonPrincipal, boutonLeger, inputStyle } from "../../../lib/components/rhUi";
 
 export default function ContratsPage() {
@@ -24,7 +25,7 @@ export default function ContratsPage() {
   }, []);
 
   return (
-    <AppShell title={t("rhcTitre")}>
+    <AppShell title={t("rhcTitre")} subNav={<PaieSousNav />}>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: -6, marginBottom: 16, maxWidth: 760 }}>{t("rhcAide")}</p>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 

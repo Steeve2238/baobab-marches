@@ -67,7 +67,9 @@ const DEFS = Object.fromEntries(CHAMPS.map((c) => [c.name, c]));
 function dateISO(v) {
   if (v == null || v === "") return null;
   const s = String(v).slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) ? s : undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) return undefined;
+  // 1990-02-31 ne doit pas etre accepte (le moteur JS le decale au 3 mars).
+  return new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s ? s : undefined;
 }
 
 /**

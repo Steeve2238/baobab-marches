@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import PaieSousNav from "../../../../lib/components/PaieSousNav";
 import ContratForm, { contratFormInitial, contratFormVersCorps } from "../../../../lib/components/ContratForm";
 import { boutonPrincipal } from "../../../../lib/components/rhUi";
 
@@ -41,7 +42,7 @@ export default function NouveauContratPage() {
   }
 
   return (
-    <AppShell title={t("rhcNouveauTitre")}>
+    <AppShell title={t("rhcNouveauTitre")} subNav={<PaieSousNav />}>
       <Link href="/rh/contrats" style={{ fontSize: 12, color: "var(--petrol)", display: "inline-block", marginBottom: 12 }}>{t("rhcRetour")}</Link>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       {form ? (

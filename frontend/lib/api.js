@@ -443,6 +443,18 @@ export const api = {
   deleteContrat: (id) => request(`/rh/contrats/${id}`, { method: "DELETE" }),
   validerContrat: (id) => request(`/rh/contrats/${id}/valider`, { method: "POST" }),
   annulerContrat: (id) => request(`/rh/contrats/${id}/annuler`, { method: "POST" }),
+  // Fiche de renseignements du salarie : modeles, export, import (apercu puis confirmation).
+  rhModeleImportPersonnel: () => requestDownload("/rh/personnel/modele-import", "modele_import_salaries.xlsx"),
+  rhExporterPersonnel: () => requestDownload("/rh/personnel/export", "salaries.xlsx"),
+  rhFicheViergeExcel: () => requestDownload("/rh/personnel/fiche-vierge.xlsx", "fiche_renseignements.xlsx"),
+  rhFicheViergePdf: () => ouvrirPdf("/rh/personnel/fiche-vierge.pdf"),
+  rhFicheSalarieExcel: (id, nom) => requestDownload(`/rh/personnel/${id}/fiche-renseignements.xlsx`, `fiche_${nom || "salarie"}.xlsx`),
+  rhFicheSalariePdf: (id) => ouvrirPdf(`/rh/personnel/${id}/fiche-renseignements.pdf`),
+  rhImporterPersonnel: (fichier, apercu) => {
+    const formData = new FormData();
+    formData.append("fichier", fichier);
+    return requestUpload(`/rh/personnel/import${apercu ? "?apercu=1" : ""}`, formData);
+  },
   ouvrirPdfRH: (chemin) => ouvrirPdf(chemin),
   telechargerPdfRH: (chemin, nom) => requestDownload(chemin, nom),
   getDmts: (employeId) => request(`/rh/dmt${employeId ? `?employe_id=${employeId}` : ""}`),

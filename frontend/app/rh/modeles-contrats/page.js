@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import PaieSousNav from "../../../lib/components/PaieSousNav";
 import { boutonPrincipal, boutonLeger, inputStyle, labelStyle, Section } from "../../../lib/components/rhUi";
 
 const TYPES = ["CDI", "CDD", "JOURNALIER"];
@@ -76,12 +77,12 @@ export default function ModelesContratsPage() {
   }
 
   if (!donnees) {
-    return <AppShell title={t("rhmTitre")}>{erreur ? <p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p> : <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>}</AppShell>;
+    return <AppShell title={t("rhmTitre")} subNav={<PaieSousNav />}>{erreur ? <p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p> : <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>}</AppShell>;
   }
   const modele = donnees.modeles.find((m) => m.type === type);
 
   return (
-    <AppShell title={t("rhmTitre")}>
+    <AppShell title={t("rhmTitre")} subNav={<PaieSousNav />}>
       <Link href="/rh/contrats" style={{ fontSize: 12, color: "var(--petrol)", display: "inline-block", marginBottom: 12 }}>{t("rhmRetour")}</Link>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 0, maxWidth: 780 }}>{t("rhmAide")}</p>
       <p style={{ fontSize: 12, color: "var(--brique)", marginTop: 0 }}>{t("rhmAvertissement")}</p>

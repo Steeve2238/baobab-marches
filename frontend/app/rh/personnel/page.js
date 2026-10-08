@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import { boutonLeger } from "../../../lib/components/rhUi";
 
 export default function PersonnelPage() {
   const { t, statutEmployeLabel } = useLangue();
@@ -12,6 +13,8 @@ export default function PersonnelPage() {
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
   const [recherche, setRecherche] = useState("");
+  const [msg, setMsg] = useState("");
+  const lancer = (fn) => () => { setErreur(""); Promise.resolve(fn()).catch((e) => setErreur(e.message)); };
 
   useEffect(() => {
     api
@@ -46,6 +49,18 @@ export default function PersonnelPage() {
       </p>
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{t("rhiBloc")}</div>
+        <p style={{ fontSize: 12, color: "var(--sub)", margin: "0 0 10px", maxWidth: 760 }}>{t("rhiBlocAide")}</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" style={boutonLeger} onClick={lancer(() => api.rhFicheViergePdf())}>{t("rhiFichePdf")}</button>
+          <button type="button" style={boutonLeger} onClick={lancer(() => api.rhFicheViergeExcel())}>{t("rhiFicheExcel")}</button>
+          <button type="button" style={boutonLeger} onClick={lancer(() => api.rhModeleImportPersonnel())}>{t("rhiModele")}</button>
+          <button type="button" style={boutonLeger} onClick={lancer(() => api.rhExporterPersonnel())}>{t("rhiExport")}</button>
+          <Link href="/rh/personnel/import" style={{ ...boutonLeger, background: "var(--petrol)", color: "#fff", textDecoration: "none" }}>{t("rhiImporter")}</Link>
+        </div>
+      </div>
 
       <div style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <Link

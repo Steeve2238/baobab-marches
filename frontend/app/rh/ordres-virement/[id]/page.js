@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import PaieSousNav from "../../../../lib/components/PaieSousNav";
 import OrdreVirementForm, { ovFormInitial, ovFormVersCorps } from "../../../../lib/components/OrdreVirementForm";
 import { boutonPrincipal, boutonLeger, Section } from "../../../../lib/components/rhUi";
 
@@ -38,13 +39,13 @@ export default function OrdreVirementDetailPage() {
   }
 
   if (!o || !form) {
-    return <AppShell title={t("rhovTitre")}>{erreur ? <p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p> : <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>}</AppShell>;
+    return <AppShell title={t("rhovTitre")} subNav={<PaieSousNav />}>{erreur ? <p style={{ color: "var(--brique)", fontSize: 12.5 }}>{erreur}</p> : <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>}</AppShell>;
   }
   const brouillon = o.statut === "BROUILLON";
   const jour = (d) => String(d).slice(0, 10);
 
   return (
-    <AppShell title={o.numero}>
+    <AppShell title={o.numero} subNav={<PaieSousNav />}>
       <Link href="/rh/ordres-virement" style={{ fontSize: 12, color: "var(--petrol)", display: "inline-block", marginBottom: 12 }}>{t("rhovRetour")}</Link>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       {message && <p style={{ color: "var(--petrol)", fontSize: 12.5, marginBottom: 14 }}>{message}</p>}

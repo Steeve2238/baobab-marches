@@ -6,6 +6,7 @@ import Link from "next/link";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
+import PaieSousNav from "../../../lib/components/PaieSousNav";
 import { OBJETS } from "../../../lib/components/DmtForm";
 import { boutonPrincipal, inputStyle } from "../../../lib/components/rhUi";
 
@@ -25,7 +26,7 @@ export default function DmtListePage() {
   }, []);
 
   return (
-    <AppShell title={t("rhdmTitre")}>
+    <AppShell title={t("rhdmTitre")} subNav={<PaieSousNav />}>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: -6, marginBottom: 16, maxWidth: 780 }}>{t("rhdmAide")}</p>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       <div className="card" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
