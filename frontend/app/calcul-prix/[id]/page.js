@@ -952,7 +952,9 @@ function DetailOffre({ t, nombre, pourcentage, calcul }) {
         ["calcPrixSwiftLabel", nombre(calcul.swift)],
         ["calcPrixTafSwiftLabel", nombre(calcul.tafSwift)],
         ["calcPrixTimbreLabel", nombre(calcul.timbre)],
+        ...(calcul.autresFraisVirement > 0 ? [["calcPrixAutresFraisVirementLabel", nombre(calcul.autresFraisVirement)]] : []),
         ["calcPrixTotalFraisBancairesLabel", nombre(calcul.totalFraisBancaires)],
+        ...(calcul.fraisPaiementRefactures > 0 ? [["calcPrixFraisRefactureLabel", nombre(calcul.fraisPaiementRefactures)]] : []),
       ],
     },
     {

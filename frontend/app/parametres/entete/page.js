@@ -29,6 +29,9 @@ const PARAM_DEFS_CALCUL_PRIX = [
   { cle: "tauxTAF", labelKey: "calcPrixTauxTAFLabel", type: "pourcentage" },
   { cle: "forfaitSwift", labelKey: "calcPrixForfaitSwiftLabel", type: "montant" },
   { cle: "forfaitTimbre", labelKey: "calcPrixForfaitTimbreLabel", type: "montant" },
+  { cle: "forfaitAutresFraisVirement", labelKey: "calcPrixForfaitAutresFraisVirementLabel", type: "montant" },
+  { cle: "tauxAutresFraisVirement", labelKey: "calcPrixTauxAutresFraisVirementLabel", type: "pourcentage" },
+  { cle: "refacturerFraisPaiement", labelKey: "calcPrixRefacturerFraisPaiementLabel", type: "case" },
 ];
 
 export default function EnteteSettingsPage() {
@@ -118,7 +121,7 @@ export default function EnteteSettingsPage() {
         const valeurs = {};
         PARAM_DEFS_CALCUL_PRIX.forEach(({ cle, type }) => {
           const brut = Number(data[cle]) || 0;
-          valeurs[cle] = String(type === "pourcentage" ? brut * 100 : brut);
+          valeurs[cle] = String(type === "pourcentage" ? brut * 100 : type === "case" ? (brut === 1 ? 1 : 0) : brut);
         });
         setFormCalculPrix(valeurs);
       })
@@ -175,7 +178,7 @@ export default function EnteteSettingsPage() {
       const payload = {};
       PARAM_DEFS_CALCUL_PRIX.forEach(({ cle, type }) => {
         const saisi = Number(formCalculPrix[cle]);
-        payload[cle] = type === "pourcentage" ? saisi / 100 : saisi;
+        payload[cle] = type === "pourcentage" ? saisi / 100 : type === "case" ? (saisi === 1 ? 1 : 0) : saisi;
       });
       await api.patchParametresCalculPrix(payload);
       setConfirmationCalculPrix(true);
@@ -496,7 +499,22 @@ export default function EnteteSettingsPage() {
 
           <form onSubmit={handleEnregistrerCalculPrix}>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {PARAM_DEFS_CALCUL_PRIX.map(({ cle, labelKey, type }) => (
+              {PARAM_DEFS_CALCUL_PRIX.map(({ cle, labelKey, type }) => type === "case" ? (
+                <div key={cle} style={{ gridColumn: "1 / -1", background: "var(--fond, #f4f7f6)", borderRadius: 8, padding: "10px 12px" }}>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={Number(formCalculPrix[cle]) === 1}
+                      onChange={(e) => setFormCalculPrix((f) => ({ ...f, [cle]: e.target.checked ? 1 : 0 }))}
+                      style={{ marginTop: 2 }}
+                    />
+                    <span>
+                      <strong>{t(labelKey)}</strong>
+                      <span style={{ display: "block", fontSize: 11, color: "var(--sub)", marginTop: 2 }}>{t("calcPrixRefacturerFraisPaiementAide")}</span>
+                    </span>
+                  </label>
+                </div>
+              ) : (
                 <div key={cle}>
                   <label style={labelStyle}>{t(labelKey)}</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

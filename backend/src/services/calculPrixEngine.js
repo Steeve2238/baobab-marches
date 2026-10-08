@@ -52,19 +52,10 @@ function calculerOffre(offre, parametres) {
   const tvaImport = baseTvaImport * Number(parametres.tauxTvaImport);
   const totalDroitsTaxesDouane = droitDouane + redevanceStatistique + pcs + pccCosec + tvaImport;
 
-  // COUT DE REVIENT & MARGE CIBLE
-  const coutDeRevientHt = prixAchatTotalXof + fretAlloue + totalDroitsTaxesDouane + fraisTransit;
-  const margeBrute = coutDeRevientHt * margeCible;
-  const prixVenteTotalHt = coutDeRevientHt + margeBrute;
-
-  // PRIX DE VENTE (DEVIS)
-  const prixUnitaireHt = quantite > 0 ? prixVenteTotalHt / quantite : 0;
-  const prixUnitaireArrondi = Math.ceil(prixUnitaireHt / 100) * 100;
-  const montantTotalArrondiHt = prixUnitaireArrondi * quantite;
-  const tvaVente = montantTotalArrondiHt * Number(parametres.tauxTvaVente);
-  const totalTtc = montantTotalArrondiHt + tvaVente;
-
-  // FRAIS BANCAIRES & CHANGE (paiement fournisseur)
+  // FRAIS BANCAIRES & CHANGE (paiement fournisseur) : calcules AVANT le prix de
+  // vente car, si l'option « refacturer » est active, ils y sont ajoutes.
+  // Ils ne dependent que du montant vire au fournisseur (pas du prix de vente),
+  // donc aucun calcul circulaire.
   const montantATransfererFournisseur = prixAchatTotalXof;
   const commissionTthu = montantATransfererFournisseur * Number(parametres.tauxCommissionTTHU);
   const commissionDbs = Math.max(
@@ -75,10 +66,32 @@ function calculerOffre(offre, parametres) {
   const swift = Number(parametres.forfaitSwift);
   const tafSwift = swift * Number(parametres.tauxTAF);
   const timbre = Number(parametres.forfaitTimbre);
-  const totalFraisBancaires = commissionTthu + commissionDbs + tafDbs + swift + tafSwift + timbre;
+  // Autres frais de virement (banque correspondante, frais OUR/SHA...) :
+  // forfait + pourcentage du montant vire, 0 par defaut.
+  const autresFraisVirement =
+    (Number(parametres.forfaitAutresFraisVirement) || 0) +
+    montantATransfererFournisseur * (Number(parametres.tauxAutresFraisVirement) || 0);
+  const totalFraisBancaires =
+    commissionTthu + commissionDbs + tafDbs + swift + tafSwift + timbre + autresFraisVirement;
+
+  // COUT DE REVIENT & MARGE CIBLE
+  const coutDeRevientHt = prixAchatTotalXof + fretAlloue + totalDroitsTaxesDouane + fraisTransit;
+  const margeBrute = coutDeRevientHt * margeCible;
+  // Option « refacturer les frais de paiement au client » : refacturation au
+  // cout reel, APRES la marge (aucune marge n'est prise sur ces frais).
+  const refacturerFrais = Number(parametres.refacturerFraisPaiement) === 1;
+  const fraisPaiementRefactures = refacturerFrais ? totalFraisBancaires : 0;
+  const prixVenteTotalHt = coutDeRevientHt + margeBrute + fraisPaiementRefactures;
+
+  // PRIX DE VENTE (DEVIS)
+  const prixUnitaireHt = quantite > 0 ? prixVenteTotalHt / quantite : 0;
+  const prixUnitaireArrondi = Math.ceil(prixUnitaireHt / 100) * 100;
+  const montantTotalArrondiHt = prixUnitaireArrondi * quantite;
+  const tvaVente = montantTotalArrondiHt * Number(parametres.tauxTvaVente);
+  const totalTtc = montantTotalArrondiHt + tvaVente;
 
   // DECISION
-  const margeNetteReelle = margeBrute - totalFraisBancaires;
+  const margeNetteReelle = margeBrute + fraisPaiementRefactures - totalFraisBancaires;
   const margeNetteReellePct = coutDeRevientHt > 0 ? margeNetteReelle / coutDeRevientHt : 0;
 
   const arr2 = (n) => Math.round(n * 100) / 100;
@@ -111,6 +124,8 @@ function calculerOffre(offre, parametres) {
     swift: arr2(swift),
     tafSwift: arr2(tafSwift),
     timbre: arr2(timbre),
+    autresFraisVirement: arr2(autresFraisVirement),
+    fraisPaiementRefactures: arr2(fraisPaiementRefactures),
     totalFraisBancaires: arr2(totalFraisBancaires),
     margeNetteReelle: arr2(margeNetteReelle),
     margeNetteReellePct: margeNetteReellePct,

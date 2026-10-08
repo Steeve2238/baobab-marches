@@ -273,6 +273,9 @@ const CLES_PARAMETRES_CALCUL_PRIX = [
   "tauxTAF",
   "forfaitSwift",
   "forfaitTimbre",
+  "forfaitAutresFraisVirement",
+  "tauxAutresFraisVirement",
+  "refacturerFraisPaiement",
 ];
 
 // GET /api/parametres/calcul-prix
@@ -300,7 +303,7 @@ router.patch("/calcul-prix", requireRole("ADMIN"), async (req, res) => {
   for (const cle of CLES_PARAMETRES_CALCUL_PRIX) {
     if (req.body[cle] === undefined) continue;
     const valeur = Number(req.body[cle]);
-    if (!Number.isFinite(valeur) || valeur < 0) {
+    if (!Number.isFinite(valeur) || valeur < 0 || (cle === "refacturerFraisPaiement" && valeur !== 0 && valeur !== 1)) {
       return res.status(400).json({ error: t(req, "CALCUL_PARAMETRES_INVALID") });
     }
     misesAJour[cle] = valeur;
