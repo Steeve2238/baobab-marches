@@ -7,8 +7,9 @@ import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
 import { DEVISES } from "../../../lib/constants/devises";
+import { useProfilActivite } from "../../../lib/useProfilActivite";
 
-export default function NouveauDossierPage() {
+function FormulaireAppelOffres() {
   const router = useRouter();
   const { t } = useLangue();
   const [maitresOuvrage, setMaitresOuvrage] = useState([]);
@@ -225,3 +226,57 @@ const boutonLienStyle = {
   textDecoration: "underline",
   cursor: "pointer",
 };
+
+// Choix du type de dossier avant la creation : Appel d'offres, Consultation restreinte ou Vente.
+// Chaque type ouvre son propre circuit (la consultation et la vente s'enregistrent dans le module Marche).
+export default function NouveauDossierPage() {
+  const { t } = useLangue();
+  const router = useRouter();
+  const profil = useProfilActivite();
+  const [type, setType] = useState(null);
+
+  useEffect(() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      if (q.get("type") === "AO") setType("AO");
+    } catch (e) {
+      /* ignore */
+    }
+  }, []);
+
+  const choix = [
+    { cle: "AO", titre: "marchesAppelOffresTitle", desc: "nouveauTypeAODesc", accent: "var(--ocre)" },
+    { cle: "CONSULTATION", titre: "marchesConsultationRestreinteTitle", desc: "nouveauTypeConsultationDesc", accent: "var(--petrol)", href: "/marches/consultation-restreinte/consultations?nouveau=1&type=CONSULTATION" },
+    { cle: "VENTE", titre: "marchesVenteDirecteTitle", desc: "nouveauTypeVenteDesc", accent: "var(--petrol)", href: "/marches/consultation-restreinte/consultations?nouveau=1&type=VENTE" },
+  ].filter((c) => (profil === "NEGOCE" ? c.cle === "VENTE" : profil === "MARCHES" ? c.cle !== "VENTE" : true));
+
+  // Profil Negoce : une seule voie possible, on y va directement.
+  useEffect(() => {
+    if (profil === "NEGOCE") router.replace("/marches/consultation-restreinte/consultations?nouveau=1&type=VENTE");
+  }, [profil, router]);
+
+  if (type === "AO") return <FormulaireAppelOffres />;
+
+  return (
+    <AppShell title={t("newDossierButton")}>
+      <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: -6, marginBottom: 20 }}>{t("nouveauTypeQuestion")}</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, maxWidth: 900 }}>
+        {choix.map((c) => {
+          const contenu = (
+            <>
+              <h2 style={{ fontSize: 16, color: "var(--petrol)", marginBottom: 8 }}>{t(c.titre)}</h2>
+              <p style={{ fontSize: 12.5, color: "var(--sub)", lineHeight: 1.5, marginBottom: 14 }}>{t(c.desc)}</p>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: c.accent }}>{t("nouveauTypeCommencer")} →</span>
+            </>
+          );
+          const style = { display: "block", padding: "22px 22px", textDecoration: "none", color: "inherit", borderTop: `3px solid ${c.accent}`, textAlign: "left", cursor: "pointer", font: "inherit" };
+          return c.href ? (
+            <Link key={c.cle} href={c.href} className="card" style={style}>{contenu}</Link>
+          ) : (
+            <button key={c.cle} type="button" onClick={() => setType(c.cle)} className="card" style={style}>{contenu}</button>
+          );
+        })}
+      </div>
+    </AppShell>
+  );
+}

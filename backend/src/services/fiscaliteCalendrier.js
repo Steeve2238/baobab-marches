@@ -86,9 +86,35 @@ async function echeancesSalaires(tenantId, annee) {
   });
 }
 
+/**
+ * Cotisations sociales (IPRES, CSS...) du module Paie : une echeance par mois de paie existant, au plus tard le 15 du mois
+ * suivant (date conventionnelle a confirmer selon le regime de declaration de l'entreprise). Le montant est repris des
+ * bulletins (cotisations salariales hors impot + charges patronales) des que la periode est validee ; le suivi reste saisi
+ * dans le calendrier.
+ */
+async function echeancesCotisations(tenantId, annee) {
+  const r = await db.query(
+    `SELECT p.id, p.annee, p.mois, p.statut,
+            COALESCE((SELECT SUM(b.charges_patronales) FROM paie_bulletin b WHERE b.periode_id = p.id), 0)
+            + COALESCE((SELECT SUM((x->>'montant')::numeric) FROM paie_bulletin b, jsonb_array_elements(COALESCE(b.calcul_json->'retenues', '[]'::jsonb)) x
+                        WHERE b.periode_id = p.id AND x->>'section' IS DISTINCT FROM 'IMPOT'), 0) AS montant
+     FROM paie_periode p JOIN tenant t ON t.id = p.tenant_id
+     WHERE p.tenant_id = $1 AND t.module_paie_actif = TRUE AND ((p.annee = $2 AND p.mois <= 11) OR (p.annee = $3 AND p.mois = 12))`,
+    [tenantId, annee, annee - 1]
+  ).catch(() => ({ rows: [] }));
+  return r.rows.map((x) => {
+    const cleMois = `${x.annee}-${pad(x.mois)}`;
+    return {
+      cle: `COTISATIONS:${cleMois}`, type: "COTISATIONS", libelle_cle: "COTISATIONS", periode: cleMois, date_limite: dateLimite(x.annee, x.mois), annee_periode: x.annee, mois_periode: x.mois,
+      automatique: false, paie_periode_id: x.id, paie_statut: x.statut, paie_montant: x.statut === "OUVERTE" ? null : num(x.montant),
+    };
+  });
+}
+
 async function lister(tenantId, annee) {
   const echeances = genererEcheances(annee);
   echeances.push(...(await echeancesSalaires(tenantId, annee)));
+  echeances.push(...(await echeancesCotisations(tenantId, annee)));
   echeances.sort((a, b) => a.date_limite.localeCompare(b.date_limite) || a.type.localeCompare(b.type));
   const cles = echeances.map((x) => x.cle);
   const suivis = await db.query(`SELECT * FROM fiscalite_suivi WHERE tenant_id = $1 AND cle = ANY($2)`, [tenantId, cles]);
@@ -181,7 +207,7 @@ async function lister(tenantId, annee) {
       }
     }
     // Paie : IR et TRIMF retenus sur salaires, montant repris de la periode de paie validee ou cloturee.
-    if (e.type === "SALAIRES" && e.paie_montant !== null && montant === null) montant = e.paie_montant;
+    if ((e.type === "SALAIRES" || e.type === "COTISATIONS") && e.paie_montant !== null && montant === null) montant = e.paie_montant;
     // Lot 5 : CEL et taxe sur les voitures suivies depuis leur dossier annuel.
     if (e.type.startsWith("CEL_") || e.type === "VEHICULES") {
       const dos = e.type === "VEHICULES" ? vehDossier : celDossier;
@@ -215,7 +241,7 @@ async function lister(tenantId, annee) {
       else alerte = "A_VENIR";
     }
     // La declaration de la CVA et son paiement portent sur le meme impot : les penalites sont estimees sur le paiement seulement.
-    const penalites = alerte === "EN_RETARD" && montant && e.type !== "CEL_DECLARATION" ? estimerPenalites({ montant, jours_retard: -joursRestants, type: e.type === "TVA" || e.type === "RETENUES" || e.type === "SALAIRES" || e.type.startsWith("CEL") ? e.type : "AUTRE", declaration_deposee: statut === "DEPOSEE" }) : null;
+    const penalites = alerte === "EN_RETARD" && montant && e.type !== "CEL_DECLARATION" && e.type !== "COTISATIONS" ? estimerPenalites({ montant, jours_retard: -joursRestants, type: e.type === "TVA" || e.type === "RETENUES" || e.type === "SALAIRES" || e.type.startsWith("CEL") ? e.type : "AUTRE", declaration_deposee: statut === "DEPOSEE" }) : null;
     return {
       ...e,
       statut,

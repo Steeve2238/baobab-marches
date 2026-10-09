@@ -217,6 +217,7 @@ export const api = {
   // dynamiquement le menu de gauche selon le profil.
   getPermissions: () => request("/auth/permissions"),
   getSignaux: () => request("/signaux"),
+  getEcheancesTableauBord: (jours = 30) => request(`/tableau-bord/echeances?jours=${jours}`),
   acquitterSignal: (id) => request(`/signaux/${id}/acquitter`, { method: "PATCH" }),
 
   // Module 1 - Extraction DAO & chronogramme

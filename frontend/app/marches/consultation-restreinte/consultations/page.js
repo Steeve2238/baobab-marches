@@ -63,7 +63,8 @@ export default function ConsultationsPage() {
         setForm((f) => ({ ...f, type: "VENTE" }));
       }
       if (q.get("nouveau") === "1") {
-        setForm((f) => ({ ...f, client_commercial_id: q.get("client_id") || "", type: "VENTE" }));
+        const typeNouveau = q.get("type") === "CONSULTATION" ? "CONSULTATION" : "VENTE";
+        setForm((f) => ({ ...f, client_commercial_id: q.get("client_id") || "", type: typeNouveau }));
         setAfficherForm(true);
       }
     } catch (e) {

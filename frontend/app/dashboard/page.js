@@ -25,7 +25,7 @@ const GROUPES_STATUT = {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { t, statutLabel, dict } = useLangue();
+  const { t, statutLabel, dict, typeDemandeRHLabel } = useLangue();
   const [dossiers, setDossiers] = useState([]);
   const [signaux, setSignaux] = useState([]);
   const [fournisseurs, setFournisseurs] = useState([]);
@@ -39,6 +39,9 @@ export default function DashboardPage() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [filtreGroupe, setFiltreGroupe] = useState(null);
+  // Blocs « Prochaines échéances » et « À traiter » (09/10/2026).
+  const [echeances, setEcheances] = useState(null);
+  const [aTraiter, setATraiter] = useState(null);
   // Periode d'analyse (vue dirigeant) : filtre les dossiers selon leur date de creation.
   const [periode, setPeriode] = useState("TOUT");
 
@@ -160,6 +163,60 @@ export default function DashboardPage() {
     if (groupe) statsGroupes[groupe] += 1;
     parStatut[d.statut] = (parStatut[d.statut] || 0) + 1;
   }
+  // Échéances (30 jours) et éléments à traiter : chargés à part, chaque source tolère un refus (403) sans bloquer le tableau de bord.
+  useEffect(() => {
+    if (!permissions) return;
+    let actif = true;
+    const aRH = permissions.admin || (permissions.modules || []).includes("rh") || permissions.validateurUniversel;
+    Promise.allSettled([
+      api.getEcheancesTableauBord(30),
+      api.getMesTaches(false),
+      aRH ? api.getDemandesRHAValider() : Promise.resolve([]),
+      aRH ? api.getFichesTempsAValider() : Promise.resolve([]),
+    ]).then(([ech, taches, demandes, fiches]) => {
+      if (!actif) return;
+      setEcheances(ech.status === "fulfilled" ? ech.value : { items: [], retards: 0, total: 0 });
+      const liste = [];
+      (taches.status === "fulfilled" ? taches.value : []).forEach((x) =>
+        liste.push({
+          cle: `T${x.id}`,
+          type: "tache",
+          titre: x.intitule,
+          detail: x.contexte_principal || null,
+          date: x.date_echeance || null,
+          lien: x.source_type === "CONSULTATION" ? `/marches/consultation-restreinte/consultations/${x.lien_id}` : `/dossiers/${x.lien_id}`,
+          retard: x.statut === "EN_RETARD",
+        })
+      );
+      (demandes.status === "fulfilled" ? demandes.value : []).forEach((x) =>
+        liste.push({
+          cle: `D${x.id}`,
+          type: "demande",
+          titre: typeDemandeRHLabel(x.type_demande),
+          detail: [x.employe_prenom, x.employe_nom].filter(Boolean).join(" "),
+          date: x.date_soumission || null,
+          lien: "/rh/demandes",
+        })
+      );
+      (fiches.status === "fulfilled" ? fiches.value : []).forEach((x) =>
+        liste.push({
+          cle: `F${x.id}`,
+          type: "fiche",
+          titre: null,
+          detail: [x.employe_prenom, x.employe_nom].filter(Boolean).join(" "),
+          date: x.semaine_debut || null,
+          lien: "/rh/fiches-temps",
+        })
+      );
+      // En retard d'abord, puis par date d'échéance croissante (sans date en dernier).
+      liste.sort((a, b) => (b.retard ? 1 : 0) - (a.retard ? 1 : 0) || String(a.date || "9999").localeCompare(String(b.date || "9999")));
+      setATraiter(liste);
+    });
+    return () => {
+      actif = false;
+    };
+  }, [permissions]);
+
   const dossiersAffiches = filtreGroupe
     ? dossiersPeriode.filter((d) => GROUPES_STATUT[d.statut] === filtreGroupe)
     : dossiersPeriode;
@@ -275,6 +332,12 @@ export default function DashboardPage() {
                 {t(cle)}
               </button>
             ))}
+            {/* Création rapide : choix du type de dossier (appel d'offres, consultation restreinte, vente). */}
+            {!permissions?.lectureSeule && (
+              <Link href="/dossiers/nouveau" style={{ ...boutonNouveauDossierStyle, marginLeft: "auto" }}>
+                + {t("newDossierButton")}
+              </Link>
+            )}
           </div>
 
           {signauxActifs.length === 0 ? (
@@ -433,6 +496,77 @@ export default function DashboardPage() {
             )}
           </section>
 
+          {/* Prochaines échéances + À traiter */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 10, marginBottom: 24 }}>
+            <section className="card" style={{ padding: "14px 16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                <h2 style={{ ...chartTitreStyle, margin: 0 }}>{t("dashEcheancesTitre")}</h2>
+                {echeances && echeances.retards > 0 && (
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brique)" }}>
+                    {echeances.retards} {t("dashEchRetardMin")}
+                  </span>
+                )}
+              </div>
+              {echeances === null ? (
+                <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>…</p>
+              ) : echeances.items.length === 0 ? (
+                <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{t("dashEcheancesVide")}</p>
+              ) : (
+                <div style={{ display: "grid", gap: 2 }}>
+                  {echeances.items.slice(0, 8).map((e, i) => (
+                    <Link key={`${e.source}-${e.date}-${i}`} href={e.lien} style={ligneBlocStyle}>
+                      <span style={{ ...pastilleDateStyle, color: e.niveau === "RETARD" ? "var(--brique)" : e.niveau === "IMMINENT" ? "var(--ocre)" : "var(--sub)" }}>
+                        {libelleDelai(e.jours, t)}
+                      </span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ fontWeight: 600 }}>{libelleEcheance(e, t, dict.dateLocale)}</span>
+                        {e.detail ? <span style={{ color: "var(--sub)" }}>{" · "}{e.detail}</span> : null}
+                      </span>
+                      {e.montant ? (
+                        <span className="mono" style={{ fontSize: 11.5, color: "var(--ink)", flexShrink: 0 }}>
+                          {Math.round(e.montant).toLocaleString(dict.dateLocale)}
+                        </span>
+                      ) : null}
+                    </Link>
+                  ))}
+                  {echeances.items.length > 8 && (
+                    <span style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>+ {echeances.items.length - 8}</span>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <section className="card" style={{ padding: "14px 16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
+                <h2 style={{ ...chartTitreStyle, margin: 0 }}>{t("dashATraiterTitre")}</h2>
+                <Link href="/mes-taches" style={{ fontSize: 11, color: "var(--petrol)", fontWeight: 600 }}>{t("dashVoirTout")} →</Link>
+              </div>
+              {aTraiter === null ? (
+                <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>…</p>
+              ) : aTraiter.length === 0 ? (
+                <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{t("dashATraiterVide")}</p>
+              ) : (
+                <div style={{ display: "grid", gap: 2 }}>
+                  {aTraiter.slice(0, 8).map((x) => (
+                    <Link key={x.cle} href={x.lien} style={ligneBlocStyle}>
+                      <span style={{ ...pastilleTypeStyle, background: x.type === "tache" ? "rgba(0,0,0,0.05)" : "rgba(184,116,38,0.14)", color: x.type === "tache" ? "var(--sub)" : "var(--ocre)" }}>
+                        {t(x.type === "tache" ? "dashATache" : x.type === "demande" ? "dashADemande" : "dashAFiche")}
+                      </span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ fontWeight: 600 }}>{x.titre || x.detail}</span>
+                        {x.titre && x.detail ? <span style={{ color: "var(--sub)" }}>{" · "}{x.detail}</span> : null}
+                      </span>
+                      {x.retard && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--brique)", flexShrink: 0 }}>{t("dashEchRetard")}</span>}
+                    </Link>
+                  ))}
+                  {aTraiter.length > 8 && (
+                    <span style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>+ {aTraiter.length - 8}</span>
+                  )}
+                </div>
+              )}
+            </section>
+          </div>
+
           <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 12 }}>{t("domainStatsSection")}</h2>
           <div
             style={{
@@ -461,26 +595,15 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("ongoingFiles")}</h2>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {filtreGroupe && (
+          {/* La liste complète n'apparaît que lorsqu'un filtre (anneau, KPI) est actif. */}
+          {filtreGroupe && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("ongoingFiles")}</h2>
                 <button onClick={() => setFiltreGroupe(null)} style={boutonEffacerFiltreStyle}>
                   {t("clearFilter")}
                 </button>
-              )}
-              {/* Masque en mode lecture seule (Directeur General) : le clic
-                  aboutirait de toute facon a un 403 cote backend
-                  (blockLectureSeule sur dossiers.js), autant ne pas exposer
-                  un bouton qui ne peut jamais fonctionner pour ce profil. */}
-              {!permissions?.lectureSeule && (
-                <Link href="/dossiers/nouveau" style={boutonNouveauDossierStyle}>
-                  + {t("newDossierButton")}
-                </Link>
-              )}
-            </div>
-          </div>
-
+              </div>
           {dossiersAffiches.length === 0 ? (
             <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>
               {t("noFiles")}
@@ -515,6 +638,8 @@ export default function DashboardPage() {
                 </Link>
               ))}
             </div>
+          )}
+            </>
           )}
         </>
       )}
@@ -663,4 +788,27 @@ function statutClasse(statut) {
   if (["ATTRIBUE", "EN_EXECUTION", "RECEPTION", "CLOTURE"].includes(statut)) return "ok";
   if (["NON_ATTRIBUE", "NO_GO"].includes(statut)) return "risk";
   return "warn";
+}
+
+const ligneBlocStyle = { display: "flex", gap: 10, alignItems: "baseline", fontSize: 12.5, color: "var(--ink)", textDecoration: "none", padding: "4px 0", borderBottom: "1px solid var(--line)" };
+const pastilleDateStyle = { fontSize: 11, fontWeight: 700, width: 74, flexShrink: 0, whiteSpace: "nowrap" };
+const pastilleTypeStyle = { fontSize: 10.5, fontWeight: 700, padding: "1px 7px", borderRadius: 10, flexShrink: 0, whiteSpace: "nowrap" };
+
+function libelleDelai(jours, t) {
+  if (jours < 0) return `${t("dashEchRetardCourt")} ${-jours} ${t("dashJoursCourt")}`;
+  if (jours === 0) return t("dashAujourdhui");
+  return `${t("dashDans")} ${jours} ${t("dashJoursCourt")}`;
+}
+
+function libelleEcheance(e, t, locale) {
+  if (e.source === "FISCAL" || e.source === "SOCIAL") {
+    const base = t(`fiscEch${e.type}`);
+    if (["TVA", "RETENUES", "SALAIRES", "COTISATIONS"].includes(e.type) && e.mois_periode) {
+      const mois = new Date(2000, e.mois_periode - 1, 1).toLocaleDateString(locale, { month: "long" });
+      return `${base} — ${mois} ${e.annee_periode}`;
+    }
+    return base;
+  }
+  const prefixe = { DOSSIER: "dashSrcDossier", COMMANDE: "dashSrcCommande", PAIEMENT_FOURNISSEUR: "dashSrcPaiementFournisseur", ENCAISSEMENT_CLIENT: "dashSrcEncaissement", FINANCEMENT: "dashSrcFinancement" }[e.source];
+  return `${prefixe ? t(prefixe) : ""} : ${e.titre}`;
 }
