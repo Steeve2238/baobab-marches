@@ -39,6 +39,8 @@ export default function DashboardPage() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [filtreGroupe, setFiltreGroupe] = useState(null);
+  // Periode d'analyse (vue dirigeant) : filtre les dossiers selon leur date de creation.
+  const [periode, setPeriode] = useState("TOUT");
 
   useEffect(() => {
     async function charger() {
@@ -138,14 +140,44 @@ export default function DashboardPage() {
 
   const signauxActifs = signaux.filter((s) => !s.accuse_reception);
 
+  const maintenant = new Date();
+  const debutPeriode =
+    periode === "MOIS"
+      ? new Date(maintenant.getFullYear(), maintenant.getMonth(), 1)
+      : periode === "TRIMESTRE"
+      ? new Date(maintenant.getFullYear(), maintenant.getMonth() - 2, 1)
+      : periode === "ANNEE"
+      ? new Date(maintenant.getFullYear(), 0, 1)
+      : null;
+  const dossiersPeriode = debutPeriode
+    ? dossiers.filter((d) => d.date_creation && new Date(d.date_creation) >= debutPeriode)
+    : dossiers;
+
   const statsGroupes = { OUVERT: 0, EN_COURS: 0, TERMINE: 0, REJETE: 0 };
-  for (const d of dossiers) {
+  const parStatut = {};
+  for (const d of dossiersPeriode) {
     const groupe = GROUPES_STATUT[d.statut];
     if (groupe) statsGroupes[groupe] += 1;
+    parStatut[d.statut] = (parStatut[d.statut] || 0) + 1;
   }
   const dossiersAffiches = filtreGroupe
-    ? dossiers.filter((d) => GROUPES_STATUT[d.statut] === filtreGroupe)
-    : dossiers;
+    ? dossiersPeriode.filter((d) => GROUPES_STATUT[d.statut] === filtreGroupe)
+    : dossiersPeriode;
+  const totalPeriode = dossiersPeriode.length;
+  const tauxRejet = totalPeriode > 0 ? Math.round((statsGroupes.REJETE / totalPeriode) * 100) : null;
+
+  // Points d'attention : faits lisibles dans les donnees, sans regle de retard inventee.
+  // Dossiers rejetes ; date limite de soumission proche (7 jours) ou depassee pour un dossier pas encore soumis.
+  const pointsAttention = [];
+  for (const d of dossiersPeriode) {
+    if (GROUPES_STATUT[d.statut] === "REJETE") pointsAttention.push({ id: d.id, niveau: "critique", type: "rejete", dossier: d });
+    else if ((d.statut === "ANALYSE" || d.statut === "GO") && d.date_limite_soumission) {
+      const jours = Math.ceil((new Date(d.date_limite_soumission) - maintenant) / 86400000);
+      if (jours < 0) pointsAttention.push({ id: d.id, niveau: "critique", type: "depasse", dossier: d, jours: -jours });
+      else if (jours <= 7) pointsAttention.push({ id: d.id, niveau: "attention", type: "proche", dossier: d, jours });
+    }
+  }
+  pointsAttention.sort((a, b) => (a.niveau === b.niveau ? 0 : a.niveau === "critique" ? -1 : 1));
 
   function handleClicStat(groupe) {
     setFiltreGroupe((prev) => (prev === groupe ? null : groupe));
@@ -218,9 +250,56 @@ export default function DashboardPage() {
 
       {!chargement && !erreur && (
         <>
+          {/* Filtre de periode (vue dirigeant) */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 14 }}>
+            <span style={{ fontSize: 11.5, color: "var(--sub)", fontWeight: 600 }}>{t("dashPeriode")}</span>
+            {[["TOUT", "dashPeriodeTout"], ["MOIS", "dashPeriodeMois"], ["TRIMESTRE", "dashPeriodeTrimestre"], ["ANNEE", "dashPeriodeAnnee"]].map(([k, cle]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => {
+                  setPeriode(k);
+                  setFiltreGroupe(null);
+                }}
+                style={{
+                  border: "1px solid var(--line)",
+                  background: periode === k ? "var(--petrol)" : "#fff",
+                  color: periode === k ? "#fff" : "var(--ink)",
+                  borderRadius: 999,
+                  padding: "4px 12px",
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                {t(cle)}
+              </button>
+            ))}
+          </div>
+
+          {signauxActifs.length === 0 ? (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                background: "var(--petrol)",
+                color: "#C9DEDC",
+                borderRadius: 10,
+                padding: "8px 14px",
+                fontSize: 12,
+                marginBottom: 16,
+              }}
+            >
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#5FB8C4", flexShrink: 0 }} />
+              <span>
+                <strong style={{ color: "#fff" }}>0 {t("signalSingular")}</strong> · {t("dashAucunSignalCourt")}
+              </span>
+            </div>
+          ) : (
           <section
             className="card"
-            style={{ background: "var(--petrol)", color: "#fff", marginBottom: 24 }}
+            style={{ background: "var(--petrol)", color: "#fff", marginBottom: 16 }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
               <div style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 15 }}>
@@ -274,49 +353,85 @@ export default function DashboardPage() {
             )}
           </section>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-              gap: 10,
-              marginBottom: 24,
-            }}
-          >
+          )}
+
+          {/* 4 indicateurs essentiels */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 16 }}>
+            <StatCard valeur={totalPeriode} libelle={t("statTotalFiles")} actif={filtreGroupe === null} onClick={() => setFiltreGroupe(null)} />
+            <StatCard valeur={statsGroupes.OUVERT} libelle={t("statOpenFiles")} couleur="var(--ocre)" actif={filtreGroupe === "OUVERT"} onClick={() => handleClicStat("OUVERT")} />
             <StatCard
-              valeur={dossiers.length}
-              libelle={t("statTotalFiles")}
-              actif={filtreGroupe === null}
-              onClick={() => setFiltreGroupe(null)}
-            />
-            <StatCard
-              valeur={statsGroupes.OUVERT}
-              libelle={t("statOpenFiles")}
-              couleur="var(--ocre)"
-              actif={filtreGroupe === "OUVERT"}
-              onClick={() => handleClicStat("OUVERT")}
-            />
-            <StatCard
-              valeur={statsGroupes.EN_COURS}
-              libelle={t("statOngoingFiles")}
-              couleur="#5FB8C4"
-              actif={filtreGroupe === "EN_COURS"}
-              onClick={() => handleClicStat("EN_COURS")}
-            />
-            <StatCard
-              valeur={statsGroupes.TERMINE}
-              libelle={t("statClosedFiles")}
-              couleur="#2E7D5B"
-              actif={filtreGroupe === "TERMINE"}
-              onClick={() => handleClicStat("TERMINE")}
-            />
-            <StatCard
-              valeur={statsGroupes.REJETE}
-              libelle={t("statRejectedFiles")}
-              couleur="var(--brique)"
+              valeur={tauxRejet === null ? "—" : `${tauxRejet} %`}
+              libelle={`${t("dashTauxRejet")}${totalPeriode > 0 ? ` (${statsGroupes.REJETE}/${totalPeriode})` : ""}`}
+              couleur={statsGroupes.REJETE > 0 ? "var(--brique)" : "var(--petrol)"}
               actif={filtreGroupe === "REJETE"}
               onClick={() => handleClicStat("REJETE")}
             />
+            <StatCard valeur={signauxActifs.length} libelle={t("dashSignauxActifs")} couleur={signauxActifs.length > 0 ? "var(--ocre)" : "var(--petrol)"} actif={false} onClick={() => {}} />
           </div>
+          {totalPeriode > 0 && totalPeriode < 5 && (
+            <p style={{ fontSize: 11, color: "var(--sub)", marginTop: -8, marginBottom: 14 }}>{t("dashPetitEchantillon")}</p>
+          )}
+
+          {/* Graphiques de synthese */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 10, marginBottom: 16 }}>
+            <section className="card" style={{ padding: "14px 16px" }}>
+              <h2 style={chartTitreStyle}>{t("dashRepartitionStatut")}</h2>
+              <Anneau
+                total={totalPeriode}
+                segments={[
+                  { cle: "OUVERT", libelle: t("statOpenFiles"), valeur: statsGroupes.OUVERT, couleur: "var(--ocre)" },
+                  { cle: "EN_COURS", libelle: t("statOngoingFiles"), valeur: statsGroupes.EN_COURS, couleur: "#5FB8C4" },
+                  { cle: "TERMINE", libelle: t("statClosedFiles"), valeur: statsGroupes.TERMINE, couleur: "#2E7D5B" },
+                  { cle: "REJETE", libelle: t("statRejectedFiles"), valeur: statsGroupes.REJETE, couleur: "var(--brique)" },
+                ]}
+                actifCle={filtreGroupe}
+                onChoisir={handleClicStat}
+                unite={t("dashUniteDossiers")}
+                vide={t("dashAucunDossier")}
+              />
+            </section>
+            <section className="card" style={{ padding: "14px 16px" }}>
+              <h2 style={chartTitreStyle}>{t("dashDossiersParEtape")}</h2>
+              <BarresHorizontales
+                lignes={["ANALYSE", "GO", "SOUMIS", "ATTRIBUE", "EN_EXECUTION", "RECEPTION", "CLOTURE", "NON_ATTRIBUE", "NO_GO"].map((st) => ({
+                  cle: st,
+                  libelle: statutLabel(st),
+                  valeur: parStatut[st] || 0,
+                  couleur: GROUPES_STATUT[st] === "REJETE" ? "var(--brique)" : GROUPES_STATUT[st] === "TERMINE" ? "#2E7D5B" : GROUPES_STATUT[st] === "EN_COURS" ? "#5FB8C4" : "var(--ocre)",
+                }))}
+                vide={t("dashAucunDossier")}
+              />
+            </section>
+          </div>
+
+          {/* Points d'attention */}
+          <section className="card" style={{ padding: "14px 16px", marginBottom: 24 }}>
+            <h2 style={chartTitreStyle}>{t("dashPointsAttention")}</h2>
+            {pointsAttention.length === 0 ? (
+              <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{t("dashAucunPoint")}</p>
+            ) : (
+              <div style={{ display: "grid", gap: 6 }}>
+                {pointsAttention.slice(0, 6).map((p) => (
+                  <Link
+                    key={`${p.type}-${p.id}`}
+                    href={`/dossiers/${p.id}`}
+                    style={{ display: "flex", gap: 10, alignItems: "baseline", fontSize: 12.5, color: "var(--ink)", textDecoration: "none" }}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: p.niveau === "critique" ? "var(--brique)" : "var(--ocre)" }} />
+                    <span style={{ fontWeight: 600 }}>{p.dossier.intitule}</span>
+                    <span style={{ color: "var(--sub)" }}>
+                      {p.type === "rejete" && t("dashPointRejete")}
+                      {p.type === "depasse" && `${t("dashPointDepasse")} (${p.jours} ${t("dashJours")})`}
+                      {p.type === "proche" && `${t("dashPointProche")} ${p.jours} ${t("dashJours")}`}
+                    </span>
+                  </Link>
+                ))}
+                {pointsAttention.length > 6 && (
+                  <span style={{ fontSize: 11, color: "var(--sub)" }}>+ {pointsAttention.length - 6}</span>
+                )}
+              </div>
+            )}
+          </section>
 
           <h2 style={{ fontSize: 15.5, color: "var(--petrol)", marginBottom: 12 }}>{t("domainStatsSection")}</h2>
           <div
@@ -426,6 +541,83 @@ function StatCard({ valeur, libelle, couleur = "var(--petrol)", actif, onClick }
       </div>
       <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 2 }}>{libelle}</div>
     </button>
+  );
+}
+
+const chartTitreStyle = { fontSize: 13, color: "var(--petrol)", margin: "0 0 10px", fontWeight: 700 };
+
+// Anneau de repartition (SVG) : un segment par groupe de statut, cliquable pour filtrer la liste.
+function Anneau({ total, segments, actifCle, onChoisir, vide, unite }) {
+  const R = 44;
+  const C = 2 * Math.PI * R;
+  if (total === 0) return <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{vide}</p>;
+  let cumul = 0;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+      <svg width="124" height="124" viewBox="0 0 124 124" role="img" aria-label="Répartition par statut">
+        <circle cx="62" cy="62" r={R} fill="none" stroke="#E6ECEB" strokeWidth="16" />
+        {segments
+          .filter((sg) => sg.valeur > 0)
+          .map((sg) => {
+            const longueur = (sg.valeur / total) * C;
+            const decalage = -cumul;
+            cumul += longueur;
+            return (
+              <circle
+                key={sg.cle}
+                cx="62"
+                cy="62"
+                r={R}
+                fill="none"
+                stroke={sg.couleur}
+                strokeWidth={actifCle === sg.cle ? 20 : 16}
+                strokeDasharray={`${Math.max(longueur - 1.5, 0.5)} ${C}`}
+                strokeDashoffset={decalage}
+                transform="rotate(-90 62 62)"
+                style={{ cursor: "pointer", opacity: actifCle && actifCle !== sg.cle ? 0.35 : 1 }}
+                onClick={() => onChoisir(sg.cle)}
+              />
+            );
+          })}
+        <text x="62" y="60" textAnchor="middle" style={{ fontSize: 22, fontWeight: 700, fill: "#12292C" }}>{total}</text>
+        <text x="62" y="76" textAnchor="middle" style={{ fontSize: 9, fill: "#5B6A6C" }}>{unite}</text>
+      </svg>
+      <div style={{ display: "grid", gap: 6, fontSize: 12 }}>
+        {segments.map((sg) => (
+          <button
+            key={sg.cle}
+            type="button"
+            onClick={() => onChoisir(sg.cle)}
+            style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit", fontSize: 12, color: "var(--ink)", textAlign: "left", fontWeight: actifCle === sg.cle ? 700 : 400 }}
+          >
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: sg.couleur, flexShrink: 0 }} />
+            <span>{sg.libelle}</span>
+            <span className="mono" style={{ marginLeft: "auto", paddingLeft: 10 }}>
+              {sg.valeur} · {Math.round((sg.valeur / total) * 100)} %
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Barres horizontales : meme unite (nombre de dossiers) pour toutes les lignes.
+function BarresHorizontales({ lignes, vide }) {
+  const max = Math.max(1, ...lignes.map((l) => l.valeur));
+  if (lignes.every((l) => l.valeur === 0)) return <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{vide}</p>;
+  return (
+    <div style={{ display: "grid", gap: 7 }}>
+      {lignes.map((l) => (
+        <div key={l.cle} style={{ display: "grid", gridTemplateColumns: "92px 1fr 22px", gap: 8, alignItems: "center", fontSize: 11.5 }}>
+          <span style={{ color: "var(--sub)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.libelle}</span>
+          <span style={{ background: "#E6ECEB", borderRadius: 4, height: 9, overflow: "hidden" }}>
+            <span style={{ display: "block", height: "100%", width: `${(l.valeur / max) * 100}%`, background: l.couleur, borderRadius: 4 }} />
+          </span>
+          <span className="mono" style={{ textAlign: "right" }}>{l.valeur}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

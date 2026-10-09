@@ -75,7 +75,7 @@ router.get("/", async (req, res) => {
   try {
     const result = await db.query(
       `SELECT d.id, d.reference_externe, d.intitule, d.secteur, d.montant_estime,
-              d.devise, d.date_limite_soumission, d.statut,
+              d.devise, d.date_limite_soumission, d.statut, d.date_creation,
               mo.nom AS maitre_ouvrage_nom
        FROM dossier_ao d
        LEFT JOIN maitre_ouvrage mo ON mo.id = d.maitre_ouvrage_id

@@ -79,6 +79,18 @@ export default function CalculPrixListePage() {
     <AppShell title={t("calcPrixListTitle")}>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 12 }}>{t("calcPrixListSubtitle")}</p>
 
+      {/* Aide : explique le dossier de calcul simplement ; ouverte tant qu'aucun dossier n'existe. */}
+      <details className="card" open={!chargement && dossiers.length === 0} style={{ marginBottom: 14 }}>
+        <summary style={{ cursor: "pointer", fontSize: 13.5, fontWeight: 700, color: "var(--petrol)" }}>{t("calcPrixAideTitre")}</summary>
+        <p style={{ fontSize: 12.5, lineHeight: 1.55, margin: "10px 0 8px" }}>{t("calcPrixAideIntro")}</p>
+        <ol style={{ fontSize: 12.5, lineHeight: 1.55, margin: "0 0 8px", paddingLeft: 20 }}>
+          <li>{t("calcPrixAide1")}</li>
+          <li>{t("calcPrixAide2")}</li>
+          <li>{t("calcPrixAide3")}</li>
+        </ol>
+        <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{t("calcPrixAideExemple")}</p>
+      </details>
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
         <button type="button" onClick={ouvrirFormulaire} style={boutonPrincipalStyle}>
           {t("calcPrixNouveauBouton")}

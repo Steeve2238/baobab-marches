@@ -219,21 +219,94 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
   // (et a chaque changement de page), sinon celui choisi par un clic.
   const groupeActif = NAV_ITEMS.find((e) => e.items && e.items.some((i) => entreeActive(i, pathname)))?.id || null;
   const [groupeOuvert, setGroupeOuvert] = useState(groupeActif);
+  // Menu depliant : epingle (fixe, comme avant) ou replie en barre fine qui se deplie au survol. Choix memorise
+  // par navigateur ; epingle par defaut.
+  const [epingle, setEpingle] = useState(true);
+  const [survol, setSurvol] = useState(false);
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("baobab_menu_epingle") === "0") setEpingle(false);
+    } catch (e) {
+      /* stockage indisponible : on reste epingle */
+    }
+  }, []);
+  function basculerEpingle() {
+    const suivant = !epingle;
+    setEpingle(suivant);
+    setSurvol(false);
+    try {
+      window.localStorage.setItem("baobab_menu_epingle", suivant ? "1" : "0");
+    } catch (e) {
+      /* ignore */
+    }
+  }
+  const deplie = epingle || survol;
   useEffect(() => {
     if (groupeActif) setGroupeOuvert(groupeActif);
   }, [groupeActif]);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      <aside style={sidebarStyle}>
-        <div style={{ padding: "22px 18px 18px", display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ width: epingle ? SIDEBAR_LARGEUR : SIDEBAR_RAIL, flexShrink: 0, transition: "width 0.18s" }}>
+      <aside
+        style={{
+          ...sidebarStyle,
+          width: deplie ? SIDEBAR_LARGEUR : SIDEBAR_RAIL,
+          boxShadow: !epingle && survol ? "6px 0 24px rgba(0,0,0,0.28)" : "none",
+        }}
+        onMouseEnter={() => setSurvol(true)}
+        onMouseLeave={() => setSurvol(false)}
+        onFocus={() => setSurvol(true)}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget)) setSurvol(false);
+        }}
+      >
+        {!deplie ? (
+          <div
+            onClick={() => setSurvol(true)}
+            title={t("menuDeplier")}
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", height: "100%", padding: "18px 0", cursor: "pointer" }}
+          >
+            <div style={logoStyle}>B</div>
+            <div style={avatarStyle}>
+              {profil?.prenom ? profil.prenom.charAt(0) : (profil?.email || "?").charAt(0)}
+              {profil?.nom ? profil.nom.charAt(0) : ""}
+            </div>
+          </div>
+        ) : (
+        <>
+        <div style={{ padding: "20px 14px 16px 18px", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={logoStyle}>B</div>
-          <div>
-            <div style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 14.5, color: "#fff" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: "Space Grotesk", fontWeight: 700, fontSize: 13.5, color: "#fff", whiteSpace: "nowrap" }}>
               Baobab Marchés
             </div>
-            <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.6)" }}>{t("appSubtitle")}</div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", whiteSpace: "nowrap" }}>{t("appSubtitle")}</div>
           </div>
+          <button
+            type="button"
+            onClick={basculerEpingle}
+            aria-pressed={epingle}
+            title={epingle ? t("menuDesepingler") : t("menuEpingler")}
+            style={{
+              background: epingle ? "rgba(224,149,76,0.22)" : "transparent",
+              border: "1px solid rgba(255,255,255,0.18)",
+              borderRadius: 6,
+              width: 26,
+              height: 26,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              flexShrink: 0,
+              padding: 0,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill={epingle ? "#E0954C" : "none"} stroke={epingle ? "#E0954C" : "rgba(255,255,255,0.75)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: epingle ? "none" : "rotate(45deg)" }} aria-hidden="true">
+              <path d="M12 17v5" />
+              <path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6z" />
+            </svg>
+          </button>
         </div>
 
         {/* flex 1 1 auto + minHeight:0 + overflowY:auto : quand la liste de
@@ -260,13 +333,13 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "space-between",
-                    padding: "9px 12px",
+                    padding: "8px 12px",
                     borderRadius: 8,
                     border: "none",
                     background: "transparent",
                     cursor: "pointer",
                     fontFamily: "inherit",
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: contientActif ? 700 : 600,
                     color: contientActif ? "#fff" : "rgba(255,255,255,0.85)",
                     textAlign: "left",
@@ -324,7 +397,7 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
                 {profil.prenom && (
                   <div
                     style={{
-                      fontSize: 12.5,
+                      fontSize: 11.5,
                       fontWeight: 600,
                       color: "#fff",
                       whiteSpace: "nowrap",
@@ -337,7 +410,7 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
                 )}
                 <div
                   style={{
-                    fontSize: profil.prenom ? 10 : 12.5,
+                    fontSize: profil.prenom ? 9.5 : 11.5,
                     fontWeight: profil.prenom ? 400 : 600,
                     color: profil.prenom ? "rgba(255,255,255,0.55)" : "#fff",
                     whiteSpace: "nowrap",
@@ -354,7 +427,10 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
             {t("signOut")}
           </button>
         </div>
+        </>
+        )}
       </aside>
+      </div>
 
       <main style={{ flex: 1, background: "var(--bg)", minWidth: 0 }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 28px 60px" }}>
@@ -395,9 +471,10 @@ function NavLien({ item, actif, t, sousMenu }) {
       href={item.href}
       style={{
         display: "block",
-        padding: sousMenu ? "7px 12px" : "9px 12px",
+        padding: sousMenu ? "6px 12px" : "8px 12px",
         borderRadius: 8,
-        fontSize: sousMenu ? 12.5 : 13,
+        fontSize: sousMenu ? 11.5 : 12,
+        whiteSpace: "nowrap",
         fontWeight: actif ? 700 : 500,
         color: actif ? "#fff" : "rgba(255,255,255,0.65)",
         background: actif ? "rgba(255,255,255,0.14)" : "transparent",
@@ -409,15 +486,21 @@ function NavLien({ item, actif, t, sousMenu }) {
   );
 }
 
+const SIDEBAR_LARGEUR = 216;
+const SIDEBAR_RAIL = 52;
+
 const sidebarStyle = {
-  width: 216,
-  flexShrink: 0,
+  width: SIDEBAR_LARGEUR,
   background: "var(--petrol)",
   display: "flex",
   flexDirection: "column",
-  position: "sticky",
+  position: "fixed",
   top: 0,
+  left: 0,
   height: "100vh",
+  zIndex: 40,
+  overflow: "hidden",
+  transition: "width 0.18s",
 };
 
 const logoStyle = {
@@ -454,6 +537,6 @@ const logoutBtnStyle = {
   border: "1px solid rgba(255,255,255,0.15)",
   color: "#fff",
   borderRadius: 8,
-  padding: "8px 12px",
-  fontSize: 12.5,
+  padding: "7px 12px",
+  fontSize: 11.5,
 };
