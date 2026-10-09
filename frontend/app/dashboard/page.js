@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "../../lib/api";
@@ -39,6 +39,9 @@ export default function DashboardPage() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
   const [filtreGroupe, setFiltreGroupe] = useState(null);
+  // Filtre par étape précise (clic sur une barre de « Dossiers par étape »).
+  const [filtreStatut, setFiltreStatut] = useState(null);
+  const listeRef = useRef(null);
   // Blocs « Prochaines échéances » et « À traiter » (09/10/2026).
   const [echeances, setEcheances] = useState(null);
   const [aTraiter, setATraiter] = useState(null);
@@ -217,9 +220,18 @@ export default function DashboardPage() {
     };
   }, [permissions]);
 
-  const dossiersAffiches = filtreGroupe
+  const echeancesRetard = (echeances?.items || []).filter((e) => e.jours < 0);
+  const echeancesAVenir = (echeances?.items || []).filter((e) => e.jours >= 0);
+  const filtreActif = !!(filtreGroupe || filtreStatut);
+  const dossiersAffiches = filtreStatut
+    ? dossiersPeriode.filter((d) => d.statut === filtreStatut)
+    : filtreGroupe
     ? dossiersPeriode.filter((d) => GROUPES_STATUT[d.statut] === filtreGroupe)
     : dossiersPeriode;
+  // La liste s'affiche sous la page : on y amène la vue quand un filtre est choisi.
+  useEffect(() => {
+    if ((filtreGroupe || filtreStatut) && listeRef.current) listeRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [filtreGroupe, filtreStatut]);
   const totalPeriode = dossiersPeriode.length;
   const tauxRejet = totalPeriode > 0 ? Math.round((statsGroupes.REJETE / totalPeriode) * 100) : null;
 
@@ -229,15 +241,26 @@ export default function DashboardPage() {
   for (const d of dossiersPeriode) {
     if (GROUPES_STATUT[d.statut] === "REJETE") pointsAttention.push({ id: d.id, niveau: "critique", type: "rejete", dossier: d });
     else if ((d.statut === "ANALYSE" || d.statut === "GO") && d.date_limite_soumission) {
-      const jours = Math.ceil((new Date(d.date_limite_soumission) - maintenant) / 86400000);
+      // Jours calendaires (minuit à minuit), même convention que le bloc « Prochaines échéances ».
+      const jours = joursCalendaires(d.date_limite_soumission);
       if (jours < 0) pointsAttention.push({ id: d.id, niveau: "critique", type: "depasse", dossier: d, jours: -jours });
       else if (jours <= 7) pointsAttention.push({ id: d.id, niveau: "attention", type: "proche", dossier: d, jours });
     }
   }
+  const pointsDepasses = pointsAttention.filter((p) => p.type === "depasse");
   pointsAttention.sort((a, b) => (a.niveau === b.niveau ? 0 : a.niveau === "critique" ? -1 : 1));
 
   function handleClicStat(groupe) {
+    setFiltreStatut(null);
     setFiltreGroupe((prev) => (prev === groupe ? null : groupe));
+  }
+  function handleClicEtape(statut) {
+    setFiltreGroupe(null);
+    setFiltreStatut((prev) => (prev === statut ? null : statut));
+  }
+  function effacerFiltres() {
+    setFiltreGroupe(null);
+    setFiltreStatut(null);
   }
 
   const scoresFiabilite = fournisseurs.map((f) => (f.score_fiabilite == null ? null : Number(f.score_fiabilite))).filter((s) => s != null && Number.isFinite(s));
@@ -316,7 +339,7 @@ export default function DashboardPage() {
                 type="button"
                 onClick={() => {
                   setPeriode(k);
-                  setFiltreGroupe(null);
+                  effacerFiltres();
                 }}
                 style={{
                   border: "1px solid var(--line)",
@@ -356,7 +379,8 @@ export default function DashboardPage() {
             >
               <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#5FB8C4", flexShrink: 0 }} />
               <span>
-                <strong style={{ color: "#fff" }}>0 {t("signalSingular")}</strong> · {t("dashAucunSignalCourt")}
+                <strong style={{ color: "#fff" }}>0 {t("signalSingular")}</strong> · {t("dashAucunSignalCourt")}{" "}
+                <span title={t("dashRadarInfo")} style={{ cursor: "help", textDecoration: "underline dotted" }}>{t("dashRadarPerimetre")}</span>
               </span>
             </div>
           ) : (
@@ -420,7 +444,7 @@ export default function DashboardPage() {
 
           {/* 4 indicateurs essentiels */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10, marginBottom: 16 }}>
-            <StatCard valeur={totalPeriode} libelle={t("statTotalFiles")} actif={filtreGroupe === null} onClick={() => setFiltreGroupe(null)} />
+            <StatCard valeur={totalPeriode} libelle={t("statTotalFiles")} actif={!filtreActif} onClick={effacerFiltres} />
             <StatCard valeur={statsGroupes.OUVERT} libelle={t("statOpenFiles")} couleur="var(--ocre)" actif={filtreGroupe === "OUVERT"} onClick={() => handleClicStat("OUVERT")} />
             <StatCard
               valeur={tauxRejet === null ? "—" : `${tauxRejet} %`}
@@ -429,7 +453,7 @@ export default function DashboardPage() {
               actif={filtreGroupe === "REJETE"}
               onClick={() => handleClicStat("REJETE")}
             />
-            <StatCard valeur={signauxActifs.length} libelle={t("dashSignauxActifs")} couleur={signauxActifs.length > 0 ? "var(--ocre)" : "var(--petrol)"} actif={false} onClick={() => {}} />
+            <StatCard titre={t("dashRadarInfo")} valeur={signauxActifs.length} libelle={t("dashSignauxActifs")} couleur={signauxActifs.length > 0 ? "var(--ocre)" : "var(--petrol)"} actif={false} onClick={() => {}} />
           </div>
           {totalPeriode > 0 && totalPeriode < 5 && (
             <p style={{ fontSize: 11, color: "var(--sub)", marginTop: -8, marginBottom: 14 }}>{t("dashPetitEchantillon")}</p>
@@ -456,14 +480,21 @@ export default function DashboardPage() {
             <section className="card" style={{ padding: "14px 16px" }}>
               <h2 style={chartTitreStyle}>{t("dashDossiersParEtape")}</h2>
               <BarresHorizontales
+                // Échelle : part du total des dossiers de la période (un seul dossier sur six ne remplit plus la barre).
+                total={totalPeriode}
+                actifCle={filtreStatut}
+                onChoisir={handleClicEtape}
                 lignes={["ANALYSE", "GO", "SOUMIS", "ATTRIBUE", "EN_EXECUTION", "RECEPTION", "CLOTURE", "NON_ATTRIBUE", "NO_GO"].map((st) => ({
                   cle: st,
                   libelle: statutLabel(st),
                   valeur: parStatut[st] || 0,
-                  couleur: GROUPES_STATUT[st] === "REJETE" ? "var(--brique)" : GROUPES_STATUT[st] === "TERMINE" ? "#2E7D5B" : GROUPES_STATUT[st] === "EN_COURS" ? "#5FB8C4" : "var(--ocre)",
+                  info: st === "NON_ATTRIBUE" ? t("dashDefNonAttribue") : st === "NO_GO" ? t("dashDefNoGo") : null,
+                  // Code couleur : neutre = étape normale ; orange = décision / action attendue ; gris = dossier non retenu.
+                  couleur: st === "NON_ATTRIBUE" || st === "NO_GO" ? "#8A9597" : st === "ANALYSE" || st === "GO" ? "var(--ocre)" : st === "CLOTURE" ? "#2E7D5B" : "var(--petrol)",
                 }))}
                 vide={t("dashAucunDossier")}
               />
+              <p style={{ fontSize: 10.5, color: "var(--sub)", margin: "10px 0 0", lineHeight: 1.4 }}>{t("dashLegendeEtapes")}</p>
             </section>
           </div>
 
@@ -498,14 +529,10 @@ export default function DashboardPage() {
 
           {/* Prochaines échéances + À traiter */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 10, marginBottom: 24 }}>
-            <section className="card" style={{ padding: "14px 16px" }}>
+            <section id="bloc-echeances" className="card" style={{ padding: "14px 16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
                 <h2 style={{ ...chartTitreStyle, margin: 0 }}>{t("dashEcheancesTitre")}</h2>
-                {echeances && echeances.retards > 0 && (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brique)" }}>
-                    {echeances.retards} {t("dashEchRetardMin")}
-                  </span>
-                )}
+
               </div>
               {echeances === null ? (
                 <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>…</p>
@@ -513,24 +540,33 @@ export default function DashboardPage() {
                 <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{t("dashEcheancesVide")}</p>
               ) : (
                 <div style={{ display: "grid", gap: 2 }}>
-                  {echeances.items.slice(0, 8).map((e, i) => (
-                    <Link key={`${e.source}-${e.date}-${i}`} href={e.lien} style={ligneBlocStyle}>
-                      <span style={{ ...pastilleDateStyle, color: e.niveau === "RETARD" ? "var(--brique)" : e.niveau === "IMMINENT" ? "var(--ocre)" : "var(--sub)" }}>
-                        {libelleDelai(e.jours, t)}
-                      </span>
-                      <span style={{ minWidth: 0, flex: 1 }}>
-                        <span style={{ fontWeight: 600 }}>{libelleEcheance(e, t, dict.dateLocale)}</span>
-                        {e.detail ? <span style={{ color: "var(--sub)" }}>{" · "}{e.detail}</span> : null}
-                      </span>
-                      {e.montant ? (
-                        <span className="mono" style={{ fontSize: 11.5, color: "var(--ink)", flexShrink: 0 }}>
-                          {Math.round(e.montant).toLocaleString(dict.dateLocale)}
-                        </span>
-                      ) : null}
-                    </Link>
-                  ))}
-                  {echeances.items.length > 8 && (
-                    <span style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>+ {echeances.items.length - 8}</span>
+                  {[["RETARD", echeancesRetard, "dashEchDepassees", "var(--brique)"], ["AVENIR", echeancesAVenir, "dashEchAVenir", "var(--sub)"]].map(([cleGroupe, liste, cleTitre, couleurTitre]) =>
+                    liste.length === 0 ? null : (
+                      <div key={cleGroupe} style={{ display: "grid", gap: 2, marginBottom: 6 }}>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: couleurTitre, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                          {t(cleTitre)} ({liste.length})
+                        </div>
+                        {liste.slice(0, cleGroupe === "RETARD" ? 4 : 6).map((e, i) => (
+                          <Link key={`${e.source}-${e.date}-${i}`} href={e.lien} style={ligneBlocStyle}>
+                            <span style={{ ...pastilleDateStyle, color: e.niveau === "RETARD" ? "var(--brique)" : e.niveau === "IMMINENT" ? "var(--ocre)" : "var(--sub)" }}>
+                              {libelleDelai(e.jours, t)}
+                            </span>
+                            <span style={{ minWidth: 0, flex: 1 }}>
+                              <span style={{ fontWeight: 600 }}>{libelleEcheance(e, t, dict.dateLocale)}</span>
+                              {e.detail ? <span style={{ color: "var(--sub)" }}>{" · "}{e.detail}</span> : null}
+                            </span>
+                            {e.montant ? (
+                              <span className="mono" style={{ fontSize: 11.5, color: "var(--ink)", flexShrink: 0 }}>
+                                {Math.round(e.montant).toLocaleString(dict.dateLocale)}
+                              </span>
+                            ) : null}
+                          </Link>
+                        ))}
+                        {liste.length > (cleGroupe === "RETARD" ? 4 : 6) && (
+                          <span style={{ fontSize: 11, color: "var(--sub)" }}>+ {liste.length - (cleGroupe === "RETARD" ? 4 : 6)}</span>
+                        )}
+                      </div>
+                    )
                   )}
                 </div>
               )}
@@ -541,12 +577,28 @@ export default function DashboardPage() {
                 <h2 style={{ ...chartTitreStyle, margin: 0 }}>{t("dashATraiterTitre")}</h2>
                 <Link href="/mes-taches" style={{ fontSize: 11, color: "var(--petrol)", fontWeight: 600 }}>{t("dashVoirTout")} →</Link>
               </div>
-              {aTraiter === null ? (
+              <p style={{ fontSize: 10.5, color: "var(--sub)", margin: "-4px 0 8px" }}>{t("dashATraiterPerimetre")}</p>
+              {aTraiter === null || echeances === null ? (
                 <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>…</p>
-              ) : aTraiter.length === 0 ? (
+              ) : aTraiter.length === 0 && echeancesRetard.length === 0 && pointsDepasses.length === 0 ? (
                 <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{t("dashATraiterVide")}</p>
               ) : (
                 <div style={{ display: "grid", gap: 2 }}>
+                  {echeancesRetard.length > 0 && (
+                    <a href="#bloc-echeances" style={ligneBlocStyle}>
+                      <span style={{ ...pastilleTypeStyle, background: "rgba(176,58,46,0.12)", color: "var(--brique)" }}>{t("dashEchRetard")}</span>
+                      <span style={{ minWidth: 0, flex: 1, fontWeight: 600 }}>{echeancesRetard.length} {t("dashATraiterEchRetard")}</span>
+                    </a>
+                  )}
+                  {pointsDepasses.map((p) => (
+                    <Link key={`dep-${p.id}`} href={`/dossiers/${p.id}`} style={ligneBlocStyle}>
+                      <span style={{ ...pastilleTypeStyle, background: "rgba(176,58,46,0.12)", color: "var(--brique)" }}>{t("dashEchRetard")}</span>
+                      <span style={{ minWidth: 0, flex: 1 }}>
+                        <span style={{ fontWeight: 600 }}>{p.dossier.intitule}</span>
+                        <span style={{ color: "var(--sub)" }}>{" · "}{t("dashPointDepasse")}</span>
+                      </span>
+                    </Link>
+                  ))}
                   {aTraiter.slice(0, 8).map((x) => (
                     <Link key={x.cle} href={x.lien} style={ligneBlocStyle}>
                       <span style={{ ...pastilleTypeStyle, background: x.type === "tache" ? "rgba(0,0,0,0.05)" : "rgba(184,116,38,0.14)", color: x.type === "tache" ? "var(--sub)" : "var(--ocre)" }}>
@@ -596,11 +648,13 @@ export default function DashboardPage() {
           </div>
 
           {/* La liste complète n'apparaît que lorsqu'un filtre (anneau, KPI) est actif. */}
-          {filtreGroupe && (
-            <>
+          {filtreActif && (
+            <div ref={listeRef} style={{ scrollMarginTop: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>{t("ongoingFiles")}</h2>
-                <button onClick={() => setFiltreGroupe(null)} style={boutonEffacerFiltreStyle}>
+                <h2 style={{ fontSize: 15.5, color: "var(--petrol)" }}>
+                  {t("ongoingFiles")}{filtreStatut ? ` — ${statutLabel(filtreStatut)}` : ""} ({dossiersAffiches.length})
+                </h2>
+                <button onClick={effacerFiltres} style={boutonEffacerFiltreStyle}>
                   {t("clearFilter")}
                 </button>
               </div>
@@ -639,7 +693,7 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-            </>
+            </div>
           )}
         </>
       )}
@@ -647,9 +701,10 @@ export default function DashboardPage() {
   );
 }
 
-function StatCard({ valeur, libelle, couleur = "var(--petrol)", actif, onClick }) {
+function StatCard({ valeur, libelle, couleur = "var(--petrol)", actif, onClick, titre }) {
   return (
     <button
+      title={titre}
       onClick={onClick}
       className="card"
       style={{
@@ -728,19 +783,25 @@ function Anneau({ total, segments, actifCle, onChoisir, vide, unite }) {
 }
 
 // Barres horizontales : meme unite (nombre de dossiers) pour toutes les lignes.
-function BarresHorizontales({ lignes, vide }) {
-  const max = Math.max(1, ...lignes.map((l) => l.valeur));
+function BarresHorizontales({ lignes, vide, total, actifCle, onChoisir }) {
+  const base = Math.max(1, total || 0, ...lignes.map((l) => l.valeur));
   if (lignes.every((l) => l.valeur === 0)) return <p style={{ fontSize: 12, color: "var(--sub)", margin: 0 }}>{vide}</p>;
   return (
     <div style={{ display: "grid", gap: 7 }}>
       {lignes.map((l) => (
-        <div key={l.cle} style={{ display: "grid", gridTemplateColumns: "92px 1fr 22px", gap: 8, alignItems: "center", fontSize: 11.5 }}>
-          <span style={{ color: "var(--sub)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.libelle}</span>
+        <button
+          key={l.cle}
+          type="button"
+          title={l.info || undefined}
+          onClick={() => onChoisir && l.valeur > 0 && onChoisir(l.cle)}
+          style={{ display: "grid", gridTemplateColumns: "92px 1fr 22px", gap: 8, alignItems: "center", fontSize: 11.5, background: "none", border: "none", padding: 0, fontFamily: "inherit", textAlign: "left", cursor: l.valeur > 0 ? "pointer" : "default", opacity: actifCle && actifCle !== l.cle ? 0.45 : 1, fontWeight: actifCle === l.cle ? 700 : 400 }}
+        >
+          <span style={{ color: "var(--sub)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.libelle}{l.info ? " ⓘ" : ""}</span>
           <span style={{ background: "#E6ECEB", borderRadius: 4, height: 9, overflow: "hidden" }}>
-            <span style={{ display: "block", height: "100%", width: `${(l.valeur / max) * 100}%`, background: l.couleur, borderRadius: 4 }} />
+            <span style={{ display: "block", height: "100%", width: `${(l.valeur / base) * 100}%`, background: l.couleur, borderRadius: 4 }} />
           </span>
-          <span className="mono" style={{ textAlign: "right" }}>{l.valeur}</span>
-        </div>
+          <span className="mono" style={{ textAlign: "right", color: "var(--ink)" }}>{l.valeur}</span>
+        </button>
       ))}
     </div>
   );
@@ -793,6 +854,16 @@ function statutClasse(statut) {
 const ligneBlocStyle = { display: "flex", gap: 10, alignItems: "baseline", fontSize: 12.5, color: "var(--ink)", textDecoration: "none", padding: "4px 0", borderBottom: "1px solid var(--line)" };
 const pastilleDateStyle = { fontSize: 11, fontWeight: 700, width: 74, flexShrink: 0, whiteSpace: "nowrap" };
 const pastilleTypeStyle = { fontSize: 10.5, fontWeight: 700, padding: "1px 7px", borderRadius: 10, flexShrink: 0, whiteSpace: "nowrap" };
+
+// Nombre de jours calendaires entre aujourd'hui et une date (minuit à minuit, indépendant de l'heure).
+function joursCalendaires(dateStr) {
+  const d = String(dateStr).slice(0, 10);
+  const [a, m, j] = d.split("-").map(Number);
+  const auj = new Date();
+  const cible = Date.UTC(a, m - 1, j);
+  const ref = Date.UTC(auj.getFullYear(), auj.getMonth(), auj.getDate());
+  return Math.round((cible - ref) / 86400000);
+}
 
 function libelleDelai(jours, t) {
   if (jours < 0) return `${t("dashEchRetardCourt")} ${-jours} ${t("dashJoursCourt")}`;
