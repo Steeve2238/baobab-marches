@@ -275,6 +275,7 @@ const CLES_PARAMETRES_CALCUL_PRIX = [
   "forfaitTimbre",
   "forfaitAutresFraisVirement",
   "tauxAutresFraisVirement",
+  "tauxFraisChange",
   "refacturerFraisPaiement",
 ];
 

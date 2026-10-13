@@ -31,6 +31,7 @@ const PARAM_DEFS_CALCUL_PRIX = [
   { cle: "forfaitTimbre", labelKey: "calcPrixForfaitTimbreLabel", type: "montant" },
   { cle: "forfaitAutresFraisVirement", labelKey: "calcPrixForfaitAutresFraisVirementLabel", type: "montant" },
   { cle: "tauxAutresFraisVirement", labelKey: "calcPrixTauxAutresFraisVirementLabel", type: "pourcentage" },
+  { cle: "tauxFraisChange", labelKey: "calcPrixTauxFraisChangeLabel", type: "pourcentage" },
   { cle: "refacturerFraisPaiement", labelKey: "calcPrixRefacturerFraisPaiementLabel", type: "case" },
 ];
 

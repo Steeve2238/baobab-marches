@@ -7,6 +7,8 @@ import { api } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import { estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import AppShell from "../../../../../lib/components/AppShell";
+import RemiseSimulateur from "../../../../../lib/components/RemiseSimulateur";
+import { remisesParLigne } from "../../../../../lib/remiseLignes";
 import EcheancierEditor from "../../../../../lib/components/EcheancierEditor";
 import { echeancierValide, pourApi } from "../../../../../lib/echeancier";
 import LigneProduitOutils from "../../../../../lib/components/LigneProduitOutils";
@@ -67,6 +69,7 @@ export default function DevisDetailPage() {
   const [typeFacturation, setTypeFacturation] = useState("INTEGRALE");
   const [pourcentageAcompte, setPourcentageAcompte] = useState("");
   const [permissions, setPermissions] = useState(null);
+  const [remiseOuverte, setRemiseOuverte] = useState(false);
   const [formOuvert, setFormOuvert] = useState(false);
   const [formDevis, setFormDevis] = useState(null);
   const [echeancierEdition, setEcheancierEdition] = useState([]);
@@ -265,6 +268,7 @@ export default function DevisDetailPage() {
   }
 
   const style = STATUT_STYLE[devis.statut] || {};
+  const remisesLignes = Number(devis.pourcentage_remise) > 0 ? remisesParLigne(devis.lignes, devis.montant_remise) : new Map();
   // Un devis Valide reste modifiable (chantier du 06/10/2026 avec Steeve :
   // corriger un devis deja entierement facture, ex avenant/ligne oubliee) -
   // seul un devis Expire reste fige. Voir PATCH /devis/:id : toute
@@ -308,11 +312,29 @@ export default function DevisDetailPage() {
   // ce devis (le backend le refuserait de toute facon - voir
   // VENTE_DEVIS_SUPPRESSION_FACTURE_EXISTANTE) : inutile de laisser cliquer
   // sur un bouton qui echouera a coup sur.
+  // Negociation de remise (09/10/2026) : simulation de la marge puis application sans repasser le devis en brouillon.
+  const peutNegocierRemise =
+    ["BROUILLON", "ENVOYE", "VALIDE"].includes(devis.statut) &&
+    !devis.importe &&
+    !totalPartiel &&
+    (possedeRole(["COMMERCIAL", "ADMINISTRATIF", "DIRECTION", "FINANCIER"]) || !!permissions?.validateurUniversel);
   const peutSupprimer = peutModifierClient && (!devis.factures || devis.factures.length === 0);
 
   return (
     <AppShell title={devis.numero} backHref="/marches/consultation-restreinte/devis">
       {erreur && <p className="no-print" style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+      {remiseOuverte && (
+        <div className="no-print">
+          <RemiseSimulateur
+            devis={devis}
+            onClose={() => setRemiseOuverte(false)}
+            onApplied={(maj) => {
+              setDevis((prev) => ({ ...prev, ...maj }));
+              setRemiseOuverte(false);
+            }}
+          />
+        </div>
+      )}
 
       <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -339,6 +361,11 @@ export default function DevisDetailPage() {
           {peutValider && (
             <button onClick={handleValider} disabled={action || totalPartiel} title={totalPartiel ? t("venteDevisPartielValidationAide") : undefined} style={{ ...boutonPrincipalStyle, ...(totalPartiel ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}>
               {t("venteValidateDevisButton")}
+            </button>
+          )}
+          {peutNegocierRemise && (
+            <button onClick={() => setRemiseOuverte(true)} style={boutonSecondaireStyle}>
+              {t("remiseBoutonNegocier")}
             </button>
           )}
           {peutEditer && (
@@ -414,6 +441,12 @@ export default function DevisDetailPage() {
             <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: peutFacturer ? 16 : 0 }}>{t("venteAucuneFactureDevis")}</p>
           )}
 
+          {peutFacturer && (!devis.factures || devis.factures.length === 0) && (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, fontSize: 12.5, color: "var(--sub)" }}>
+              <span>{t("remiseBoutonAvantFacture")}</span>
+              <button type="button" onClick={() => setRemiseOuverte(true)} style={boutonSecondaireStyle}>{t("remiseBoutonNegocier")}</button>
+            </div>
+          )}
           {peutFacturer ? (
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid var(--line)", paddingTop: 14 }}>
               <div>
@@ -648,6 +681,8 @@ export default function DevisDetailPage() {
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteLabel")}</th>
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("ventePrixUnitaireLabel")}</th>
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteMontantLabel")}</th>
+              {remisesLignes.size > 0 && <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteRemiseLabel")} ({Math.round(Number(devis.pourcentage_remise) * 100) / 100}%)</th>}
+              {remisesLignes.size > 0 && <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteMontantNetLigneLabel")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -667,6 +702,16 @@ export default function DevisDetailPage() {
                     <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.montant_ht).toLocaleString()}</td>
                   </>
                 )}
+                {remisesLignes.size > 0 && (
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right", color: "var(--brique)" }}>
+                    {remisesLignes.has(l.id) ? `-${remisesLignes.get(l.id).remise.toLocaleString()}` : ""}
+                  </td>
+                )}
+                {remisesLignes.size > 0 && (
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                    {remisesLignes.has(l.id) ? remisesLignes.get(l.id).net.toLocaleString() : ""}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -680,7 +725,7 @@ export default function DevisDetailPage() {
           {Number(devis.pourcentage_remise) > 0 && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--brique)" }}>
-                <span>{t("venteRemiseLabel")} ({Number(devis.pourcentage_remise)}%)</span>
+                <span>{t("venteRemiseLabel")} ({Math.round(Number(devis.pourcentage_remise) * 100) / 100}%)</span>
                 <span className="mono">-{Number(devis.montant_remise).toLocaleString()} XOF</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>

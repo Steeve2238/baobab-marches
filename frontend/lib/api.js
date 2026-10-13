@@ -646,6 +646,9 @@ export const api = {
   },
   changerStatutDevis: (id, statut) => request(`/ventes/devis/${id}/statut`, { method: "PATCH", body: JSON.stringify({ statut }) }),
   validerDevis: (id) => request(`/ventes/devis/${id}/valider`, { method: "POST" }),
+  simulerRemiseDevis: (id, mode, valeur) => request(`/ventes/devis/${id}/simulation-remise?mode=${encodeURIComponent(mode)}&valeur=${encodeURIComponent(valeur)}`),
+  appliquerRemiseDevis: (id, data) => request(`/ventes/devis/${id}/appliquer-remise`, { method: "POST", body: JSON.stringify(data || {}) }),
+  getRemisesDevis: (id) => request(`/ventes/devis/${id}/remises`),
   genererFactureDepuisDevis: (id, data) => request(`/ventes/devis/${id}/generer-facture`, { method: "POST", body: JSON.stringify(data || {}) }),
 
   getFacturesVente: (statut) => request(`/ventes/factures${statut ? `?statut=${statut}` : ""}`),

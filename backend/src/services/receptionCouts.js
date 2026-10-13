@@ -5,7 +5,9 @@ const { calculerOffre } = require("./calculPrixEngine");
 // lecture, jamais stockee. Miroir cote frontend : lib/receptionCouts.js
 // (apercu en direct) - toute modification ici doit etre reportee la-bas.
 
-const TYPES_COUT = ["FRET", "ASSURANCE", "DOUANE", "TRANSIT", "TRANSPORT_LOCAL", "AUTRE"];
+const TYPES_COUT = ["FRET", "ASSURANCE", "DOUANE", "TRANSIT", "TRANSPORT_LOCAL", "FRAIS_PAIEMENT", "AUTRE"];
+// Cotations de transitaire : pas de frais de paiement (ce sont des frais bancaires, pas ceux d'un transitaire).
+const TYPES_COUT_COTATION = TYPES_COUT.filter((x) => x !== "FRAIS_PAIEMENT");
 const REPARTITIONS = ["VALEUR", "QUANTITE", "POIDS"];
 
 // Couts deja compris dans le prix facture par le fournisseur selon l'incoterm
@@ -59,6 +61,7 @@ function repartirCouts(lignes, couts, cours) {
     return Number.isFinite(p) && p > 0 ? p * (Number(l.quantite) || 0) : 0;
   });
   const allocCentimes = lignes.map(() => 0);
+  const allocParType = lignes.map(() => ({}));
   const avertissements = [];
 
   const coutsCalcules = couts.map((c) => {
@@ -74,14 +77,23 @@ function repartirCouts(lignes, couts, cours) {
       avertissements.push({ code: "POIDS_PARTIEL", type_cout: c.type_cout, libelle: c.libelle || "" });
     }
     const parts = repartirEntier(Math.round(montantXof * 100), cles);
-    parts.forEach((p, i) => (allocCentimes[i] += p));
+    parts.forEach((p, i) => {
+      allocCentimes[i] += p;
+      allocParType[i][c.type_cout] = (allocParType[i][c.type_cout] || 0) + p;
+    });
     return { ...c, montant: Number(c.montant) || 0, montant_xof: montantXof, repartition_effective: mode };
   });
 
   const lignesCalculees = lignes.map((l, i) => {
     const alloc = allocCentimes[i] / 100;
     const q = Number(l.quantite) || 0;
+    // Decomposition du cout de revient unitaire par composante (achat, fret, assurance, douane...).
+    const detail = { ACHAT: q > 0 ? arr2(valeurs[i] / q) : 0 };
+    for (const [type, centimes] of Object.entries(allocParType[i])) {
+      if (centimes > 0) detail[type] = q > 0 ? arr2(centimes / 100 / q) : 0;
+    }
     return {
+      cout_detail_unitaire_xof: detail,
       valeur_achat_xof: valeurs[i],
       cout_approche_xof: alloc,
       cout_revient_total_xof: arr2(valeurs[i] + alloc),
@@ -111,6 +123,18 @@ function avertissementsIncoterm(incoterm, couts, table = INCOTERM_INCLUS) {
     }
   }
   return res;
+}
+
+/**
+ * Estimation des frais de paiement fournisseur (virement, change, SWIFT, timbre...) avec les
+ * parametres du tenant : meme calcul que le dossier de calcul, sur le montant vire.
+ */
+function estimerFraisPaiement(totalAchatXof, parametres) {
+  const r = calculerOffre(
+    { prix_unitaire_devise: Number(totalAchatXof) || 0, cours_devise: 1, quantite: 1, fret_alloue_xof: 0, frais_transit_xof: 0, marge_cible_pct: 0 },
+    parametres
+  );
+  return r.totalFraisBancaires;
 }
 
 /**
@@ -156,5 +180,7 @@ module.exports = {
   repartirEntier,
   avertissementsIncoterm,
   estimerAssuranceEtDouane,
+  estimerFraisPaiement,
+  TYPES_COUT_COTATION,
   montantCoutXof,
 };

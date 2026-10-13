@@ -71,8 +71,12 @@ function calculerOffre(offre, parametres) {
   const autresFraisVirement =
     (Number(parametres.forfaitAutresFraisVirement) || 0) +
     montantATransfererFournisseur * (Number(parametres.tauxAutresFraisVirement) || 0);
+  // Spread de change : ecart entre le cours de vente de la banque et le cours
+  // retenu dans le dossier (marge de la banque sur la devise), en % du montant
+  // vire. Distinct de la commission de change TTHU ; 0 par defaut.
+  const fraisChange = montantATransfererFournisseur * (Number(parametres.tauxFraisChange) || 0);
   const totalFraisBancaires =
-    commissionTthu + commissionDbs + tafDbs + swift + tafSwift + timbre + autresFraisVirement;
+    commissionTthu + commissionDbs + tafDbs + swift + tafSwift + timbre + autresFraisVirement + fraisChange;
 
   // COUT DE REVIENT & MARGE CIBLE
   const coutDeRevientHt = prixAchatTotalXof + fretAlloue + totalDroitsTaxesDouane + fraisTransit;
@@ -125,6 +129,7 @@ function calculerOffre(offre, parametres) {
     tafSwift: arr2(tafSwift),
     timbre: arr2(timbre),
     autresFraisVirement: arr2(autresFraisVirement),
+    fraisChange: arr2(fraisChange),
     fraisPaiementRefactures: arr2(fraisPaiementRefactures),
     totalFraisBancaires: arr2(totalFraisBancaires),
     margeNetteReelle: arr2(margeNetteReelle),

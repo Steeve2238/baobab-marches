@@ -7,6 +7,7 @@ import { api, estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
 import MontantLettresBloc from "../../../../../lib/components/MontantLettresBloc";
+import { remisesParLigne } from "../../../../../lib/remiseLignes";
 
 // Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
 // objet Date JS (qui reintroduirait une conversion de fuseau horaire cote
@@ -137,6 +138,7 @@ export default function FactureVenteDetailPage() {
   const style = STATUT_STYLE[facture.statut] || {};
   const peutFacturer = possedeRole(["COMPTABLE", "FINANCIER"]);
   const numeroComplet = numeroAffiche(facture.numero, facture.mois_emission);
+  const remisesLignes = Number(facture.pourcentage_remise) > 0 ? remisesParLigne(facture.lignes, facture.montant_remise) : new Map();
 
   return (
     <AppShell title={numeroComplet} backHref="/marches/consultation-restreinte/factures">
@@ -271,6 +273,8 @@ export default function FactureVenteDetailPage() {
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteQuantiteLabel")}</th>
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("ventePrixUnitaireLabel")}</th>
               <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteMontantLabel")}</th>
+              {remisesLignes.size > 0 && <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteRemiseLabel")} ({Math.round(Number(facture.pourcentage_remise) * 100) / 100}%)</th>}
+              {remisesLignes.size > 0 && <th style={{ padding: "6px 4px", textAlign: "right" }}>{t("venteMontantNetLigneLabel")}</th>}
             </tr>
           </thead>
           <tbody>
@@ -282,6 +286,16 @@ export default function FactureVenteDetailPage() {
                 <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.quantite).toLocaleString()}</td>
                 <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.prix_unitaire_ht).toLocaleString()}</td>
                 <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>{Number(l.montant_ht).toLocaleString()}</td>
+                {remisesLignes.size > 0 && (
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right", color: "var(--brique)" }}>
+                    {remisesLignes.has(l.id) ? `-${remisesLignes.get(l.id).remise.toLocaleString()}` : ""}
+                  </td>
+                )}
+                {remisesLignes.size > 0 && (
+                  <td className="mono" style={{ padding: "6px 4px", fontSize: 12.5, textAlign: "right" }}>
+                    {remisesLignes.has(l.id) ? remisesLignes.get(l.id).net.toLocaleString() : ""}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -295,7 +309,7 @@ export default function FactureVenteDetailPage() {
           {Number(facture.pourcentage_remise) > 0 && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--brique)" }}>
-                <span>{t("venteRemiseLabel")} ({Number(facture.pourcentage_remise)}%)</span>
+                <span>{t("venteRemiseLabel")} ({Math.round(Number(facture.pourcentage_remise) * 100) / 100}%)</span>
                 <span className="mono">-{Number(facture.montant_remise).toLocaleString()} XOF</span>
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5 }}>

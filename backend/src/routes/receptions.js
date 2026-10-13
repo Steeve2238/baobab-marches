@@ -12,7 +12,7 @@ const { reevaluerMargeDossier } = require("./commandes");
 const { tableInclus } = require("../services/incoterms");
 const { lireFactureExcel } = require("../services/receptionExcel");
 const { derniersAchatsFournisseur, pct } = require("../services/prixFournisseurs");
-const { TYPES_COUT, REPARTITIONS, repartirCouts, avertissementsIncoterm, estimerAssuranceEtDouane } = require("../services/receptionCouts");
+const { TYPES_COUT, REPARTITIONS, repartirCouts, avertissementsIncoterm, estimerAssuranceEtDouane, estimerFraisPaiement } = require("../services/receptionCouts");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -116,7 +116,8 @@ function nettoyerCouts(coutsBruts) {
       montant: arr2(brut),
       en_devise_facture: c.en_devise_facture === true || c.en_devise_facture === "true",
       repartition: REPARTITIONS.includes(repartition) ? repartition : "VALEUR",
-      transitaire_id: typeof c.transitaire_id === "string" && UUID_RE.test(c.transitaire_id) ? c.transitaire_id : null,
+      // Les frais de paiement sont des frais bancaires : jamais rattaches a un transitaire.
+      transitaire_id: type !== "FRAIS_PAIEMENT" && typeof c.transitaire_id === "string" && UUID_RE.test(c.transitaire_id) ? c.transitaire_id : null,
       facture_reference: String(c.facture_reference || "").trim().slice(0, 100) || null,
       montant_cote_xof: c.montant_cote_xof === "" || c.montant_cote_xof === undefined || c.montant_cote_xof === null || !(Number(c.montant_cote_xof) >= 0)
         ? null
@@ -609,7 +610,12 @@ router.post("/estimer-couts-approche", async (req, res) => {
   }
   try {
     const parametres = await chargerParametres(req.user.tenantId);
-    res.json(estimerAssuranceEtDouane({ totalAchatXof: total, fretXof: fret, incoterm: req.body.incoterm }, parametres, await tableInclus(db, req.user.tenantId)));
+    const estimation = estimerAssuranceEtDouane({ totalAchatXof: total, fretXof: fret, incoterm: req.body.incoterm }, parametres, await tableInclus(db, req.user.tenantId));
+    // Frais de paiement fournisseur : estimes seulement pour un fournisseur etranger (devise autre que XOF).
+    // Pour un fournisseur local, aucune estimation : les frais reels sont saisis a la main.
+    const devise = String(req.body.devise || "XOF").trim().toUpperCase();
+    estimation.frais_paiement_xof = devise !== "XOF" ? estimerFraisPaiement(total, parametres) : 0;
+    res.json(estimation);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: t(req, "RECEPTION_UPDATE_ERROR") });

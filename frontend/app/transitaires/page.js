@@ -5,7 +5,7 @@ import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import AppShell from "../../lib/components/AppShell";
 import { useIncoterms } from "../../lib/incoterms";
-import { TYPES_COUT, REPARTITIONS } from "../../lib/receptionCouts";
+import { TYPES_COUT_COTATION as TYPES_COUT, REPARTITIONS } from "../../lib/receptionCouts";
 
 // Transitaires, cotations et performance (Lot 4, 05/10/2026).
 // Une cotation = l'offre d'un transitaire pour un trajet et un incoterm. Elle est

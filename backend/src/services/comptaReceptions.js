@@ -26,6 +26,7 @@ const COMPTE_PAR_TYPE = {
   ASSURANCE: "6258",
   DOUANE: null,
   AUTRE: null,
+  FRAIS_PAIEMENT: null,
 };
 // TVA proposee : pas de TVA sur le fret et l'assurance internationaux ni sur les droits de douane.
 const TVA_PAR_TYPE_DEFAUT_NULLE = ["FRET", "ASSURANCE", "DOUANE"];
@@ -37,6 +38,7 @@ const LIBELLE_TYPE = {
   TRANSIT: "Transit",
   TRANSPORT_LOCAL: "Transport local",
   AUTRE: "Autre frais",
+  FRAIS_PAIEMENT: "Frais de paiement",
 };
 
 const dateSql = (d) => (d instanceof Date ? d.toISOString().slice(0, 10) : d ? String(d).slice(0, 10) : null);
@@ -138,6 +140,8 @@ async function apercuFacturation(client, tenantId, receptionId) {
       taux_tva_defaut: TVA_PAR_TYPE_DEFAUT_NULLE.includes(c.type_cout) ? 0 : tvaTenant,
     };
     delete vue.montant_c;
+    // Frais de paiement (frais bancaires) : ni transitaire ni facture fournisseur a creer ici.
+    if (c.type_cout === "FRAIS_PAIEMENT") continue;
     if (!c.transitaire_id) {
       sansTransitaire.push(vue);
       continue;

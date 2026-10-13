@@ -8,6 +8,9 @@ const { t } = require("../utils/i18n");
 const { genererChronogrammeConsultation } = require("../services/chronogrammeConsultationEngine");
 const { assurerTiersPourClientSilencieux } = require("../services/comptaService");
 const echeancierSvc = require("../services/echeancier");
+const remiseDevis = require("../services/remiseDevis");
+const { detailsCoutProduits } = require("../services/coutDetailProduits");
+const { chargerParametres } = require("../services/produitsCatalogue");
 const comptaVentes = require("../services/comptaVentes");
 const comptaAnalytique = require("../services/comptaAnalytique");
 const { verifierAffectationValide } = require("../utils/affectationTache");
@@ -1713,6 +1716,139 @@ router.post("/devis/:id/valider", requireRoleOuValidateurUniversel(...ROLES_VALI
     await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: t(req, "VENTE_DEVIS_VALIDER_ERROR") });
+  } finally {
+    client.release();
+  }
+});
+
+// ----------------------------------------------------------------------------
+// Negociation de remise sur devis (09/10/2026) : le client accepte le devis mais demande une remise. La fenetre
+// « Negocier une remise » appelle d'abord la simulation (GET, ne modifie rien), puis, si on accepte, l'application.
+// Le devis garde son numero et son statut (pas de nouvelle validation) ; chaque application est tracee avec la marge
+// avant / apres. La facture recopie ensuite exactement ce montant.
+// ----------------------------------------------------------------------------
+const ROLES_REMISE = [...ROLES_CREATION, ...ROLES_VALIDATION, "FINANCIER"];
+
+async function chargerProduitsPourSimulation(queryable, tenantId, lignes) {
+  const ids = [...new Set(lignes.map((l) => l.produit_id).filter(Boolean))];
+  if (ids.length === 0) return new Map();
+  const r = await queryable.query(
+    `SELECT id, reference, cout_revient_unitaire_xof, marge_pct FROM produit WHERE tenant_id = $1 AND id = ANY($2::uuid[])`,
+    [tenantId, ids]
+  );
+  return new Map(r.rows.map((p) => [p.id, { reference: p.reference, cout: Number(p.cout_revient_unitaire_xof), marge_pct: Number(p.marge_pct) }]));
+}
+
+// GET /api/ventes/devis/:id/simulation-remise?mode=POURCENTAGE|MONTANT|NET_TTC&valeur=...
+router.get("/devis/:id/simulation-remise", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const d = await db.query(`SELECT * FROM devis WHERE id = $1 AND tenant_id = $2`, [id, req.user.tenantId]);
+    if (d.rows.length === 0) return res.status(404).json({ error: t(req, "VENTE_DEVIS_NOT_FOUND") });
+    const devis = d.rows[0];
+    const lignes = await chargerLignesDevis(id);
+    const produits = await chargerProduitsPourSimulation(db, req.user.tenantId, lignes);
+    const sim = remiseDevis.simuler({ devis, lignes, produits, mode: String(req.query.mode || "").toUpperCase(), valeur: req.query.valeur });
+    if (sim.erreur) return res.status(400).json({ error: t(req, sim.erreur === "BORNES" || sim.erreur === "VALEUR" ? "VENTE_DEVIS_REMISE_INVALID" : "VENTE_REMISE_MODE_INVALID") });
+    // Lot B : detail du cout de revient (achat, fret, douane, frais de paiement...) de chaque article, quand il est connu.
+    const details = await detailsCoutProduits(db, req.user.tenantId, produits, await chargerParametres(req.user.tenantId));
+    sim.lignes = sim.lignes.map((l) => ({ ...l, detail_cout: (l.produit_id && details.get(l.produit_id)) || null }));
+    const nb = Number((await db.query(`SELECT COUNT(*) AS n FROM facture_vente WHERE devis_id = $1 AND tenant_id = $2 AND statut != 'ANNULEE'`, [id, req.user.tenantId])).rows[0].n);
+    res.json({ ...sim, devis_statut: devis.statut, factures_existantes: nb, devis_importe: !!devis.importe });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_REMISE_SIMULATION_ERROR") });
+  }
+});
+
+// GET /api/ventes/devis/:id/remises - historique des remises appliquees
+router.get("/devis/:id/remises", async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT id, date_application, utilisateur_nom, mode_saisie, valeur_saisie, remise_avant_pct, remise_apres_pct,
+              montant_remise_avant, montant_remise_apres, total_ttc_avant, total_ttc_apres,
+              marge_avant, marge_apres, marge_pct_avant, marge_pct_apres, lignes_avec_cout, lignes_chiffrees, motif
+       FROM devis_remise_historique WHERE devis_id = $1 AND tenant_id = $2 ORDER BY date_application DESC`,
+      [req.params.id, req.user.tenantId]
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_REMISE_SIMULATION_ERROR") });
+  }
+});
+
+// POST /api/ventes/devis/:id/appliquer-remise { mode, valeur, total_ttc_attendu?, motif? }
+router.post("/devis/:id/appliquer-remise", requireRoleOuValidateurUniversel(...ROLES_REMISE), async (req, res) => {
+  const { id } = req.params;
+  const { mode, valeur, total_ttc_attendu, motif } = req.body || {};
+  const client = await db.pool.connect();
+  try {
+    await client.query("BEGIN");
+    const d = await client.query(`SELECT * FROM devis WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, [id, req.user.tenantId]);
+    if (d.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: t(req, "VENTE_DEVIS_NOT_FOUND") });
+    }
+    const devis = d.rows[0];
+    if (!["BROUILLON", "ENVOYE", "VALIDE"].includes(devis.statut)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_EDITABLE") });
+    }
+    if (devis.importe) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_REMISE_DEVIS_IMPORTE") });
+    }
+    // Une facture non annulee existe deja : changer la remise fausserait l'acompte / le solde. Reserve a l'ADMIN.
+    const nbFactures = Number((await client.query(`SELECT COUNT(*) AS n FROM facture_vente WHERE devis_id = $1 AND statut != 'ANNULEE'`, [id])).rows[0].n);
+    if (nbFactures > 0 && !req.user.roles.includes("ADMIN")) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_REMISE_FACTURE_EXISTANTE") });
+    }
+    const lignes = (await client.query(
+      `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix, produit_id, cout_revient_unitaire_ht, reference
+       FROM devis_ligne WHERE devis_id = $1 ORDER BY ordre ASC`, [id])).rows;
+    const produits = await chargerProduitsPourSimulation(client, req.user.tenantId, lignes);
+    const sim = remiseDevis.simuler({ devis, lignes, produits, mode: String(mode || "").toUpperCase(), valeur });
+    if (sim.erreur) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, sim.erreur === "BORNES" || sim.erreur === "VALEUR" ? "VENTE_DEVIS_REMISE_INVALID" : "VENTE_REMISE_MODE_INVALID") });
+    }
+    // Garde-fou : le montant valide a l'ecran doit etre exactement celui qui sera enregistre.
+    if (total_ttc_attendu !== undefined && Math.abs(Number(total_ttc_attendu) - sim.simule.total_ttc) > 0.01) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_REMISE_SIMULATION_PERIMEE") });
+    }
+    const { deja_facture: dejaFacture } = await calculerAvancementFacturation(client, req.user.tenantId, id, sim.simule.total_ttc);
+    if (sim.simule.total_ttc + 0.01 < dejaFacture) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ error: t(req, "VENTE_DEVIS_MONTANT_INFERIEUR_FACTURE") });
+    }
+    await client.query(
+      `UPDATE devis SET pourcentage_remise = $1, montant_remise = $2, montant_tva = $3, total_ttc = $4 WHERE id = $5 AND tenant_id = $6`,
+      [sim.simule.pourcentage_remise, sim.simule.montant_remise, sim.simule.montant_tva, sim.simule.total_ttc, id, req.user.tenantId]
+    );
+    const u = await client.query(`SELECT TRIM(COALESCE(prenom, '') || ' ' || COALESCE(nom, '')) AS nom FROM utilisateur WHERE id = $1`, [req.user.sub]);
+    await client.query(
+      `INSERT INTO devis_remise_historique (id, tenant_id, devis_id, utilisateur_id, utilisateur_nom, mode_saisie, valeur_saisie,
+         remise_avant_pct, remise_apres_pct, montant_remise_avant, montant_remise_apres, total_ttc_avant, total_ttc_apres,
+         marge_avant, marge_apres, marge_pct_avant, marge_pct_apres, lignes_avec_cout, lignes_chiffrees, motif)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+      [uuidv4(), req.user.tenantId, id, req.user.sub, (u.rows[0] && u.rows[0].nom) || null, sim.mode, sim.valeur,
+       sim.actuel.pourcentage_remise, sim.simule.pourcentage_remise, sim.actuel.montant_remise, sim.simule.montant_remise,
+       sim.actuel.total_ttc, sim.simule.total_ttc, sim.actuel.marge, sim.simule.marge, sim.actuel.marge_pct, sim.simule.marge_pct,
+       sim.couverture.lignes_avec_cout, sim.couverture.lignes_chiffrees, typeof motif === "string" && motif.trim() ? motif.trim().slice(0, 300) : null]
+    );
+    const maj = await client.query(
+      `SELECT d.*, cl.nom AS client_nom, cl.adresse AS client_adresse, cl.exonere_tva AS client_exonere_tva, cl.motif_exoneration_tva AS client_motif_exoneration_tva
+       FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id WHERE d.id = $1`, [id]);
+    await client.query("COMMIT");
+    const avancement = await calculerAvancementFacturation(db, req.user.tenantId, id, sim.simule.total_ttc);
+    res.json({ ...maj.rows[0], lignes: await chargerLignesDevis(id), ...avancement });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: t(req, "VENTE_REMISE_APPLY_ERROR") });
   } finally {
     client.release();
   }

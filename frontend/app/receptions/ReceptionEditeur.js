@@ -261,12 +261,13 @@ export default function ReceptionEditeur({ id }) {
     setInfo("");
     try {
       const fret = coutsNum.filter((c) => c.type_cout === "FRET").reduce((s, c) => s + (c.en_devise_facture ? c.montant * coursNum : c.montant), 0);
-      const e = await api.estimerCoutsApprocheReception({ total_achat_xof: apercu.total_achat_xof, fret_xof: arr2(fret), incoterm: form.incoterm });
+      const e = await api.estimerCoutsApprocheReception({ total_achat_xof: apercu.total_achat_xof, fret_xof: arr2(fret), incoterm: form.incoterm, devise: form.devise });
       setCouts((prev) => {
-        const sans = prev.filter((c) => c.type_cout !== "ASSURANCE" && c.type_cout !== "DOUANE");
+        const sans = prev.filter((c) => c.type_cout !== "ASSURANCE" && c.type_cout !== "DOUANE" && !(e.frais_paiement_xof > 0 && c.type_cout === "FRAIS_PAIEMENT"));
         const ajouts = [];
         if (e.assurance_xof > 0) ajouts.push({ type_cout: "ASSURANCE", libelle: "", montant: e.assurance_xof, en_devise_facture: false, repartition: "VALEUR" });
         if (e.droits_taxes_xof > 0) ajouts.push({ type_cout: "DOUANE", libelle: "", montant: e.droits_taxes_xof, en_devise_facture: false, repartition: "VALEUR" });
+        if (e.frais_paiement_xof > 0) ajouts.push({ type_cout: "FRAIS_PAIEMENT", libelle: t("receptionsFraisPaiementEstime"), montant: e.frais_paiement_xof, en_devise_facture: false, repartition: "VALEUR" });
         return [...sans, ...ajouts];
       });
       let message = t("receptionsCoutsEstimeOk").replace("{valeur}", Number(e.valeur_en_douane_xof).toLocaleString());

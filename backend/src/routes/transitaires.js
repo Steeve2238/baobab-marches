@@ -3,7 +3,7 @@ const db = require("../db");
 const { v4: uuidv4 } = require("uuid");
 const { requireAuth, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
-const { TYPES_COUT, REPARTITIONS } = require("../services/receptionCouts");
+const { TYPES_COUT_COTATION: TYPES_COUT, REPARTITIONS } = require("../services/receptionCouts");
 const {
   MODES_TRANSPORT,
   STATUTS_COTATION,

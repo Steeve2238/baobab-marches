@@ -337,7 +337,9 @@ async function syntheseDossier(tenantId, colonne, cle) {
       `SELECT COUNT(*)::int AS nb,
               COALESCE(SUM((SELECT SUM(l.quantite * l.prix_unitaire_devise) FROM reception_ligne l WHERE l.reception_id = r.id) * r.cours_devise), 0) AS achat_xof,
               COALESCE(SUM((SELECT SUM(c.montant * CASE WHEN c.en_devise_facture THEN r.cours_devise ELSE 1 END)
-                            FROM reception_cout_approche c WHERE c.reception_id = r.id)), 0) AS approche_xof
+                            FROM reception_cout_approche c WHERE c.reception_id = r.id AND c.type_cout <> 'FRAIS_PAIEMENT')), 0) AS approche_xof,
+              COALESCE(SUM((SELECT SUM(c.montant * CASE WHEN c.en_devise_facture THEN r.cours_devise ELSE 1 END)
+                            FROM reception_cout_approche c WHERE c.reception_id = r.id AND c.type_cout = 'FRAIS_PAIEMENT')), 0) AS frais_paiement_xof
        FROM reception_marchandise r
        JOIN commande_fournisseur cf ON cf.id = r.commande_id
        WHERE r.tenant_id = $1 AND r.statut = 'VALIDEE' AND cf.${colonne} = $2`,
@@ -376,7 +378,21 @@ async function syntheseDossier(tenantId, colonne, cle) {
   const fraisFinancementRetenus = arr2(fin.reduce((s, x) => s + Number(x.cout_retenu_xof || 0), 0));
   // Frais de paiement du fournisseur (change, virement) ET cout de la ligne de
   // financement s'additionnent : ce sont deux depenses distinctes.
-  const fraisBancairesUtilises = arr2(estimeFraisBancaires + fraisFinancementRetenus);
+  // Frais de paiement fournisseur : les frais REELS saisis a la reception (type FRAIS_PAIEMENT) remplacent
+  // l'estimation du dossier de calcul des qu'il y en a (sinon, on garde l'estimation).
+  const receptionsPaiement = (
+    await db.query(
+      `SELECT COUNT(*) FILTER (WHERE r.devise <> 'XOF')::int AS etrangeres,
+              COUNT(*) FILTER (WHERE EXISTS (SELECT 1 FROM reception_cout_approche c WHERE c.reception_id = r.id AND c.type_cout = 'FRAIS_PAIEMENT'))::int AS avec_frais
+       FROM reception_marchandise r JOIN commande_fournisseur cf ON cf.id = r.commande_id
+       WHERE r.tenant_id = $1 AND r.statut = 'VALIDEE' AND cf.${colonne} = $2`,
+      [tenantId, cle]
+    )
+  ).rows[0];
+  const fraisPaiementReels = arr2(Number(reel.frais_paiement_xof));
+  const paiementSource = fraisPaiementReels > 0 ? "RECEPTION" : "DOSSIER_CALCUL";
+  const fraisPaiementUtilise = paiementSource === "RECEPTION" ? fraisPaiementReels : arr2(estimeFraisBancaires);
+  const fraisBancairesUtilises = arr2(fraisPaiementUtilise + fraisFinancementRetenus);
   const comparable = enrichies.length > 0 && nonCommandees === 0 && enrichies.every((c) => c.statut_reception === "COMPLETE");
   const estimeRevientArr = arr2(estimeRevient);
   const margeEstimeePct = estimeRevient > 0 ? (estimeMarge / estimeRevient) * 100 : null;
@@ -394,6 +410,11 @@ async function syntheseDossier(tenantId, colonne, cle) {
     frais_bancaires: {
       estimes_xof: arr2(estimeFraisBancaires),
       paiement_fournisseur_xof: arr2(estimeFraisBancaires),
+      paiement_reel_xof: fraisPaiementReels,
+      paiement_utilise_xof: fraisPaiementUtilise,
+      paiement_source: paiementSource,
+      receptions_etrangeres: receptionsPaiement.etrangeres,
+      receptions_avec_frais_paiement: receptionsPaiement.avec_frais,
       retenus_xof: fraisFinancementRetenus,
       utilises_xof: fraisBancairesUtilises,
       source: fin.length > 0 ? "FINANCEMENT" : "DOSSIER_CALCUL",

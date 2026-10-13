@@ -2,7 +2,9 @@
 // backend/src/services/receptionCouts.js (la reference reste le serveur : apres
 // enregistrement, l'ecran affiche toujours les valeurs recalculees par l'API).
 
-export const TYPES_COUT = ["FRET", "ASSURANCE", "DOUANE", "TRANSIT", "TRANSPORT_LOCAL", "AUTRE"];
+export const TYPES_COUT = ["FRET", "ASSURANCE", "DOUANE", "TRANSIT", "TRANSPORT_LOCAL", "FRAIS_PAIEMENT", "AUTRE"];
+// Cotations de transitaire : sans frais de paiement (frais bancaires).
+export const TYPES_COUT_COTATION = TYPES_COUT.filter((x) => x !== "FRAIS_PAIEMENT");
 export const REPARTITIONS = ["VALEUR", "QUANTITE", "POIDS"];
 
 // Couts normalement deja compris dans le prix facture par le fournisseur.
