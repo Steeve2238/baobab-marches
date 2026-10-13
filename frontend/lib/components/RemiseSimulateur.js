@@ -100,7 +100,7 @@ export default function RemiseSimulateur({ devis, onClose, onApplied }) {
   const lignesCout = sim ? sim.lignes.filter((l) => !l.non_chiffre) : [];
 
   return (
-    <div role="dialog" aria-modal="true" style={fondStyle} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div role="dialog" aria-modal="true" style={fondStyle}>
       <div style={fenetreStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div>
@@ -328,8 +328,8 @@ function LigneRecap({ libelle, a, b, nf, suffixe = "", fort, discret, couleurB, 
   );
 }
 
-const fondStyle = { position: "fixed", inset: 0, background: "rgba(14,58,64,0.45)", zIndex: 1000, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "4vh 14px", overflowY: "auto" };
-const fenetreStyle = { background: "#fff", borderRadius: 12, padding: "20px 22px", width: "100%", maxWidth: 880, boxShadow: "0 12px 40px rgba(0,0,0,0.25)" };
+const fondStyle = { position: "fixed", inset: 0, background: "rgba(14,58,64,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "3vh 14px", overflow: "hidden" };
+const fenetreStyle = { background: "#fff", borderRadius: 12, padding: "20px 22px", width: "100%", maxWidth: 880, maxHeight: "94vh", overflowY: "auto", overscrollBehavior: "contain", boxShadow: "0 12px 40px rgba(0,0,0,0.25)" };
 const labelStyle = { fontSize: 11.5, fontWeight: 600, display: "block", marginBottom: 5 };
 const inputStyle = { padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13, fontFamily: "inherit" };
 const thStyle = { padding: "4px 4px", textAlign: "right", fontWeight: 600 };
