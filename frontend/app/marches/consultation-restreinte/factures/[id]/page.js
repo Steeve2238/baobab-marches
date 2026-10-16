@@ -189,6 +189,28 @@ export default function FactureVenteDetailPage() {
         </div>
       </div>
 
+      {facture.devis_info && (
+        <div className="card no-print" style={{ marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12.5 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
+              {t("venteDevisOrigine")} :{" "}
+              <Link href={`/marches/consultation-restreinte/devis/${facture.devis_info.id}`} style={{ color: "var(--petrol)" }}>{facture.devis_info.numero}</Link>
+            </div>
+            <span style={{ color: "var(--sub)" }}>{t("venteDejaFactureLabel")} : </span>
+            <span className="mono" style={{ fontWeight: 600 }}>{Number(facture.devis_info.deja_facture).toLocaleString()} XOF</span>
+            <span style={{ color: "var(--sub)", marginLeft: 14 }}>{t("venteResteAFacturerLabel")} : </span>
+            <span className="mono" style={{ fontWeight: 600, color: facture.devis_info.reste_a_facturer > 0.009 ? "var(--ocre)" : "#2E7D5B" }}>
+              {Number(facture.devis_info.reste_a_facturer).toLocaleString()} XOF
+            </span>
+          </div>
+          {facture.devis_info.statut === "VALIDE" && facture.devis_info.reste_a_facturer > 0.009 && peutFacturer && (
+            <Link href={`/marches/consultation-restreinte/devis/${facture.devis_info.id}?facturer=1`} style={{ ...boutonPrincipalStyle, textDecoration: "none", display: "inline-block" }}>
+              {t("venteFacturerSuiteBouton")}
+            </Link>
+          )}
+        </div>
+      )}
+
       {(facture.bons_livraison || []).length > 0 && (
         <div className="card no-print" style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>

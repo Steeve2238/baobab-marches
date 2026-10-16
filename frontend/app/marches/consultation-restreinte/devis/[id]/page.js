@@ -91,6 +91,8 @@ export default function DevisDetailPage() {
     ])
       .then(([devisData, enteteData, parametresData, permissionsData, clientsData]) => {
         setDevis(devisData);
+        // Une facture existe deja : la suite logique est le solde (INTEGRALE serait refusee : depassement du devis).
+        setTypeFacturation((prev) => (Number(devisData.deja_facture) > 0 && prev === "INTEGRALE" ? "SOLDE" : prev));
         setEntete({ ...enteteData, ...parametresData });
         setPermissions(permissionsData);
         setClients(clientsData);
@@ -106,6 +108,13 @@ export default function DevisDetailPage() {
   }
 
   useEffect(charger, [params.id]);
+
+  // Lien « Facturer la suite » depuis une facture (?facturer=1) : amene directement au bloc de facturation.
+  useEffect(() => {
+    if (!devis || typeof window === "undefined" || !/[?&]facturer=1/.test(window.location.search)) return;
+    const el = document.getElementById("bloc-facturation");
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [devis]);
 
   // Personnalise dynamiquement document.title (numero du devis + entreprise
   // du tenant) car document.title est injecte par le navigateur dans
@@ -392,7 +401,7 @@ export default function DevisDetailPage() {
       )}
 
       {devis.statut === "VALIDE" && (
-        <div className="no-print card" style={{ marginBottom: 16 }}>
+        <div id="bloc-facturation" className="no-print card" style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16, marginBottom: 12 }}>
             <h3 style={{ fontSize: 13.5, color: "var(--petrol)", margin: 0 }}>{t("venteFacturesDevisSection")}</h3>
             <div style={{ display: "flex", gap: 20, fontSize: 12.5 }}>
@@ -447,6 +456,11 @@ export default function DevisDetailPage() {
               <button type="button" onClick={() => setRemiseOuverte(true)} style={boutonSecondaireStyle}>{t("remiseBoutonNegocier")}</button>
             </div>
           )}
+          {peutFacturer && Number(devis.deja_facture) > 0 && (
+            <p style={{ fontSize: 12.5, color: "var(--sub)", margin: "0 0 10px" }}>
+              {t("venteFacturerSuiteAide").replace("{m}", resteAFacturer.toLocaleString())}
+            </p>
+          )}
           {peutFacturer ? (
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid var(--line)", paddingTop: 14 }}>
               <div>
@@ -457,6 +471,11 @@ export default function DevisDetailPage() {
                   <option value="SOLDE">{t("venteTypeFacturationSolde")}</option>
                 </select>
               </div>
+              {typeFacturation === "SOLDE" && (
+                <div style={{ fontSize: 12.5, paddingBottom: 8 }}>
+                  {t("venteSoldeMontantHint")} <strong className="mono">{resteAFacturer.toLocaleString()} XOF</strong>
+                </div>
+              )}
               {typeFacturation === "ACOMPTE" && (
                 <div>
                   <label style={labelStyle}>{t("ventePourcentageAcompteLabel")}</label>
@@ -469,6 +488,11 @@ export default function DevisDetailPage() {
                     onChange={(e) => setPourcentageAcompte(e.target.value)}
                     style={{ ...inputStyleCompact, width: 90 }}
                   />
+                  {Number(pourcentageAcompte) > 0 && Number(pourcentageAcompte) <= 100 && (
+                    <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 4 }}>
+                      = {(Math.round(Number(devis.total_ttc) * Number(pourcentageAcompte)) / 100).toLocaleString()} XOF
+                    </div>
+                  )}
                 </div>
               )}
               <div>
@@ -499,7 +523,11 @@ export default function DevisDetailPage() {
               </button>
             </div>
           ) : (
-            resteAFacturer <= 0.009 && <p style={{ fontSize: 12.5, color: "#2E7D5B", fontWeight: 600, margin: 0 }}>{t("venteDevisEntierementFacture")}</p>
+            resteAFacturer <= 0.009 ? (
+              <p style={{ fontSize: 12.5, color: "#2E7D5B", fontWeight: 600, margin: 0 }}>{t("venteDevisEntierementFacture")}</p>
+            ) : (
+              <p style={{ fontSize: 12.5, color: "var(--ocre)", fontWeight: 600, margin: 0 }}>{t("venteFacturationRolesRequis")}</p>
+            )
           )}
         </div>
       )}

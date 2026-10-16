@@ -1910,8 +1910,19 @@ router.get("/factures/:id", async (req, res) => {
     const resteTotal = lignes.reduce((n, l) => n + l.reste_a_livrer, 0);
     const nbLivres = bons.filter((b) => b.statut === "LIVRE").length;
     const livraisonStatut = nbLivres === 0 ? "NON_LIVREE" : resteTotal > 0 ? "PARTIELLE" : "LIVREE";
+    // Avancement de facturation du devis d'origine : permet, depuis la facture (ex. un acompte deja paye), de
+    // retrouver le devis et de facturer la suite (solde ou nouvel acompte).
+    let devisInfo = null;
+    if (result.rows[0].devis_id) {
+      const dv = await db.query(`SELECT id, numero, statut, total_ttc FROM devis WHERE id = $1 AND tenant_id = $2`, [result.rows[0].devis_id, req.user.tenantId]);
+      if (dv.rows[0]) {
+        const av = await calculerAvancementFacturation(db, req.user.tenantId, dv.rows[0].id, dv.rows[0].total_ttc);
+        devisInfo = { id: dv.rows[0].id, numero: dv.rows[0].numero, statut: dv.rows[0].statut, total_ttc: Number(dv.rows[0].total_ttc), ...av };
+      }
+    }
     res.json({
       ...result.rows[0],
+      devis_info: devisInfo,
       lignes: lignesAvecLivraison,
       bons_livraison: bons,
       bon_livraison: bons[bons.length - 1] || null,
