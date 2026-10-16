@@ -14,6 +14,7 @@
  */
 const { v4: uuidv4 } = require("uuid");
 const compta = require("./comptaService");
+const modesReglement = require("./modesReglement");
 
 const { versCentimes, centimesVersDecimal, ComptaError } = compta;
 const ORIGINE = "REGLEMENT_CLIENT";
@@ -88,12 +89,22 @@ async function creerReglementClient(client, tenantId, utilisateurId, data) {
   if (!exercice) throw new ComptaError("COMPTA_EXERCICE_INTROUVABLE", 400);
   if (exercice.statut === "CLOTURE") throw new ComptaError("COMPTA_EXERCICE_CLOTURE", 409);
 
-  const jr = await client.query(
-    `SELECT * FROM journal_comptable WHERE id = $1 AND tenant_id = $2 AND actif = true AND type_journal IN ('BANQUE', 'CAISSE')`,
-    [data.journal_id, tenantId]
-  );
-  const journal = jr.rows[0];
-  if (!journal || !journal.compte_tresorerie) throw new ComptaError("COMPTA_REGLEMENT_JOURNAL_INVALIDE", 400);
+  // Mode de reglement parametre (journal, compte de tresorerie, commission) ; l'ancien texte libre reste accepte.
+  let res;
+  try {
+    res = await modesReglement.resoudre(client, tenantId, data.mode_reglement_id || null, {
+      sens: "ENCAISSEMENT", journalId: data.journal_id || null, texteLegacy: data.mode_paiement || null,
+    });
+  } catch (e) {
+    if (e instanceof modesReglement.ModeError) throw new ComptaError(e.code, e.status);
+    throw e;
+  }
+  const journal = res.journal;
+  if (!journal) throw new ComptaError("COMPTA_REGLEMENT_JOURNAL_INVALIDE", 400);
+  if (!res.compteTresorerie) throw new ComptaError(res.mode ? "MODE_REGLEMENT_COMPTE_TRESORERIE_REQUIS" : "COMPTA_REGLEMENT_JOURNAL_INVALIDE", 400);
+  const modeTexte = res.libelle || (data.mode_paiement ? String(data.mode_paiement).trim() : null);
+  const modeId = res.mode ? res.mode.id : null;
+  const commissionC = res.compteCommission ? Math.min(modesReglement.commissionCentimes(montantC, res.commissionPct), montantC) : 0;
 
   const saisies = Array.isArray(data.imputations) ? data.imputations.filter((i) => i && i.facture_id) : [];
   const vus = new Set();
@@ -120,12 +131,12 @@ async function creerReglementClient(client, tenantId, utilisateurId, data) {
   const reference = data.reference ? String(data.reference).trim() : null;
   const rg = await client.query(
     `INSERT INTO reglement_client
-       (id, tenant_id, numero, tiers_id, journal_id, date_reglement, montant, mode_paiement, reference, libelle, cree_par)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+       (id, tenant_id, numero, tiers_id, journal_id, date_reglement, montant, mode_paiement, reference, libelle, cree_par, mode_reglement_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
     [
       uuidv4(), tenantId, numero, tiers.id, journal.id, data.date_reglement, centimesVersDecimal(montantC),
-      data.mode_paiement ? String(data.mode_paiement).trim() : null, reference,
-      data.libelle ? String(data.libelle).trim() : null, utilisateurId,
+      modeTexte, reference,
+      data.libelle ? String(data.libelle).trim() : null, utilisateurId, modeId,
     ]
   );
   const reglement = rg.rows[0];
@@ -140,9 +151,10 @@ async function creerReglementClient(client, tenantId, utilisateurId, data) {
        SET montant_encaisse = montant_encaisse + $2,
            statut = CASE WHEN $3 THEN 'PAYEE' ELSE statut END,
            date_paiement = CASE WHEN $3 THEN $4::date ELSE date_paiement END,
-           mode_paiement = CASE WHEN $3 THEN $5 ELSE mode_paiement END
+           mode_paiement = CASE WHEN $3 THEN $5 ELSE mode_paiement END,
+           mode_reglement_id = CASE WHEN $3 THEN $6 ELSE mode_reglement_id END
        WHERE id = $1`,
-      [i.facture.id, centimesVersDecimal(i.montant_c), solde, data.date_reglement, data.mode_paiement ? String(data.mode_paiement).trim() : null]
+      [i.facture.id, centimesVersDecimal(i.montant_c), solde, data.date_reglement, modeTexte, modeId]
     );
   }
 
@@ -155,15 +167,18 @@ async function creerReglementClient(client, tenantId, utilisateurId, data) {
   );
   const lignes = [
     {
-      compte_id: await idCompte(client, tenantId, journal.compte_tresorerie),
+      compte_id: await idCompte(client, tenantId, res.compteTresorerie),
       tiers_id: null,
       libelle: libelleEcriture,
-      debit_c: montantC,
+      debit_c: montantC - commissionC,
       credit_c: 0,
       date_echeance: null,
       compte_modifiable: "TRESORERIE",
     },
   ];
+  if (commissionC > 0) {
+    lignes.push({ compte_id: await idCompte(client, tenantId, res.compteCommission), tiers_id: null, libelle: `Commission ${modeTexte || ""}`.trim(), debit_c: commissionC, credit_c: 0, date_echeance: null });
+  }
   if (totalImputeC > 0) {
     lignes.push({ compte_id: await idCompte(client, tenantId, tiers.compte_collectif), tiers_id: tiers.id, libelle: `Reglement ${tiers.nom}`, debit_c: 0, credit_c: totalImputeC, date_echeance: null });
   }
@@ -241,6 +256,14 @@ async function annulerReglementClient(client, tenantId, utilisateurId, id) {
     [tenantId, ORIGINE, id]
   );
   const e = ec.rows[0];
+  // Cheque deja remis en banque : annuler d'abord la remise (sinon le bordereau ne correspondrait plus aux ecritures).
+  if (e) {
+    const remis = await client.query(
+      `SELECT 1 FROM remise_banque_ligne rl JOIN ligne_ecriture l ON l.id = rl.ligne_ecriture_id WHERE l.ecriture_id = $1 LIMIT 1`,
+      [e.id]
+    );
+    if (remis.rows.length > 0) throw new ComptaError("REMISE_CHEQUE_DEJA_REMIS", 409);
+  }
   const res = { supprimee: false, contrepassee: false };
   if (e) {
     if (e.statut !== "VALIDEE") {

@@ -54,6 +54,19 @@ function lienFiscal(e) {
   return "/fiscalite/calendrier";
 }
 
+// GET /api/tableau-bord/negoce?periode=JOUR|SEMAINE|MOIS|ANNEE - tableau de bord Negoce (Pack Commerce, lot 3).
+// Reserve aux profils qui voient les ventes (module « marches »), l'administrateur ou le tableau de bord.
+router.get("/negoce", async (req, res) => {
+  try {
+    const p = req.user?.permissions;
+    if (!aModule(p, "marches") && !(p && p.tableauDeBord)) return res.status(403).json({ error: t(req, "MODULE_FORBIDDEN") });
+    res.json(await require("../services/dashboardNegoce").calculer(req.user.tenantId, req.query.periode));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "TABLEAU_BORD_ERREUR") });
+  }
+});
+
 // GET /api/tableau-bord/echeances?jours=30
 router.get("/echeances", async (req, res) => {
   try {

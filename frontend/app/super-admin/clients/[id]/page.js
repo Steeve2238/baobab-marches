@@ -367,6 +367,7 @@ export default function SuperAdminClientDetailPage() {
           <option value="NEGOCE">{t("profilActiviteNEGOCE")}</option>
           <option value="MARCHES">{t("profilActiviteMARCHES")}</option>
         </select>
+        <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 8, marginBottom: 0 }}>{t(`packContenu_${client.profil_activite || "LES_DEUX"}`)}</p>
       </div>
 
       <div className="card" style={{ marginBottom: 16, maxWidth: 480 }}>

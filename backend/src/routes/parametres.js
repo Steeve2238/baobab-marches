@@ -340,18 +340,10 @@ router.get("/profil-activite", async (req, res) => {
   }
 });
 
-router.patch("/profil-activite", requireRole("ADMIN"), async (req, res) => {
-  const profil = req.body && req.body.profil_activite;
-  if (!PROFILS_ACTIVITE.includes(profil)) {
-    return res.status(400).json({ error: t(req, "PROFIL_ACTIVITE_INVALIDE") });
-  }
-  try {
-    await db.query(`UPDATE tenant SET profil_activite = $1 WHERE id = $2`, [profil, req.user.tenantId]);
-    res.json({ profil_activite: profil });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: t(req, "CALCUL_PARAMETRES_UPDATE_ERROR") });
-  }
+// Le pack de licence (profil d'activite) n'est plus modifiable par le client (lot 8) : seul le Super Admin le change
+// (PATCH /api/super-admin/clients/:id/profil-activite).
+router.patch("/profil-activite", requireRole("ADMIN"), (req, res) => {
+  res.status(403).json({ error: t(req, "PACK_GERE_PAR_SUPER_ADMIN"), code: "PACK_GERE_PAR_SUPER_ADMIN" });
 });
 
 // ----------------------------------------------------------------------------

@@ -12,6 +12,7 @@ const FORM_VIDE = {
   pays: "Senegal",
   formule_abonnement_id: "",
   mode_hebergement: "HEBERGE",
+  profil_activite: "LES_DEUX",
   admin_nom: "",
   admin_prenom: "",
   admin_email: "",
@@ -152,6 +153,17 @@ export default function SuperAdminNouveauClientPage() {
         <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>
           {form.mode_hebergement === "LOCAL" ? t("saModeLocalHelp") : t("saModeHebergeHelp")}
         </p>
+        <label style={{ ...labelStyle, marginTop: 10 }}>{t("profilActiviteSection")}</label>
+        <select
+          value={form.profil_activite}
+          onChange={(e) => setForm((f) => ({ ...f, profil_activite: e.target.value }))}
+          style={inputStyle}
+        >
+          <option value="LES_DEUX">{t("profilActiviteLES_DEUX")}</option>
+          <option value="NEGOCE">{t("profilActiviteNEGOCE")}</option>
+          <option value="MARCHES">{t("profilActiviteMARCHES")}</option>
+        </select>
+        <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>{t(`packContenu_${form.profil_activite}`)}</p>
         <label style={{ ...labelStyle, marginTop: 10 }}>{t("saFormuleLabel")}</label>
         <select
           value={form.formule_abonnement_id}

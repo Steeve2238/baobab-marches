@@ -18,6 +18,8 @@ const facturesEmises = require("../services/comptaFacturesEmises");
 const etatsCompta = require("../services/comptaEtats");
 const exportsEtats = require("../services/comptaExportsEtats");
 const immoCompta = require("../services/comptaImmobilisations");
+const remisesCompta = require("../services/comptaRemises");
+const stockCompta = require("../services/comptaStock");
 const multer = require("multer");
 
 const { ComptaError, avecTransaction } = compta;
@@ -484,7 +486,10 @@ router.post(
   gerer(async (req, res) => {
     await compta.exigerInitialise(db, tenant(req));
     const depuis = req.body?.depuis && /^\d{4}-\d{2}-\d{2}$/.test(req.body.depuis) ? req.body.depuis : undefined;
-    res.json(await ventesCompta.rattraperVentes(tenant(req), userId(req), { depuis }));
+    const resume = await ventesCompta.rattraperVentes(tenant(req), userId(req), { depuis });
+    const dep = await require("../services/depenses").rattraperDepenses(tenant(req), userId(req), { depuis });
+    const av = await require("../services/comptaAvoirs").rattraperAvoirs(tenant(req), userId(req), { depuis });
+    res.json({ ...resume, depenses: dep.depenses, avoirs: av.avoirs });
   })
 );
 
@@ -900,6 +905,38 @@ router.post(
   blockLectureSeule,
   gerer(async (req, res) => {
     res.json(await avecTransaction((client) => encaissementsCompta.annulerReglementClient(client, tenant(req), userId(req), req.params.id)));
+  })
+);
+
+// Stock : ecriture de variation a l'inventaire (lot 9)
+router.get("/stock", gerer(async (req, res) => res.json(await stockCompta.etat(db, tenant(req)))));
+router.post(
+  "/stock/inventaires/:id/comptabiliser",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    const r = await avecTransaction((client) => stockCompta.genererEcritureInventaire(client, tenant(req), userId(req), req.params.id));
+    if (r.statut === "IGNOREE") return res.status(409).json({ error: t(req, `STOCK_COMPTA_${r.raison}`), code: `STOCK_COMPTA_${r.raison}` });
+    res.status(r.statut === "CREEE" ? 201 : 200).json(r);
+  })
+);
+router.post("/stock/rattraper", blockLectureSeule, gerer(async (req, res) => res.json(await stockCompta.rattraper(tenant(req), userId(req)))));
+
+// Remise de cheques en banque (lot 1b)
+router.get("/encaissements/cheques", gerer(async (req, res) => res.json(await remisesCompta.portefeuille(db, tenant(req)))));
+router.get("/encaissements/remises-banque", gerer(async (req, res) => res.json({ remises: await remisesCompta.listerRemises(db, tenant(req)) })));
+router.get("/encaissements/remises-banque/:id", gerer(async (req, res) => res.json(await remisesCompta.lireRemise(db, tenant(req), req.params.id))));
+router.post(
+  "/encaissements/remises-banque",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.status(201).json(await avecTransaction((client) => remisesCompta.creerRemise(client, tenant(req), userId(req), req.body || {})));
+  })
+);
+router.post(
+  "/encaissements/remises-banque/:id/annuler",
+  blockLectureSeule,
+  gerer(async (req, res) => {
+    res.json(await avecTransaction((client) => remisesCompta.annulerRemise(client, tenant(req), userId(req), req.params.id)));
   })
 );
 

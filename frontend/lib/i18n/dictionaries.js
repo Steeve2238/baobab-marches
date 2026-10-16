@@ -13,6 +13,16 @@ import { FIN_FR, FIN_EN } from "./financementDictionary";
 import { ECH_FR, ECH_EN } from "./echeancierDictionary";
 import { PLAN_FR, PLAN_EN } from "./planTresorerieDictionary";
 import { CEX_FR, CEX_EN } from "./compteExploitationDictionary";
+import { MDR_FR, MDR_EN } from "./modesReglementDictionary";
+import { CAI_FR, CAI_EN } from "./caisseDictionary";
+import { BC_FR, BC_EN } from "./bonsCommandeDictionary";
+import { DGN_FR, DGN_EN } from "./dashboardNegoceDictionary";
+import { DEP_FR, DEP_EN } from "./depensesDictionary";
+import { STK_FR, STK_EN } from "./stockDictionary";
+import { AVO_FR, AVO_EN } from "./avoirsDictionary";
+import { IMP_FR, IMP_EN } from "./importDonneesDictionary";
+import { REM_FR, REM_EN } from "./remisesDictionary";
+import { CST_FR, CST_EN } from "./comptaStockDictionary";
 import { OFFRES_FR, OFFRES_EN } from "./offresDictionary";
 import { RHD_FR, RHD_EN } from "./rhDossierDictionary";
 import { RHC_FR, RHC_EN } from "./rhContratsDictionary";
@@ -924,11 +934,15 @@ export const DICTIONARIES = {
     venteTypeConsultation: "Consultation",
     venteTypeVente: "Vente",
     backToVentes: "Retour aux ventes",
-    profilActiviteSection: "Profil d'activité",
-    profilActiviteDescription: "Adapte le menu et les libellés : « Négoce » remplace Marché par Ventes et masque Appel d'offres et Dossiers. Aucun droit d'accès n'est modifié.",
-    profilActiviteLES_DEUX: "Marchés et négoce (menu complet)",
-    profilActiviteNEGOCE: "Négoce / commerce (Ventes)",
-    profilActiviteMARCHES: "Marchés publics et consultations",
+    profilActiviteSection: "Pack de licence",
+    profilActiviteDescription: "Détermine le menu et les fonctions disponibles. Les options Comptabilité, Fiscalité et RH-Paie se gèrent à part, quel que soit le pack. Changer de pack ne supprime aucune donnée.",
+    packContenu_NEGOCE: "Pack Négoce : ventes, caisse, stock et inventaires, achats, dépenses et résultat, avoirs, import Excel. Sans appels d'offres ni dossiers de calcul.",
+    packContenu_MARCHES: "Pack Marchés : appels d'offres, consultations restreintes, dossiers de calcul, devis et facturation, achats. Sans caisse, dépenses/résultat ni avoirs.",
+    packContenu_LES_DEUX: "Pack Complet : toutes les fonctions Marchés et Négoce.",
+    packGereParFournisseur: "Le pack est géré par votre fournisseur de licence : pour en changer, contactez-le.",
+    profilActiviteLES_DEUX: "Pack Complet (marchés + négoce)",
+    profilActiviteNEGOCE: "Pack Négoce (vente / commerce)",
+    profilActiviteMARCHES: "Pack Marchés (appels d'offres et consultations)",
     navVentesConsultations: "Consultations",
     navVentesDevis: "Devis",
     navVentesFactures: "Factures",
@@ -2766,11 +2780,15 @@ export const DICTIONARIES = {
     venteTypeConsultation: "Consultation",
     venteTypeVente: "Sale",
     backToVentes: "Back to sales",
-    profilActiviteSection: "Activity profile",
-    profilActiviteDescription: "Adapts the menu and wording: \"Trade\" replaces Markets with Sales and hides Tenders and Files. No access right is changed.",
-    profilActiviteLES_DEUX: "Markets and trade (full menu)",
-    profilActiviteNEGOCE: "Trade / commerce (Sales)",
-    profilActiviteMARCHES: "Public markets and consultations",
+    profilActiviteSection: "Licence pack",
+    profilActiviteDescription: "Determines the menu and available features. Accounting, Tax and HR-Payroll options are managed separately, whatever the pack. Changing pack deletes no data.",
+    packContenu_NEGOCE: "Trade pack: sales, till, stock and inventories, purchasing, expenses and results, credit notes, Excel import. No tenders or costing files.",
+    packContenu_MARCHES: "Markets pack: tenders, restricted consultations, costing files, quotes and invoicing, purchasing. No till, expenses/results or credit notes.",
+    packContenu_LES_DEUX: "Complete pack: all Markets and Trade features.",
+    packGereParFournisseur: "The pack is managed by your licence provider: contact them to change it.",
+    profilActiviteLES_DEUX: "Complete pack (markets + trade)",
+    profilActiviteNEGOCE: "Trade pack (sales / commerce)",
+    profilActiviteMARCHES: "Markets pack (tenders and consultations)",
     navVentesConsultations: "Consultations",
     navVentesDevis: "Quotes",
     navVentesFactures: "Invoices",
@@ -4103,3 +4121,23 @@ Object.assign(DICTIONARIES.fr, PAIEK_FR);
 Object.assign(DICTIONARIES.fr, PAIE2_FR);
 Object.assign(DICTIONARIES.en, PAIEK_EN);
 Object.assign(DICTIONARIES.en, PAIE2_EN);
+Object.assign(DICTIONARIES.fr, MDR_FR);
+Object.assign(DICTIONARIES.en, MDR_EN);
+Object.assign(DICTIONARIES.fr, CAI_FR);
+Object.assign(DICTIONARIES.fr, BC_FR);
+Object.assign(DICTIONARIES.fr, DGN_FR);
+Object.assign(DICTIONARIES.fr, DEP_FR);
+Object.assign(DICTIONARIES.fr, STK_FR);
+Object.assign(DICTIONARIES.fr, AVO_FR);
+Object.assign(DICTIONARIES.fr, IMP_FR);
+Object.assign(DICTIONARIES.fr, REM_FR);
+Object.assign(DICTIONARIES.fr, CST_FR);
+Object.assign(DICTIONARIES.en, CAI_EN);
+Object.assign(DICTIONARIES.en, BC_EN);
+Object.assign(DICTIONARIES.en, DGN_EN);
+Object.assign(DICTIONARIES.en, DEP_EN);
+Object.assign(DICTIONARIES.en, STK_EN);
+Object.assign(DICTIONARIES.en, AVO_EN);
+Object.assign(DICTIONARIES.en, IMP_EN);
+Object.assign(DICTIONARIES.en, REM_EN);
+Object.assign(DICTIONARIES.en, CST_EN);

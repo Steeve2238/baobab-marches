@@ -7,6 +7,7 @@ import { api } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import { estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import AppShell from "../../../../../lib/components/AppShell";
+import PiecesJointes from "../../../../../lib/components/PiecesJointes";
 import RemiseSimulateur from "../../../../../lib/components/RemiseSimulateur";
 import { remisesParLigne } from "../../../../../lib/remiseLignes";
 import EcheancierEditor from "../../../../../lib/components/EcheancierEditor";
@@ -58,6 +59,9 @@ export default function DevisDetailPage() {
   const [chargement, setChargement] = useState(true);
   const [action, setAction] = useState(false);
   const [referenceBc, setReferenceBc] = useState("");
+  // BC du client (lot 4) : reference + date saisies sur le devis, reprises sur les factures
+  const [bcForm, setBcForm] = useState({ reference_bc_client: "", date_bc_client: "" });
+  const [bcInfo, setBcInfo] = useState("");
   // Numero manuel (ADMIN, a la generation de la facture uniquement) - chantier
   // du 01/10/2026, demande ecrite du client.
   const [numeroFactureManuel, setNumeroFactureManuel] = useState("");
@@ -91,6 +95,8 @@ export default function DevisDetailPage() {
     ])
       .then(([devisData, enteteData, parametresData, permissionsData, clientsData]) => {
         setDevis(devisData);
+        setReferenceBc((prev) => prev || devisData.reference_bc_client || "");
+        setBcForm({ reference_bc_client: devisData.reference_bc_client || "", date_bc_client: devisData.date_bc_client ? String(devisData.date_bc_client).slice(0, 10) : "" });
         // Une facture existe deja : la suite logique est le solde (INTEGRALE serait refusee : depassement du devis).
         setTypeFacturation((prev) => (Number(devisData.deja_facture) > 0 && prev === "INTEGRALE" ? "SOLDE" : prev));
         setEntete({ ...enteteData, ...parametresData });
@@ -152,6 +158,19 @@ export default function DevisDetailPage() {
       setErreur(err.message);
     } finally {
       setAction(false);
+    }
+  }
+
+  async function handleEnregistrerBc() {
+    setErreur("");
+    setBcInfo("");
+    try {
+      const r = await api.bcModifierClient(devis.id, bcForm);
+      setDevis((prev) => ({ ...prev, reference_bc_client: r.reference_bc_client, date_bc_client: r.date_bc_client }));
+      setReferenceBc(r.reference_bc_client || "");
+      setBcInfo(t("bcClientEnregistre"));
+    } catch (err) {
+      setErreur(err.message);
     }
   }
 
@@ -397,6 +416,26 @@ export default function DevisDetailPage() {
         <div className="no-print card" style={{ marginBottom: 16, borderColor: "var(--brique)" }}>
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--brique)" }}>{texteTotalPartiel}</div>
           <div style={{ fontSize: 12, color: "var(--sub)", marginTop: 4 }}>{t("venteDevisPartielValidationAide")}</div>
+        </div>
+      )}
+
+      {(devis.statut === "ENVOYE" || devis.statut === "VALIDE") && (
+        <div className="no-print card" style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 13.5, color: "var(--petrol)", margin: "0 0 4px" }}>{t("bcClientTitre")}</h3>
+          <p style={{ fontSize: 12, color: "var(--sub)", margin: "0 0 12px" }}>{t("bcClientAide")}</p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 14 }}>
+            <div>
+              <label style={labelStyle}>{t("bcClientReference")}</label>
+              <input value={bcForm.reference_bc_client} onChange={(e) => setBcForm((f) => ({ ...f, reference_bc_client: e.target.value }))} style={{ ...inputStyleCompact, width: 200 }} />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("bcClientDate")}</label>
+              <input type="date" value={bcForm.date_bc_client} onChange={(e) => setBcForm((f) => ({ ...f, date_bc_client: e.target.value }))} style={{ ...inputStyleCompact, width: 160 }} />
+            </div>
+            <button type="button" onClick={handleEnregistrerBc} style={boutonSecondaireStyle}>{t("bcClientEnregistrer")}</button>
+            {bcInfo && <span style={{ fontSize: 12, color: "#2E7D5B", fontWeight: 600 }}>{bcInfo}</span>}
+          </div>
+          <PiecesJointes type="DEVIS_BC_CLIENT" id={devis.id} />
         </div>
       )}
 

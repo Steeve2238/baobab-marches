@@ -7,6 +7,7 @@ import { api, estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
 import MontantLettresBloc from "../../../../../lib/components/MontantLettresBloc";
+import ModeReglementSelect from "../../../../../lib/components/ModeReglementSelect";
 import { remisesParLigne } from "../../../../../lib/remiseLignes";
 
 // Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
@@ -85,7 +86,7 @@ export default function FactureVenteDetailPage() {
     setAction(true);
     setErreur("");
     try {
-      const maj = await api.marquerFactureVentePayee(facture.id, { mode_paiement: modePaiement });
+      const maj = await api.marquerFactureVentePayee(facture.id, { mode_reglement_id: modePaiement });
       setFacture((prev) => ({ ...prev, ...maj }));
     } catch (err) {
       setErreur(err.message);
@@ -159,11 +160,12 @@ export default function FactureVenteDetailPage() {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {facture.statut === "IMPAYEE" && peutFacturer && (
             <>
-              <input
-                placeholder={t("saPaymentModePlaceholder")}
+              <ModeReglementSelect
+                sens="ENCAISSEMENT"
+                vide={false}
                 value={modePaiement}
-                onChange={(e) => setModePaiement(e.target.value)}
-                style={{ ...inputStyleCompact, width: 160 }}
+                onChange={(id) => setModePaiement(id)}
+                style={{ ...inputStyleCompact, width: 180 }}
               />
               <button onClick={handleMarquerPayee} disabled={action} style={boutonPrincipalStyle}>
                 {t("saMarkPaidButton")}
@@ -182,6 +184,11 @@ export default function FactureVenteDetailPage() {
             <button onClick={handleGenererBl} disabled={action} style={boutonPrincipalStyle}>
               {(facture.bons_livraison || []).length === 0 ? t("venteGenerateBlButton") : t("venteGenerateNextBlButton")}
             </button>
+          )}
+          {peutFacturer && facture.statut !== "ANNULEE" && (facture.type_facturation || "INTEGRALE") === "INTEGRALE" && (
+            <Link href={`/ventes/avoirs/nouveau?facture_id=${facture.id}`} style={boutonSecondaireStyle}>
+              {t("avoCreerDepuisFacture")}
+            </Link>
           )}
           <button onClick={() => window.print()} style={boutonSecondaireStyle}>
             {t("print")}

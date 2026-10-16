@@ -42,7 +42,7 @@ export default function FournisseursPage() {
       return;
     }
     try {
-      const maj = await api.patchFournisseur(edition.id, { echeancier: pourApi(edition.echeancier) });
+      const maj = await api.patchFournisseur(edition.id, { echeancier: pourApi(edition.echeancier), adresse: edition.adresse, telephone: edition.telephone, email: edition.email, contact_nom: edition.contact_nom });
       setFournisseurs((prev) => prev.map((f) => (f.id === maj.id ? maj : f)));
       setEdition(null);
     } catch (err) {
@@ -100,7 +100,7 @@ export default function FournisseursPage() {
               <div key={f.id} className="card">
                 <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", alignItems: "center", gap: 8 }}>
                   <div style={{ fontWeight: 600, fontSize: 13.5 }}>{f.nom}</div>
-                  <div style={{ fontSize: 12.5, color: "var(--sub)" }}>{f.pays || "—"}</div>
+                  <div style={{ fontSize: 12.5, color: "var(--sub)" }}>{[f.pays, f.telephone].filter(Boolean).join(" · ") || "—"}</div>
                   <div>
                     <div style={{ fontSize: 9.5, color: "var(--sub)", textTransform: "uppercase" }}>{t("reliabilityScoreLabel")}</div>
                     <div className="mono" style={{ fontSize: 13, fontWeight: 700 }}>
@@ -114,7 +114,7 @@ export default function FournisseursPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setEdition(enEdition ? null : { id: f.id, echeancier: ech || [] })}
+                    onClick={() => setEdition(enEdition ? null : { id: f.id, echeancier: ech || [], adresse: f.adresse || "", telephone: f.telephone || "", email: f.email || "", contact_nom: f.contact_nom || "" })}
                     style={{ background: "transparent", color: "var(--petrol)", border: "1px solid var(--line)", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600 }}
                   >
                     {enEdition ? t("echFermer") : t("echModifier")}
@@ -122,6 +122,15 @@ export default function FournisseursPage() {
                 </div>
                 {enEdition && (
                   <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--petrol)", marginBottom: 8 }}>{t("fournCoordTitre")}</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, marginBottom: 14 }}>
+                      {[["adresse", "fournAdresse"], ["contact_nom", "fournContact"], ["telephone", "fournTelephone"], ["email", "fournEmail"]].map(([k, cle]) => (
+                        <div key={k}>
+                          <label style={labelStyle}>{t(cle)}</label>
+                          <input value={edition[k]} onChange={(e) => setEdition((ed) => ({ ...ed, [k]: e.target.value }))} style={inputStyle} />
+                        </div>
+                      ))}
+                    </div>
                     <EcheancierEditor sens="FOURNISSEUR" valeur={edition.echeancier} onChange={(v) => setEdition((ed) => ({ ...ed, echeancier: v }))} />
                     <button type="button" onClick={enregistrerEcheancier} style={{ ...boutonPrincipalStyle, marginTop: 10 }}>
                       {t("echEnregistrer")}

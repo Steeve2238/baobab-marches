@@ -73,7 +73,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-// PATCH /api/fournisseurs/:id : nom, pays et/ou conditions de paiement (echeancier).
+// PATCH /api/fournisseurs/:id : nom, pays, coordonnees (bon de commande) et/ou conditions de paiement (echeancier).
 router.patch("/:id", async (req, res) => {
   const { id } = req.params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return res.status(404).json({ error: t(req, "FOURNISSEUR_NOT_FOUND") });
@@ -85,12 +85,19 @@ router.patch("/:id", async (req, res) => {
     echJson = JSON.stringify(ech.lignes);
   }
   if (b.nom !== undefined && !String(b.nom).trim()) return res.status(400).json({ error: t(req, "FOURNISSEUR_NOM_REQUIRED") });
+  const txt = (v, max) => String(v || "").trim().slice(0, max) || null;
   try {
     const r = await db.query(
       `UPDATE fournisseur SET nom = COALESCE($1, nom), pays = CASE WHEN $2::boolean THEN $3 ELSE pays END,
-              echeancier_json = COALESCE($4::jsonb, echeancier_json)
+              echeancier_json = COALESCE($4::jsonb, echeancier_json),
+              adresse = CASE WHEN $7::boolean THEN $8 ELSE adresse END,
+              email = CASE WHEN $9::boolean THEN $10 ELSE email END,
+              telephone = CASE WHEN $11::boolean THEN $12 ELSE telephone END,
+              contact_nom = CASE WHEN $13::boolean THEN $14 ELSE contact_nom END
        WHERE id = $5 AND tenant_id = $6 RETURNING *`,
-      [b.nom !== undefined ? String(b.nom).trim() : null, b.pays !== undefined, b.pays || null, echJson, id, req.user.tenantId]
+      [b.nom !== undefined ? String(b.nom).trim() : null, b.pays !== undefined, b.pays || null, echJson, id, req.user.tenantId,
+       b.adresse !== undefined, txt(b.adresse, 300), b.email !== undefined, txt(b.email, 160),
+       b.telephone !== undefined, txt(b.telephone, 60), b.contact_nom !== undefined, txt(b.contact_nom, 120)]
     );
     if (!r.rows[0]) return res.status(404).json({ error: t(req, "FOURNISSEUR_NOT_FOUND") });
     res.json(r.rows[0]);

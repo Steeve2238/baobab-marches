@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
+import DashboardNegoce from "../../lib/components/DashboardNegoce";
 import AppShell from "../../lib/components/AppShell";
 
 // Regroupement des statuts detailles du dossier en 4 grandes categories pour
@@ -323,10 +324,23 @@ export default function DashboardPage() {
     (d) => !d.moduleKey || permissions?.admin || (permissions?.modules || []).includes(d.moduleKey)
   );
 
+  // Profil d'activite (Pack Commerce) : un client Negoce voit uniquement le tableau de bord des ventes ;
+  // un client « Les deux » voit les ventes puis la vue marches habituelle.
+  const profilActivite = permissions?.profilActivite || "LES_DEUX";
+  const peutVoirVentes = !!permissions && (permissions.admin || permissions.tableauDeBord || (permissions.modules || []).includes("marches"));
+  if (profilActivite === "NEGOCE" && peutVoirVentes) {
+    return (
+      <AppShell title={t("navDashboard")}>
+        <DashboardNegoce />
+      </AppShell>
+    );
+  }
+
   return (
     <AppShell title={t("navDashboard")}>
       {chargement && <p>{t("loading")}</p>}
       {erreur && <p style={{ color: "var(--brique)" }}>{erreur}</p>}
+      {profilActivite === "LES_DEUX" && peutVoirVentes && !chargement && <DashboardNegoce compact />}
 
       {!chargement && !erreur && (
         <>

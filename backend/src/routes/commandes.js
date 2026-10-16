@@ -32,7 +32,8 @@ const arr2 = (n) => Math.round(n * 100) / 100;
 const uuidOuNull = (v) => (typeof v === "string" && UUID_RE.test(v) ? v : null);
 
 const SELECT_ENTETE = `
-  SELECT c.*, f.nom AS fournisseur_nom, tr.nom AS transitaire_nom, ct.reference AS cotation_reference,
+  SELECT c.*, f.nom AS fournisseur_nom, f.pays AS fournisseur_pays, f.adresse AS fournisseur_adresse, f.email AS fournisseur_email,
+         f.telephone AS fournisseur_telephone, f.contact_nom AS fournisseur_contact, tr.nom AS transitaire_nom, ct.reference AS cotation_reference,
          d.reference_externe AS dossier_ao_reference, d.intitule AS dossier_ao_intitule,
          cons.objet AS consultation_objet, cl.nom AS consultation_client_nom
   FROM commande_fournisseur c
@@ -717,6 +718,43 @@ router.patch("/:id", async (req, res) => {
     res.status(500).json({ error: t(req, "COMMANDE_SAVE_ERROR") });
   } finally {
     client.release();
+  }
+});
+
+// PATCH /:id/document - informations du bon de commande imprime (Pack Commerce, lot 4) : conditions de paiement,
+// lieu de livraison, transmission au fournisseur et confirmation en retour. N'affecte ni lignes, ni prix, ni statut :
+// autorise tant que la commande n'est pas annulee, y compris confirmee.
+router.patch("/:id/document", async (req, res) => {
+  const { id } = req.params;
+  if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "COMMANDE_NOT_FOUND") });
+  const b = req.body || {};
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  for (const k of ["date_transmission", "date_confirmation_fournisseur"]) {
+    if (b[k] && !DATE_RE.test(b[k])) return res.status(400).json({ error: t(req, "BC_DATE_INVALIDE") });
+  }
+  const texte = (v, max) => (v === undefined ? undefined : String(v || "").trim().slice(0, max) || null);
+  try {
+    const actuelle = (await db.query(`SELECT * FROM commande_fournisseur WHERE id = $1 AND tenant_id = $2`, [id, req.user.tenantId])).rows[0];
+    if (!actuelle) return res.status(404).json({ error: t(req, "COMMANDE_NOT_FOUND") });
+    if (actuelle.statut === "ANNULEE") return res.status(409).json({ error: t(req, "COMMANDE_NON_MODIFIABLE") });
+    const pick = (k, v) => (v === undefined ? actuelle[k] : v);
+    await db.query(
+      `UPDATE commande_fournisseur SET conditions_paiement = $1, lieu_livraison = $2, reference_fournisseur = $3,
+              date_transmission = $4, date_confirmation_fournisseur = $5
+       WHERE id = $6 AND tenant_id = $7`,
+      [
+        pick("conditions_paiement", texte(b.conditions_paiement, 500)),
+        pick("lieu_livraison", texte(b.lieu_livraison, 300)),
+        pick("reference_fournisseur", texte(b.reference_fournisseur, 120)),
+        pick("date_transmission", b.date_transmission === undefined ? undefined : b.date_transmission || null),
+        pick("date_confirmation_fournisseur", b.date_confirmation_fournisseur === undefined ? undefined : b.date_confirmation_fournisseur || null),
+        id, req.user.tenantId,
+      ]
+    );
+    res.json(await chargerCommande(req.user.tenantId, id));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "COMMANDE_SAVE_ERROR") });
   }
 });
 

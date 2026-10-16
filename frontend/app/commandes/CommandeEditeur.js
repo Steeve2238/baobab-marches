@@ -9,6 +9,8 @@ import AppShell from "../../lib/components/AppShell";
 import EcheancierEditor from "../../lib/components/EcheancierEditor";
 import { echeancierValide, pourApi } from "../../lib/echeancier";
 import { useIncoterms, codesAvec } from "../../lib/incoterms";
+import PiecesJointes from "../../lib/components/PiecesJointes";
+import BonCommandeDocument from "../../lib/components/BonCommandeDocument";
 
 // Saisie / suivi d'une commande fournisseur (Lot 5, 05/10/2026).
 // Brouillon modifiable -> "Confirmer" (commande envoyee au fournisseur) -> les
@@ -28,6 +30,10 @@ export default function CommandeEditeur({ id }) {
   const incoterms = useIncoterms();
   const router = useRouter();
   const [commande, setCommande] = useState(null);
+  // Bon de commande imprime (lot 4) : informations du document, apercu et en-tete societe
+  const [docForm, setDocForm] = useState({ conditions_paiement: "", lieu_livraison: "", reference_fournisseur: "", date_transmission: "", date_confirmation_fournisseur: "" });
+  const [apercu, setApercu] = useState(false);
+  const [enteteSociete, setEnteteSociete] = useState(null);
   const [chargement, setChargement] = useState(!!id);
   const [erreur, setErreur] = useState("");
   const [info, setInfo] = useState("");
@@ -64,6 +70,13 @@ export default function CommandeEditeur({ id }) {
 
   function appliquer(c) {
     setCommande(c);
+    setDocForm({
+      conditions_paiement: c.conditions_paiement || "",
+      lieu_livraison: c.lieu_livraison || "",
+      reference_fournisseur: c.reference_fournisseur || "",
+      date_transmission: jour(c.date_transmission),
+      date_confirmation_fournisseur: jour(c.date_confirmation_fournisseur),
+    });
     setForm({
       fournisseur_id: c.fournisseur_id,
       devise: c.devise,
@@ -201,6 +214,28 @@ export default function CommandeEditeur({ id }) {
     } finally {
       setEnCours(false);
     }
+  }
+
+  async function enregistrerDocument() {
+    setErreur("");
+    setInfo("");
+    setEnCours(true);
+    try {
+      const maj = await api.commandeDocument(id, docForm);
+      appliquer(maj);
+      setInfo(t("cmdDocEnregistre"));
+    } catch (err) {
+      setErreur(err.message);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  async function ouvrirApercu() {
+    if (!enteteSociete) {
+      try { setEnteteSociete(await api.getEntete()); } catch { setEnteteSociete({}); }
+    }
+    setApercu(true);
   }
 
   async function handleAnnuler() {
@@ -517,6 +552,54 @@ export default function CommandeEditeur({ id }) {
             <button type="button" disabled={enCours} onClick={annulerCorrection} style={boutonSecondaireStyle}>{t("cancel")}</button>
           </div>
         </section>
+      )}
+
+      {commande && statut !== "ANNULEE" && (
+        <section className="card no-print" style={{ marginBottom: 16 }}>
+          <h2 style={h2Style}>{t("cmdDocTitre")}</h2>
+          <p style={{ fontSize: 12, color: "var(--sub)", margin: "0 0 12px" }}>{t("cmdDocAide")}</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelStyle}>{t("cmdDocConditions")}</label>
+              <input value={docForm.conditions_paiement} onChange={(e) => setDocForm((d) => ({ ...d, conditions_paiement: e.target.value }))} style={inputStyle} />
+              <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 3 }}>{t("cmdDocConditionsAide")}</div>
+            </div>
+            <div>
+              <label style={labelStyle}>{t("cmdDocLieu")}</label>
+              <input value={docForm.lieu_livraison} onChange={(e) => setDocForm((d) => ({ ...d, lieu_livraison: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("cmdDocTransmis")}</label>
+              <input type="date" value={docForm.date_transmission} onChange={(e) => setDocForm((d) => ({ ...d, date_transmission: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("cmdDocRefFourn")}</label>
+              <input value={docForm.reference_fournisseur} onChange={(e) => setDocForm((d) => ({ ...d, reference_fournisseur: e.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>{t("cmdDocConfirmeLe")}</label>
+              <input type="date" value={docForm.date_confirmation_fournisseur} onChange={(e) => setDocForm((d) => ({ ...d, date_confirmation_fournisseur: e.target.value }))} style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "14px 0" }}>
+            <button type="button" disabled={enCours} onClick={enregistrerDocument} style={boutonSecondaireStyle}>{t("cmdDocEnregistrer")}</button>
+            <button type="button" onClick={ouvrirApercu} style={boutonPrincipalStyle}>{t("cmdDocImprimer")}</button>
+          </div>
+          <PiecesJointes type="COMMANDE_FOURNISSEUR" id={commande.id} titre={t("cmdDocPieces")} />
+        </section>
+      )}
+
+      {commande && apercu && enteteSociete && (
+        <div style={{ marginBottom: 16 }}>
+          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <h2 style={{ ...h2Style, margin: 0 }}>{t("cmdDocApercu")}</h2>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button type="button" onClick={() => window.print()} style={boutonPrincipalStyle}>{t("cmdDocImprimerAction")}</button>
+              <button type="button" onClick={() => setApercu(false)} style={boutonSecondaireStyle}>{t("cmdDocFermer")}</button>
+            </div>
+          </div>
+          <BonCommandeDocument commande={commande} entete={enteteSociete} />
+        </div>
       )}
 
       {commande && commande.historique && commande.historique.length > 0 && (

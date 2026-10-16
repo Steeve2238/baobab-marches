@@ -18,6 +18,7 @@
  */
 const { v4: uuidv4 } = require("uuid");
 const compta = require("./comptaService");
+const modesReglement = require("./modesReglement");
 
 const { versCentimes, centimesVersDecimal, ComptaError } = compta;
 
@@ -375,12 +376,20 @@ async function creerReglementFournisseur(client, tenantId, utilisateurId, data) 
   if (Number.isNaN(montantC) || montantC <= 0) throw new ComptaError("COMPTA_MONTANT_INVALIDE");
   const exercice = await exercicePourSaisie(client, tenantId, data.date_reglement);
 
-  const jr = await client.query(
-    `SELECT * FROM journal_comptable WHERE id = $1 AND tenant_id = $2 AND actif = true AND type_journal IN ('BANQUE', 'CAISSE')`,
-    [data.journal_id, tenantId]
-  );
-  const journal = jr.rows[0];
-  if (!journal || !journal.compte_tresorerie) throw new ComptaError("COMPTA_REGLEMENT_JOURNAL_INVALIDE", 400);
+  let res;
+  try {
+    res = await modesReglement.resoudre(client, tenantId, data.mode_reglement_id || null, {
+      sens: "DECAISSEMENT", journalId: data.journal_id || null, texteLegacy: data.mode_paiement || null,
+    });
+  } catch (e) {
+    if (e instanceof modesReglement.ModeError) throw new ComptaError(e.code, e.status);
+    throw e;
+  }
+  const journal = res.journal;
+  if (!journal) throw new ComptaError("COMPTA_REGLEMENT_JOURNAL_INVALIDE", 400);
+  if (!res.compteTresorerie) throw new ComptaError(res.mode ? "MODE_REGLEMENT_COMPTE_TRESORERIE_REQUIS" : "COMPTA_REGLEMENT_JOURNAL_INVALIDE", 400);
+  const modeTexte = res.libelle || (data.mode_paiement ? String(data.mode_paiement).trim() : null);
+  const modeId = res.mode ? res.mode.id : null;
 
   const saisies = Array.isArray(data.imputations) ? data.imputations.filter((i) => i && i.facture_id) : [];
   const vus = new Set();
@@ -406,14 +415,14 @@ async function creerReglementFournisseur(client, tenantId, utilisateurId, data) 
   const numero = await prochainNumero(client, tenantId, "REGL_FOURN", "RF", annee);
   const rg = await client.query(
     `INSERT INTO reglement_fournisseur
-       (id, tenant_id, numero, tiers_id, journal_id, date_reglement, montant, mode_paiement, reference, libelle, cree_par)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+       (id, tenant_id, numero, tiers_id, journal_id, date_reglement, montant, mode_paiement, reference, libelle, cree_par, mode_reglement_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
     [
       uuidv4(), tenantId, numero, tiers.id, journal.id, data.date_reglement, centimesVersDecimal(montantC),
-      data.mode_paiement ? String(data.mode_paiement).trim() : null,
+      modeTexte,
       data.reference ? String(data.reference).trim() : null,
       data.libelle ? String(data.libelle).trim() : null,
-      utilisateurId,
+      utilisateurId, modeId,
     ]
   );
   const reglement = rg.rows[0];
@@ -451,7 +460,7 @@ async function creerReglementFournisseur(client, tenantId, utilisateurId, data) 
     });
   }
   lignes.push({
-    compte_id: await idCompte(client, tenantId, journal.compte_tresorerie),
+    compte_id: await idCompte(client, tenantId, res.compteTresorerie),
     tiers_id: null,
     libelle: libelleEcriture,
     debit_c: 0,

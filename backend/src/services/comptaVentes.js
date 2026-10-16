@@ -25,6 +25,7 @@
 const { v4: uuidv4 } = require("uuid");
 const compta = require("./comptaService");
 const analytique = require("./comptaAnalytique");
+const modesReglement = require("./modesReglement");
 
 const { versCentimes, centimesVersDecimal } = compta;
 
@@ -219,18 +220,29 @@ async function genererEcritureEncaissement(client, tenantId, utilisateurId, fact
   if (exercice.statut === "CLOTURE") return { statut: "IGNOREE", raison: "EXERCICE_CLOTURE" };
 
   const especes = estEspeces(facture.mode_paiement);
-  const journal = (await premierJournal(client, tenantId, especes ? "CAISSE" : "BANQUE")) || (await premierJournal(client, tenantId, especes ? "BANQUE" : "CAISSE"));
+  // Mode de reglement parametre (journal, compte, commission) ; sinon ancien comportement selon le texte libre.
+  let res = null;
+  try {
+    res = await modesReglement.resoudre(client, tenantId, facture.mode_reglement_id || null, { sens: "ENCAISSEMENT", texteLegacy: facture.mode_paiement });
+  } catch (e) {
+    if (!(e instanceof modesReglement.ModeError)) throw e;
+  }
+  const journal = (res && res.journal) || (await premierJournal(client, tenantId, especes ? "CAISSE" : "BANQUE")) || (await premierJournal(client, tenantId, especes ? "BANQUE" : "CAISSE"));
   if (!journal) return { statut: "IGNOREE", raison: "JOURNAL_ABSENT" };
-  const numeroTreso = journal.compte_tresorerie || compta.completerNumero(especes ? "5711" : "5211", parametre.longueur_compte);
+  const numeroTreso = (res && res.compteTresorerie) || journal.compte_tresorerie || compta.completerNumero(especes ? "5711" : "5211", parametre.longueur_compte);
 
   const tiers = await compta.assurerTiersClient(client, tenantId, { id: facture.client_commercial_id, nom: facture.client_nom });
   // Encaissements deja saisis dans la comptabilite (reglements clients partiels) : seul le reste est encaisse ici.
   const netC = versCentimes(facture.montant_net_a_payer) - versCentimes(facture.montant_encaisse);
   if (netC <= 0) return { statut: "IGNOREE", raison: "DEJA_ENCAISSEE" };
+  const commissionC = res && res.compteCommission ? Math.min(modesReglement.commissionCentimes(netC, res.commissionPct), netC) : 0;
   const lignes = [
-    { compte_id: await idCompte(client, tenantId, numeroTreso), tiers_id: null, libelle: `Encaissement facture ${facture.numero}`, debit_c: netC, credit_c: 0, date_echeance: null, compte_modifiable: "TRESORERIE" },
+    { compte_id: await idCompte(client, tenantId, numeroTreso), tiers_id: null, libelle: `Encaissement facture ${facture.numero}`, debit_c: netC - commissionC, credit_c: 0, date_echeance: null, compte_modifiable: "TRESORERIE" },
     { compte_id: await idCompte(client, tenantId, tiers.compte_collectif), tiers_id: tiers.id, libelle: `Reglement facture ${facture.numero}`, debit_c: 0, credit_c: netC, date_echeance: null },
   ];
+  if (commissionC > 0) {
+    lignes.push({ compte_id: await idCompte(client, tenantId, res.compteCommission), tiers_id: null, libelle: `Commission ${res.libelle || ""} facture ${facture.numero}`.trim(), debit_c: commissionC, credit_c: 0, date_echeance: null });
+  }
   const ecriture = await client.query(
     `INSERT INTO ecriture_comptable
        (id, tenant_id, exercice_id, journal_id, numero_piece, date_ecriture, libelle, statut, origine, origine_id, origine_role, cree_par)
@@ -239,6 +251,64 @@ async function genererEcritureEncaissement(client, tenantId, utilisateurId, fact
   );
   await compta.insererLignes(client, tenantId, ecriture.rows[0].id, lignes);
   return { statut: "CREEE", ecriture: ecriture.rows[0] };
+}
+
+/**
+ * Encaissements de caisse (vente comptoir) : une ecriture EN_INSTANCE par ligne d'encaissement, dans le journal et
+ * sur le compte de tresorerie du mode de reglement (commission en charge si parametree).
+ *   Dr tresorerie (net de commission)   Dr commission   Cr client
+ * Idempotent : une ligne d'encaissement n'est comptabilisee qu'une fois (origine ENCAISSEMENT_CAISSE).
+ */
+async function genererEcrituresEncaissementsCaisse(client, tenantId, utilisateurId, factureId) {
+  const parametre = await compta.getParametre(client, tenantId);
+  if (!parametre || !parametre.initialisee) return { statut: "IGNOREE", raison: "NON_INITIALISEE" };
+  const facture = await chargerFacture(client, tenantId, factureId);
+  if (!facture || facture.statut === "ANNULEE") return { statut: "IGNOREE", raison: "FACTURE_INDISPONIBLE" };
+  const encs = (await client.query(
+    `SELECT e.* FROM encaissement_caisse e
+     WHERE e.tenant_id = $1 AND e.facture_id = $2
+       AND NOT EXISTS (SELECT 1 FROM ecriture_comptable x WHERE x.tenant_id = e.tenant_id AND x.origine = 'ENCAISSEMENT_CAISSE' AND x.origine_id = e.id)
+     ORDER BY e.date_encaissement`,
+    [tenantId, factureId]
+  )).rows;
+  if (encs.length === 0) return { statut: "EXISTANTE" };
+  const date = dateSql(facture.date_facture);
+  const exercice = await compta.exerciceDeLaDate(client, tenantId, date);
+  if (!exercice) return { statut: "IGNOREE", raison: "HORS_EXERCICE" };
+  if (exercice.statut === "CLOTURE") return { statut: "IGNOREE", raison: "EXERCICE_CLOTURE" };
+  const tiers = await compta.assurerTiersClient(client, tenantId, { id: facture.client_commercial_id, nom: facture.client_nom });
+  let creees = 0;
+  for (const enc of encs) {
+    let res = null;
+    try {
+      res = await modesReglement.resoudre(client, tenantId, enc.mode_reglement_id || null, { sens: "ENCAISSEMENT", texteLegacy: enc.mode_libelle });
+    } catch (e) {
+      if (!(e instanceof modesReglement.ModeError)) throw e;
+    }
+    const especes = estEspeces(enc.mode_libelle);
+    const journal = (res && res.journal) || (await premierJournal(client, tenantId, especes ? "CAISSE" : "BANQUE")) || (await premierJournal(client, tenantId, especes ? "BANQUE" : "CAISSE"));
+    if (!journal) return { statut: "IGNOREE", raison: "JOURNAL_ABSENT" };
+    const numeroTreso = (res && res.compteTresorerie) || journal.compte_tresorerie || compta.completerNumero(especes ? "5711" : "5211", parametre.longueur_compte);
+    const montantC = versCentimes(enc.montant);
+    const commissionC = res && res.compteCommission ? Math.min(modesReglement.commissionCentimes(montantC, res.commissionPct), montantC) : 0;
+    const libelle = `Encaissement caisse ${facture.numero} - ${enc.mode_libelle}`;
+    const lignes = [
+      { compte_id: await idCompte(client, tenantId, numeroTreso), tiers_id: null, libelle, debit_c: montantC - commissionC, credit_c: 0, date_echeance: null, compte_modifiable: "TRESORERIE" },
+      { compte_id: await idCompte(client, tenantId, tiers.compte_collectif), tiers_id: tiers.id, libelle: `Reglement facture ${facture.numero}`, debit_c: 0, credit_c: montantC, date_echeance: null },
+    ];
+    if (commissionC > 0) {
+      lignes.push({ compte_id: await idCompte(client, tenantId, res.compteCommission), tiers_id: null, libelle: `Commission ${enc.mode_libelle} ${facture.numero}`, debit_c: commissionC, credit_c: 0, date_echeance: null });
+    }
+    const ecriture = await client.query(
+      `INSERT INTO ecriture_comptable
+         (id, tenant_id, exercice_id, journal_id, numero_piece, date_ecriture, libelle, statut, origine, origine_id, origine_role, cree_par)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'EN_INSTANCE', 'ENCAISSEMENT_CAISSE', $8, 'ENCAISSEMENT', $9) RETURNING *`,
+      [uuidv4(), tenantId, exercice.id, journal.id, facture.numero, date, libelle, enc.id, utilisateurId || null]
+    );
+    await compta.insererLignes(client, tenantId, ecriture.rows[0].id, lignes);
+    creees++;
+  }
+  return { statut: "CREEE", ecritures: creees };
 }
 
 /**
@@ -330,6 +400,11 @@ async function rattraperVentes(tenantId, utilisateurId, { depuis } = {}) {
         const a = await genererEcritureFacture(client, tenantId, utilisateurId, f.id);
         if (a.statut === "CREEE") resume.factures++;
         else if (a.statut === "IGNOREE") resume.ignorees.push({ numero: f.numero, raison: a.raison });
+        // Ventes de caisse : un encaissement (donc une ecriture) par mode de reglement.
+        if (a.statut !== "IGNOREE") {
+          const c = await genererEcrituresEncaissementsCaisse(client, tenantId, utilisateurId, f.id);
+          if (c.statut === "CREEE") resume.encaissements += c.ecritures;
+        }
         if (f.statut === "PAYEE" && a.statut !== "IGNOREE") {
           const b = await genererEcritureEncaissement(client, tenantId, utilisateurId, f.id);
           if (b.statut === "CREEE") resume.encaissements++;
@@ -350,7 +425,10 @@ async function compterFacturesSansEcriture(client, tenantId) {
     `SELECT
        COUNT(*) FILTER (WHERE x.id IS NOT NULL AND e.id IS NULL)::int AS a_generer,
        COUNT(*) FILTER (WHERE x.id IS NULL AND e.id IS NULL)::int AS hors_exercice,
-       COUNT(*) FILTER (WHERE x.id IS NOT NULL AND f.statut = 'PAYEE' AND p.id IS NULL AND f.montant_net_a_payer > f.montant_encaisse)::int AS encaissements_a_generer
+       COUNT(*) FILTER (WHERE x.id IS NOT NULL AND f.statut = 'PAYEE' AND p.id IS NULL AND f.montant_net_a_payer > f.montant_encaisse)::int
+         + COUNT(*) FILTER (WHERE x.id IS NOT NULL AND EXISTS (
+             SELECT 1 FROM encaissement_caisse ec WHERE ec.tenant_id = f.tenant_id AND ec.facture_id = f.id
+               AND NOT EXISTS (SELECT 1 FROM ecriture_comptable q WHERE q.tenant_id = ec.tenant_id AND q.origine = 'ENCAISSEMENT_CAISSE' AND q.origine_id = ec.id)))::int AS encaissements_a_generer
      FROM facture_vente f
      LEFT JOIN exercice_comptable x ON x.tenant_id = f.tenant_id AND f.date_facture BETWEEN x.date_debut AND x.date_fin
      LEFT JOIN ecriture_comptable e ON e.tenant_id = f.tenant_id AND e.origine = 'FACTURE_VENTE' AND e.origine_id = f.id AND e.origine_role = 'FACTURE'
@@ -541,6 +619,10 @@ async function silencieux(tenantId, libelle, fn) {
 
 const apresGenerationFacture = (tenantId, utilisateurId, factureId) =>
   silencieux(tenantId, "ecriture de facture", (client) => genererEcritureFacture(client, tenantId, utilisateurId, factureId));
+const apresVenteCaisse = async (tenantId, utilisateurId, factureId) => {
+  await silencieux(tenantId, "ecriture de facture (caisse)", (client) => genererEcritureFacture(client, tenantId, utilisateurId, factureId));
+  return silencieux(tenantId, "ecritures d'encaissement (caisse)", (client) => genererEcrituresEncaissementsCaisse(client, tenantId, utilisateurId, factureId));
+};
 const apresPaiementFacture = (tenantId, utilisateurId, factureId) =>
   silencieux(tenantId, "ecriture d'encaissement", (client) => genererEcritureEncaissement(client, tenantId, utilisateurId, factureId));
 const apresAnnulationFacture = (tenantId, utilisateurId, factureId) =>
@@ -549,6 +631,11 @@ const apresModificationFacture = (tenantId, factureId) =>
   silencieux(tenantId, "mise a jour de l'echeance", (client) => synchroniserEcheance(client, tenantId, factureId));
 
 module.exports = {
+  compteDeVente,
+  idCompte,
+  premierJournal,
+  chargerFacture,
+  estEspeces,
   genererEcritureFacture,
   genererEcritureEncaissement,
   genererAnnulationFacture,
@@ -561,6 +648,8 @@ module.exports = {
   supprimerRegle,
   apresGenerationFacture,
   apresPaiementFacture,
+  apresVenteCaisse,
+  genererEcrituresEncaissementsCaisse,
   apresAnnulationFacture,
   apresModificationFacture,
   repartir,

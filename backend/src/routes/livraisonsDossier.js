@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require("uuid");
 const { requireAuth, blockLectureSeule } = require("../middleware/auth");
 const { t } = require("../utils/i18n");
 const { enregistrerMouvement, stockProduit } = require("../services/stockService");
+const valoStock = require("../services/valorisationStock");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -316,7 +317,7 @@ router.post("/:id/valider", async (req, res) => {
     }
     const avertissementsStock = [];
     for (const l of lignes) {
-      const cout = Number(l.cout_revient_unitaire_xof);
+      const cout = await valoStock.coutSortie(client, req.user.tenantId, l.produit_id, liv.date_livraison, Number(l.cout_revient_unitaire_xof));
       await client.query(`UPDATE livraison_dossier_ligne SET cout_unitaire_xof = $1 WHERE id = $2`, [cout, l.id]);
       await enregistrerMouvement(client, {
         tenantId: req.user.tenantId,

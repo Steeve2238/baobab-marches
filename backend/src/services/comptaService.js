@@ -232,6 +232,8 @@ const CHAMPS_PARAMETRE_COMPTES = [
   "compte_tva_collectee",
   "compte_tva_recuperable",
   "compte_achat_defaut",
+  "compte_stock_marchandises",
+  "compte_variation_stock",
 ];
 
 async function modifierParametre(client, tenantId, utilisateurId, patch) {

@@ -12,9 +12,11 @@ const remiseDevis = require("../services/remiseDevis");
 const { detailsCoutProduits } = require("../services/coutDetailProduits");
 const { chargerParametres } = require("../services/produitsCatalogue");
 const comptaVentes = require("../services/comptaVentes");
+const modesReglement = require("../services/modesReglement");
 const comptaAnalytique = require("../services/comptaAnalytique");
 const { verifierAffectationValide } = require("../utils/affectationTache");
 const { enregistrerMouvement, stockProduit } = require("../services/stockService");
+const valoStock = require("../services/valorisationStock");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -436,7 +438,7 @@ async function tauxTvaApplicable(q, tenantId, clientId) {
 router.get("/clients", async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT * FROM client_commercial WHERE tenant_id = $1 ORDER BY nom ASC`,
+      `SELECT * FROM client_commercial WHERE tenant_id = $1 AND est_comptoir = false ORDER BY nom ASC`,
       [req.user.tenantId]
     );
     res.json(result.rows);
@@ -893,11 +895,11 @@ router.get("/devis", async (req, res) => {
         ? `SELECT d.*, cl.nom AS client_nom,
                   EXISTS(SELECT 1 FROM facture_vente fv WHERE fv.devis_id = d.id) AS a_facture
            FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
-           WHERE d.tenant_id = $1 AND d.statut = $2 ORDER BY d.date_creation DESC`
+           WHERE d.tenant_id = $1 AND d.origine = 'MANUEL' AND d.statut = $2 ORDER BY d.date_creation DESC`
         : `SELECT d.*, cl.nom AS client_nom,
                   EXISTS(SELECT 1 FROM facture_vente fv WHERE fv.devis_id = d.id) AS a_facture
            FROM devis d JOIN client_commercial cl ON cl.id = d.client_commercial_id
-           WHERE d.tenant_id = $1 ORDER BY d.date_creation DESC`,
+           WHERE d.tenant_id = $1 AND d.origine = 'MANUEL' ORDER BY d.date_creation DESC`,
       statut ? [req.user.tenantId, statut] : [req.user.tenantId]
     );
     res.json(result.rows);
@@ -2046,7 +2048,7 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [
         uuidv4(), req.user.tenantId, numero, mois, id, devis.client_commercial_id,
-        reference_bc_client || null, devis.taux_tva_pourcentage, devis.total_ht, devis.pourcentage_remise, devis.montant_remise,
+        reference_bc_client || devis.reference_bc_client || null, devis.taux_tva_pourcentage, devis.total_ht, devis.pourcentage_remise, devis.montant_remise,
         devis.montant_tva, devis.total_ttc, date_echeance || null, req.user.sub, typeFacturation, pourcentageAcompte,
         montantNetAPayer,
       ]
@@ -2102,12 +2104,22 @@ router.patch("/factures/:id", async (req, res) => {
 
 router.patch("/factures/:id/marquer-payee", async (req, res) => {
   const { id } = req.params;
-  const { mode_paiement } = req.body;
+  const { mode_paiement, mode_reglement_id } = req.body;
   try {
+    // Mode de reglement parametre (comptabilite) ; l'ancien texte libre reste accepte et est rapproche d'un mode.
+    let mode = null;
+    if (mode_reglement_id) {
+      mode = await modesReglement.lire(db, req.user.tenantId, mode_reglement_id);
+      if (!mode || !mode.actif || mode.sens === "DECAISSEMENT") {
+        return res.status(400).json({ error: t(req, "MODE_REGLEMENT_INTROUVABLE") });
+      }
+    } else if (mode_paiement) {
+      mode = await modesReglement.depuisTexteLegacy(db, req.user.tenantId, mode_paiement);
+    }
     const result = await db.query(
-      `UPDATE facture_vente SET statut = 'PAYEE', date_paiement = now(), mode_paiement = $1
+      `UPDATE facture_vente SET statut = 'PAYEE', date_paiement = now(), mode_paiement = $1, mode_reglement_id = $4
        WHERE id = $2 AND tenant_id = $3 AND statut = 'IMPAYEE' RETURNING *`,
-      [mode_paiement || null, id, req.user.tenantId]
+      [(mode_reglement_id && mode ? mode.libelle : mode_paiement) || null, id, req.user.tenantId, mode ? mode.id : null]
     );
     if (result.rows.length === 0) {
       return res.status(409).json({ error: t(req, "VENTE_FACTURE_STATUT_INVALID") });
@@ -2405,7 +2417,7 @@ router.patch("/bl/:id/marquer-livre", async (req, res) => {
         produitId: l.produit_id,
         type: "SORTIE",
         quantite: -Number(l.quantite),
-        coutUnitaire: Number(l.cout_revient_unitaire_xof),
+        coutUnitaire: await valoStock.coutSortie(client, req.user.tenantId, l.produit_id, bl.date_bl, Number(l.cout_revient_unitaire_xof)),
         date: bl.date_bl,
         origineType: "BL",
         origineId: id,
@@ -2443,12 +2455,12 @@ router.get("/statistiques", async (req, res) => {
   try {
     const [consultationsResult, devisResult, devisFacturesResult, facturesResult] = await Promise.all([
       db.query(`SELECT statut, COUNT(*)::int AS n FROM consultation WHERE tenant_id = $1 GROUP BY statut`, [tenantId]),
-      db.query(`SELECT statut, COUNT(*)::int AS n FROM devis WHERE tenant_id = $1 GROUP BY statut`, [tenantId]),
+      db.query(`SELECT statut, COUNT(*)::int AS n FROM devis WHERE tenant_id = $1 AND origine = 'MANUEL' GROUP BY statut`, [tenantId]),
       // COUNT(DISTINCT d.id) et non COUNT(*) : depuis la migration 024, un
       // devis peut avoir plusieurs factures (acompte(s) + solde) - sans le
       // DISTINCT, un devis facture en 2 fois serait compte deux fois ici.
       db.query(
-        `SELECT COUNT(DISTINCT d.id)::int AS n FROM devis d JOIN facture_vente f ON f.devis_id = d.id WHERE d.tenant_id = $1`,
+        `SELECT COUNT(DISTINCT d.id)::int AS n FROM devis d JOIN facture_vente f ON f.devis_id = d.id WHERE d.tenant_id = $1 AND d.origine = 'MANUEL'`,
         [tenantId]
       ),
       // montant_net_a_payer (et non total_ht/total_ttc, qui restent la copie
@@ -2546,7 +2558,7 @@ router.get("/suivi", async (req, res) => {
        JOIN client_commercial cl ON cl.id = d.client_commercial_id
        LEFT JOIN facture_vente f ON f.devis_id = d.id
        LEFT JOIN bon_livraison bl ON bl.id = (SELECT b.id FROM bon_livraison b WHERE b.facture_vente_id = f.id ORDER BY b.rang DESC LIMIT 1)
-       WHERE d.tenant_id = $1
+       WHERE d.tenant_id = $1 AND d.origine = 'MANUEL'
        ORDER BY d.date_devis DESC, d.date_creation DESC
        LIMIT 500`,
       [req.user.tenantId]
@@ -2557,5 +2569,9 @@ router.get("/suivi", async (req, res) => {
     res.status(500).json({ error: t(req, "VENTE_SUIVI_FETCH_ERROR") });
   }
 });
+
+// Fonctions reutilisees par la caisse (services/venteComptoir.js) : meme numerotation, meme calcul de totaux et de TVA
+// que le circuit devis -> facture, pour qu'une vente comptoir soit un document comme les autres.
+router.helpers = { tirerProchainNumero, formaterNumeroVente, calculerLignesEtTotaux, tauxTvaApplicable };
 
 module.exports = router;

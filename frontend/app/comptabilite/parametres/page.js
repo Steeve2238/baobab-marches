@@ -13,6 +13,8 @@ const COMPTES_PARAM = [
   { cle: "compte_tva_collectee", label: "comptaParamTvaCollectee" },
   { cle: "compte_tva_recuperable", label: "comptaParamTvaRecuperable" },
   { cle: "compte_achat_defaut", label: "comptaParamAchatDefaut" },
+  { cle: "compte_stock_marchandises", label: "comptaParamStockMarchandises" },
+  { cle: "compte_variation_stock", label: "comptaParamVariationStock" },
   { cle: "compte_client_collectif", label: "comptaParamClientCollectif" },
   { cle: "compte_fournisseur_collectif", label: "comptaParamFournisseurCollectif" },
   { cle: "compte_acompte_client", label: "comptaParamAcompteClient" },
@@ -70,7 +72,7 @@ export default function ComptaParametresPage() {
   const enregistrerParams = (e) => {
     e.preventDefault();
     const patch = {};
-    for (const c of COMPTES_PARAM) patch[c.cle] = params[c.cle];
+    for (const c of COMPTES_PARAM) if (params[c.cle]) patch[c.cle] = params[c.cle];
     patch.tranches_balance_agee = tranches
       .split(/[,;\s]+/)
       .filter(Boolean)

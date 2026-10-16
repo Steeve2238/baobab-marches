@@ -7,6 +7,7 @@ import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
 import ComptaSousNav from "../../../lib/components/ComptaSousNav";
+import ModeReglementSelect from "../../../lib/components/ModeReglementSelect";
 import { useComptaStatut, labelStyle, inputStyle, boutonPrincipalStyle, boutonSecondaireStyle, boutonDangerStyle, thStyle, tdStyle, numStyle, formaterMontant, centimes, STATUT_COULEURS, statutLibelleCle } from "../../../lib/comptaUi";
 
 const nombre = (v) => Number(String(v || "").replace(/\s/g, "").replace(",", ".")) || 0;
@@ -26,7 +27,7 @@ const ENC = {
   "comptaReglementsNumero": "comptaEncNumero",
   "comptaReglementsAvance": "comptaEncAvance"
 };
-const FORM_VIDE = () => ({ tiers_id: "", journal_id: "", date_reglement: new Date().toISOString().slice(0, 10), montant: "", mode_paiement: "Virement", reference: "", libelle: "" });
+const FORM_VIDE = () => ({ tiers_id: "", journal_id: "", date_reglement: new Date().toISOString().slice(0, 10), montant: "", mode_reglement_id: "", mode_paiement: "", reference: "", libelle: "" });
 
 // Reglements fournisseurs : liste + formulaire d'imputation sur les factures ouvertes.
 function ReglementsContenu() {
@@ -130,6 +131,7 @@ function ReglementsContenu() {
   async function enregistrer() {
     setErreur("");
     setInfo("");
+    if (!form.mode_reglement_id) { setErreur(t("mdrModeRequis")); return; }
     setEnvoi(true);
     try {
       const corps = {
@@ -163,7 +165,7 @@ function ReglementsContenu() {
   }
 
   const peutEcrire = !!statut?.droits?.ecriture && statut?.initialisee;
-  const valide = form.tiers_id && form.journal_id && montantC > 0 && avanceC >= 0;
+  const valide = form.tiers_id && form.mode_reglement_id && montantC > 0 && avanceC >= 0;
   const pages = Math.max(1, Math.ceil(donnees.total / TAILLE));
 
   return (
@@ -201,7 +203,7 @@ function ReglementsContenu() {
             <div>
               <label style={labelStyle}>{L("comptaReglementsCompteTreso")}</label>
               <select value={form.journal_id} onChange={(e) => setForm((f) => ({ ...f, journal_id: e.target.value }))} style={inputStyle}>
-                <option value="">{t("comptaChoisir")}</option>
+                <option value="">{t("mdrSelonMode")}</option>
                 {tresos.map((j) => (
                   <option key={j.id} value={j.id}>{j.code} — {j.libelle}</option>
                 ))}
@@ -217,7 +219,12 @@ function ReglementsContenu() {
             </div>
             <div>
               <label style={labelStyle}>{t("comptaReglementsMode")}</label>
-              <input value={form.mode_paiement} onChange={(e) => setForm((f) => ({ ...f, mode_paiement: e.target.value }))} style={inputStyle} />
+              <ModeReglementSelect
+                value={form.mode_reglement_id}
+                sens={client ? "ENCAISSEMENT" : "DECAISSEMENT"}
+                style={inputStyle}
+                onChange={(id) => setForm((f) => ({ ...f, mode_reglement_id: id }))}
+              />
             </div>
             <div>
               <label style={labelStyle}>{t("comptaReglementsReference")}</label>

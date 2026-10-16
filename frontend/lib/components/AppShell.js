@@ -42,6 +42,8 @@ const NAV_ITEMS = [
       { href: "/calcul-prix", key: "navCalculPrix", moduleKeyAny: ["marches", "dossiers"] },
       // Catalogue produits (base de calcul globale) : meme regle d'acces que le dossier de calcul.
       { href: "/produits", key: "navProduits", moduleKeyAny: ["marches", "dossiers"] },
+      // Avoirs et retours clients (lot 6c) : factures de la consultation restreinte et ventes.
+      { href: "/ventes/avoirs", key: "navAvoirs", moduleKey: "marches" },
       { href: "/courriers", key: "navLetters", moduleKey: "courriers" },
     ],
   },
@@ -64,6 +66,8 @@ const NAV_ITEMS = [
     items: [
       { href: "/fournisseurs", key: "navSuppliers", moduleKey: "fournisseurs" },
       // Receptions de marchandises + stock : fournisseurs OU marches (les equipes commerciales consultent le stock).
+      // Stock (lot 6) : etat valorise, mouvements, inventaires, parametres de valorisation.
+      { href: "/stock", key: "navStock", moduleKeyAny: ["fournisseurs", "marches"] },
       { href: "/commandes", key: "navCommandes", moduleKeyAny: ["fournisseurs", "marches"] },
       { href: "/receptions", key: "navReceptions", moduleKeyAny: ["fournisseurs", "marches"] },
       { href: "/prix-fournisseurs", key: "navPrixFournisseurs", moduleKeyAny: ["fournisseurs", "marches"] },
@@ -98,6 +102,8 @@ const NAV_ITEMS = [
       { href: "/roles", key: "navRoles", adminOnly: true },
       { href: "/utilisateurs", key: "navUsers", adminOnly: true },
       { href: "/parametres/entete", key: "navSettings" },
+      { href: "/parametres/modes-reglement", key: "navModesReglement" },
+      { href: "/parametres/import-donnees", key: "navImportDonnees", moduleKeyAny: ["marches", "dossiers", "fournisseurs"] },
     ],
   },
 ];
@@ -198,11 +204,21 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
   // n'est modifiee : seuls l'intitule et la destination des entrees changent.
   const profilActivite = permissions?.profilActivite || "LES_DEUX";
   function adapterProfil(entry) {
-    if (profilActivite !== "NEGOCE" || entry.id !== "marches-ventes") return entry;
+    // Depenses et resultat (Pack Commerce, lot 5) : profils NEGOCE et LES_DEUX.
+    if (profilActivite !== "MARCHES" && entry.id === "finance") {
+      return { ...entry, items: [{ href: "/depenses", key: "navDepenses", moduleKey: "marches" }, { href: "/resultat", key: "navResultat", moduleKey: "marches" }, ...entry.items] };
+    }
+    if (profilActivite !== "MARCHES" && entry.id === "administration") {
+      return { ...entry, items: [...entry.items, { href: "/parametres/categories-depenses", key: "navCategoriesDepenses" }] };
+    }
+    if (entry.id !== "marches-ventes" || profilActivite === "MARCHES") return entry;
+    // Caisse (vente comptoir) : profils NEGOCE et LES_DEUX, en tete du groupe.
+    const caisse = { href: "/caisse", key: "navCaisse", moduleKey: "marches" };
+    if (profilActivite !== "NEGOCE") return { ...entry, items: [caisse, ...entry.items] };
     return {
       ...entry,
       key: "navGroupVentes",
-      items: entry.items
+      items: [caisse, ...entry.items]
         .filter((i) => i.href !== "/dossiers")
         .map((i) =>
           i.href === "/marches"
@@ -217,7 +233,7 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
 
   // Un seul groupe ouvert a la fois : celui de la page en cours par defaut
   // (et a chaque changement de page), sinon celui choisi par un clic.
-  const groupeActif = NAV_ITEMS.find((e) => e.items && e.items.some((i) => entreeActive(i, pathname)))?.id || null;
+  const groupeActif = NAV_ITEMS.find((e) => e.items && e.items.some((i) => entreeActive(i, pathname)))?.id || (pathname.startsWith("/caisse") ? "marches-ventes" : (pathname.startsWith("/depenses") || pathname.startsWith("/resultat")) ? "finance" : pathname.startsWith("/parametres/categories-depenses") || pathname.startsWith("/parametres/import-donnees") ? "administration" : null);
   const [groupeOuvert, setGroupeOuvert] = useState(groupeActif);
   // Menu depliant : epingle (fixe, comme avant) ou replie en barre fine qui se deplie au survol. Choix memorise
   // par navigateur ; epingle par defaut.

@@ -471,16 +471,18 @@ router.post("/clients", async (req, res) => {
   }
   // Mode d'hebergement : HEBERGE (chez Steeve, defaut) ou LOCAL (version installee chez le client).
   const modeHebergement = req.body.mode_hebergement === "LOCAL" ? "LOCAL" : "HEBERGE";
+  // Pack de licence a la creation (MARCHES | NEGOCE | LES_DEUX = Complet) ; defaut : Complet.
+  const profilActivite = ["MARCHES", "NEGOCE", "LES_DEUX"].includes(req.body.profil_activite) ? req.body.profil_activite : "LES_DEUX";
 
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
 
     const tenantResult = await client.query(
-      `INSERT INTO tenant (id, raison_sociale, secteur_activite, pays, formule_abonnement_id, mode_hebergement)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO tenant (id, raison_sociale, secteur_activite, pays, formule_abonnement_id, mode_hebergement, profil_activite)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [uuidv4(), raison_sociale, secteur_activite || null, pays || "Senegal", formule_abonnement_id || null, modeHebergement]
+      [uuidv4(), raison_sociale, secteur_activite || null, pays || "Senegal", formule_abonnement_id || null, modeHebergement, profilActivite]
     );
     const tenantId = tenantResult.rows[0].id;
 
