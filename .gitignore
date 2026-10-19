@@ -21,3 +21,5 @@ Thumbs.db
 # Editeurs
 .vscode/
 .idea/
+*.zip
+Claude outputs/

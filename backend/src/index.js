@@ -47,6 +47,7 @@ const livraisonsDossierRoutes = require("./routes/livraisonsDossier");
 const comptabiliteRoutes = require("./routes/comptabilite");
 const fiscaliteRoutes = require("./routes/fiscalite");
 const paieRoutes = require("./routes/paie");
+const contratsPrestationRoutes = require("./routes/contratsPrestation");
 const { t } = require("./utils/i18n");
 
 const app = express();
@@ -55,6 +56,8 @@ app.use(cors());
 // RH : signature (image) et exemplaires scannes du contrat voyagent en base64 dans le JSON : limites dediees.
 app.use("/api/rh/espace/signature", express.json({ limit: "1mb" }));
 app.use(/^\/api\/rh\/contrats\/[^/]+\/(scan|viser)$/, express.json({ limit: "12mb" }));
+// Contrats de prestation : exemplaire signe (scan) en base64.
+app.use(/^\/api\/contrats-prestation\/[^/]+\/scan$/, express.json({ limit: "12mb" }));
 app.use(express.json());
 
 app.get("/api/health", (req, res) => {
@@ -97,6 +100,7 @@ app.use("/api/depenses", depensesRoutes);
 app.use("/api/stock", stockRoutes);
 app.use("/api/avoirs", avoirsRoutes);
 app.use("/api/import-donnees", importDonneesRoutes);
+app.use("/api/contrats-prestation", contratsPrestationRoutes);
 app.use("/api/calcul-prix", calculPrixRoutes);
 app.use("/api/produits", produitsRoutes);
 app.use("/api/receptions", receptionsRoutes);

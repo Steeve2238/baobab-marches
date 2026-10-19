@@ -75,6 +75,8 @@ const NAV_ITEMS = [
       { href: "/transitaires", key: "navTransitaires", moduleKeyAny: ["logistique", "fournisseurs", "marches"] },
       { href: "/logistique", key: "navLogistics", moduleKey: "logistique" },
       { href: "/parc-auto", key: "navParcAuto", moduleKey: "parc-auto" },
+      // Contrats de prestation (prestataires independants) : hors paie, accessibles aux achats, aux marches et aux RH.
+      { href: "/contrats-prestation", key: "navContratsPrestation", moduleKeyAny: ["fournisseurs", "marches", "rh"] },
     ],
   },
   {

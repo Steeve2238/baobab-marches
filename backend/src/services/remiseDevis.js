@@ -108,4 +108,31 @@ function simuler({ devis, lignes, produits, mode, valeur }) {
   };
 }
 
-module.exports = { MODES, simuler, pourcentageDepuisSaisie, totauxPourPourcentage };
+// Marge brute (19/10/2026, analyse de marge a la validation du devis) : prix de vente net - cout d'ACHAT de la marchandise seul
+// (composante ACHAT du detail du cout de revient). La marge « nette » est celle deja calculee : prix de vente net - cout de
+// revient complet (achat + fret, assurance, douane, transit, frais de paiement...). Le detail n'existe que pour les articles dont
+// le cout vient d'une reception validee ; une ligne dont le detail ne colle pas au cout du devis (a 1 XOF pres) est ecartee.
+// A appeler apres l'ajout de detail_cout sur chaque ligne.
+function ajouterMargeBrute(sim) {
+  let htActuel = 0, htNet = 0, achat = 0, n = 0, nCout = 0;
+  sim.lignes = sim.lignes.map((l) => {
+    if (!l.cout_calculable) return l;
+    nCout += 1;
+    const d = l.detail_cout;
+    if (!d || !d.composantes || d.composantes.ACHAT === undefined || Math.abs(Number(d.total) - Number(l.cout_unitaire)) > 1) return { ...l, cout_achat_unitaire: null };
+    const achatUnitaire = Number(d.composantes.ACHAT);
+    const achatLigne = r2(achatUnitaire * l.quantite);
+    n += 1;
+    htActuel += l.montant_ht_actuel; htNet += l.montant_ht_net; achat += achatLigne;
+    return {
+      ...l, cout_achat_unitaire: achatUnitaire,
+      marge_brute_pct_actuelle: l.montant_ht_actuel > 0 ? r2(((l.montant_ht_actuel - achatLigne) / l.montant_ht_actuel) * 100) : null,
+      marge_brute_pct_apres: l.montant_ht_net > 0 ? r2(((l.montant_ht_net - achatLigne) / l.montant_ht_net) * 100) : null,
+    };
+  });
+  const resume = (ht) => ({ marge: r2(ht - achat), marge_pct: ht > 0 ? r2(((ht - achat) / ht) * 100) : null, ht_net: r2(ht) });
+  sim.brute = n === 0 ? null : { lignes_avec_detail: n, lignes_avec_cout: nCout, cout_achat_total: r2(achat), actuel: resume(htActuel), simule: resume(htNet) };
+  return sim;
+}
+
+module.exports = { MODES, simuler, pourcentageDepuisSaisie, totauxPourPourcentage, ajouterMargeBrute };

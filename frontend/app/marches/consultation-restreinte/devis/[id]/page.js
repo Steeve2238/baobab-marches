@@ -9,6 +9,7 @@ import { estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import AppShell from "../../../../../lib/components/AppShell";
 import PiecesJointes from "../../../../../lib/components/PiecesJointes";
 import RemiseSimulateur from "../../../../../lib/components/RemiseSimulateur";
+import ValidationDevisMarge from "../../../../../lib/components/ValidationDevisMarge";
 import { remisesParLigne } from "../../../../../lib/remiseLignes";
 import EcheancierEditor from "../../../../../lib/components/EcheancierEditor";
 import { echeancierValide, pourApi } from "../../../../../lib/echeancier";
@@ -74,6 +75,9 @@ export default function DevisDetailPage() {
   const [pourcentageAcompte, setPourcentageAcompte] = useState("");
   const [permissions, setPermissions] = useState(null);
   const [remiseOuverte, setRemiseOuverte] = useState(false);
+  // Analyse de marge a la validation (19/10/2026) : fenetre de confirmation ; retourValidation = on y revient apres une remise.
+  const [validationOuverte, setValidationOuverte] = useState(false);
+  const [retourValidation, setRetourValidation] = useState(false);
   const [formOuvert, setFormOuvert] = useState(false);
   const [formDevis, setFormDevis] = useState(null);
   const [echeancierEdition, setEcheancierEdition] = useState([]);
@@ -135,17 +139,11 @@ export default function DevisDetailPage() {
     };
   }, [devis, entete]);
 
-  async function handleValider() {
-    setAction(true);
-    setErreur("");
-    try {
-      const maj = await api.validerDevis(devis.id);
-      setDevis((prev) => ({ ...prev, ...maj }));
-    } catch (err) {
-      setErreur(err.message);
-    } finally {
-      setAction(false);
-    }
+  // Validation reelle du devis, appelee depuis la fenetre d'analyse de marge (les erreurs remontent a la fenetre).
+  async function confirmerValidation() {
+    const maj = await api.validerDevis(devis.id);
+    setDevis((prev) => ({ ...prev, ...maj }));
+    setValidationOuverte(false);
   }
 
   async function handleChangerStatut(statut) {
@@ -351,14 +349,42 @@ export default function DevisDetailPage() {
   return (
     <AppShell title={devis.numero} backHref="/marches/consultation-restreinte/devis">
       {erreur && <p className="no-print" style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+      {validationOuverte && (
+        <div className="no-print">
+          <ValidationDevisMarge
+            devis={devis}
+            onFermer={() => setValidationOuverte(false)}
+            onConfirmer={confirmerValidation}
+            onNegocier={
+              peutNegocierRemise
+                ? () => {
+                    setValidationOuverte(false);
+                    setRetourValidation(true);
+                    setRemiseOuverte(true);
+                  }
+                : undefined
+            }
+          />
+        </div>
+      )}
       {remiseOuverte && (
         <div className="no-print">
           <RemiseSimulateur
             devis={devis}
-            onClose={() => setRemiseOuverte(false)}
+            onClose={() => {
+              setRemiseOuverte(false);
+              if (retourValidation) {
+                setRetourValidation(false);
+                setValidationOuverte(true);
+              }
+            }}
             onApplied={(maj) => {
               setDevis((prev) => ({ ...prev, ...maj }));
               setRemiseOuverte(false);
+              if (retourValidation) {
+                setRetourValidation(false);
+                setValidationOuverte(true);
+              }
             }}
           />
         </div>
@@ -387,7 +413,7 @@ export default function DevisDetailPage() {
             </button>
           )}
           {peutValider && (
-            <button onClick={handleValider} disabled={action || totalPartiel} title={totalPartiel ? t("venteDevisPartielValidationAide") : undefined} style={{ ...boutonPrincipalStyle, ...(totalPartiel ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}>
+            <button onClick={() => setValidationOuverte(true)} disabled={action || totalPartiel} title={totalPartiel ? t("venteDevisPartielValidationAide") : undefined} style={{ ...boutonPrincipalStyle, ...(totalPartiel ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}>
               {t("venteValidateDevisButton")}
             </button>
           )}

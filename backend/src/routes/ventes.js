@@ -1755,6 +1755,7 @@ router.get("/devis/:id/simulation-remise", async (req, res) => {
     // Lot B : detail du cout de revient (achat, fret, douane, frais de paiement...) de chaque article, quand il est connu.
     const details = await detailsCoutProduits(db, req.user.tenantId, produits, await chargerParametres(req.user.tenantId));
     sim.lignes = sim.lignes.map((l) => ({ ...l, detail_cout: (l.produit_id && details.get(l.produit_id)) || null }));
+    remiseDevis.ajouterMargeBrute(sim);
     const nb = Number((await db.query(`SELECT COUNT(*) AS n FROM facture_vente WHERE devis_id = $1 AND tenant_id = $2 AND statut != 'ANNULEE'`, [id, req.user.tenantId])).rows[0].n);
     res.json({ ...sim, devis_statut: devis.statut, factures_existantes: nb, devis_importe: !!devis.importe });
   } catch (err) {

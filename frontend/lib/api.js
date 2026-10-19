@@ -470,6 +470,21 @@ export const api = {
   transmettreContratInspection: (id, date) =>
     request(`/rh/contrats/${id}/transmettre-inspection`, { method: "POST", body: JSON.stringify({ date }) }),
   viserContrat: (id, data) => request(`/rh/contrats/${id}/viser`, { method: "POST", body: JSON.stringify(data) }),
+  prestationsListe: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+    return request(`/contrats-prestation${q ? `?${q}` : ""}`);
+  },
+  prestationPrefill: (fournisseurId) => request(`/contrats-prestation/prefill${fournisseurId ? `?fournisseur_id=${fournisseurId}` : ""}`),
+  prestationFournisseurs: () => request("/contrats-prestation/fournisseurs"),
+  prestationCreer: (data) => request("/contrats-prestation", { method: "POST", body: JSON.stringify(data) }),
+  prestationLire: (id) => request(`/contrats-prestation/${id}`),
+  prestationModifier: (id, data) => request(`/contrats-prestation/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  prestationSupprimer: (id) => request(`/contrats-prestation/${id}`, { method: "DELETE" }),
+  prestationValider: (id) => request(`/contrats-prestation/${id}/valider`, { method: "POST" }),
+  prestationScan: (id, fichier) => request(`/contrats-prestation/${id}/scan`, { method: "PUT", body: JSON.stringify(fichier) }),
+  prestationTerminer: (id, data) => request(`/contrats-prestation/${id}/terminer`, { method: "POST", body: JSON.stringify(data || {}) }),
+  prestationResilier: (id, data) => request(`/contrats-prestation/${id}/resilier`, { method: "POST", body: JSON.stringify(data || {}) }),
+  prestationAnnuler: (id) => request(`/contrats-prestation/${id}/annuler`, { method: "POST" }),
   putScanContrat: (id, fichier) => request(`/rh/contrats/${id}/scan`, { method: "PUT", body: JSON.stringify(fichier) }),
   // RH lot 4 : courriers RH et ordres de virement
   getCourrierTypes: () => request("/rh/courriers/types"),
