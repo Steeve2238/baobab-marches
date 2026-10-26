@@ -7,6 +7,7 @@ import { superAdminApi } from "../../../../lib/superAdminApi";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import SuperAdminShell from "../../../../lib/components/SuperAdminShell";
 import OffreFormulaire from "../../../../lib/components/OffreFormulaire";
+import PartageDocument from "../../../../lib/components/PartageDocument";
 import { inputStyle, labelStyle, boutonPrincipalStyle, boutonSecondaireStyle, boutonDangerStyle, thStyle, tdStyle } from "../../../../lib/comptaUi";
 import { STYLE_STATUT_OFFRE } from "../page";
 
@@ -209,6 +210,10 @@ export default function SuperAdminOffreDetailPage() {
             </div>
           )}
 
+          {offre.statut !== "ANNULEE" && offre.statut !== "REFUSEE" && (
+            <PartageDocument type="OFFRE" documentId={offre.id} numero={offre.numero} emailParDefaut={offre.destinataire_email} peutCreer={["BROUILLON", "ENVOYEE"].includes(offre.statut)} onChange={charger} />
+          )}
+
           {contrat && (
             <div className="card" style={{ marginTop: 20 }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
@@ -234,6 +239,9 @@ export default function SuperAdminOffreDetailPage() {
               {contrat.date_envoi && <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 10 }}>{t("saOffEnvoyeA")} {contrat.envoye_a} · {new Date(contrat.date_envoi).toLocaleDateString("fr-FR")}</p>}
               {panneau === "contrat-mail" && blocMail(() => agir(() => superAdminApi.envoyerContrat(contrat.id, mail), t("saCtrEnvoye")))}
 
+              {contrat.statut !== "RESILIE" && (
+                <PartageDocument type="CONTRAT" documentId={contrat.id} numero={contrat.numero} emailParDefaut={offre.destinataire_email} peutCreer={["PREPARE", "ENVOYE"].includes(contrat.statut)} onChange={charger} />
+              )}
               {contrat.statut !== "RESILIE" && (
                 <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
                   <h4 style={{ fontSize: 12.5, color: "var(--petrol)", marginBottom: 6 }}>{contrat.statut === "SIGNE" ? t("saCtrSigneRemplacer") : t("saCtrDeposerSigne")}</h4>

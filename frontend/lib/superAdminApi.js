@@ -227,4 +227,13 @@ export const superAdminApi = {
     return requestUpload(`/super-admin/contrats/${id}/signe`, fd);
   },
   telechargerContratSigne: (id) => telecharger(`/super-admin/contrats/${id}/signe`, "contrat-signe.pdf"),
+
+  // --- Remise tracee (lien + code + signature en ligne) ---
+  creerPartageOffre: (id, data) => request(`/super-admin/offres/${id}/partage`, { method: "POST", body: JSON.stringify(data) }),
+  creerPartageContrat: (id, data) => request(`/super-admin/contrats/${id}/partage`, { method: "POST", body: JSON.stringify(data) }),
+  getPartages: (query = "") => request(`/super-admin/partages${query}`),
+  getPartage: (id) => request(`/super-admin/partages/${id}`),
+  renouvelerPartage: (id, data) => request(`/super-admin/partages/${id}/renouveler`, { method: "POST", body: JSON.stringify(data || {}) }),
+  revoquerPartage: (id) => request(`/super-admin/partages/${id}/revoquer`, { method: "POST", body: JSON.stringify({}) }),
+  telechargerPartage: (id) => telecharger(`/super-admin/partages/${id}/pdf`, "document.pdf"),
 };

@@ -1,0 +1,4 @@
+pc/deploy.config.ps1
+*.dump
+*.dump.enc
+*.dump.enc.sha256

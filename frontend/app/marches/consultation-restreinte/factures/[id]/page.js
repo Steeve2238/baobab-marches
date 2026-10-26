@@ -8,6 +8,7 @@ import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
 import MontantLettresBloc from "../../../../../lib/components/MontantLettresBloc";
 import ModeReglementSelect from "../../../../../lib/components/ModeReglementSelect";
+import PartageVente from "../../../../../lib/components/PartageVente";
 import { remisesParLigne } from "../../../../../lib/remiseLignes";
 
 // Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
@@ -258,6 +259,8 @@ export default function FactureVenteDetailPage() {
           </table>
         </div>
       )}
+
+      <PartageVente type="FACTURE" document={facture} peutCreer={facture.statut !== "ANNULEE"} onChange={charger} />
 
       <div className="card print-letter" style={{ padding: "28px 32px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 24, borderBottom: "2px solid var(--petrol)", paddingBottom: 16, marginBottom: 20 }}>

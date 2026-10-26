@@ -19,6 +19,7 @@ const ONGLETS = [
   { href: "/ventes/clients", key: "navVentesClients" },
   { href: "/ventes/suivi", key: "navVentesSuivi" },
   { href: "/ventes/statistiques", key: "navVentesStatistiques" },
+  { href: "/ventes/envois", key: "navSuiviEnvois" },
 ];
 
 export default function VentesSousNav() {

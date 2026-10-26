@@ -22,6 +22,7 @@ const ONGLETS = [
   { href: "/marches/consultation-restreinte/clients", key: "navVentesClients" },
   { href: "/marches/consultation-restreinte/suivi", key: "navVentesSuivi" },
   { href: "/marches/consultation-restreinte/statistiques", key: "navVentesStatistiques" },
+  { href: "/ventes/envois", key: "navSuiviEnvois" },
 ];
 
 export default function ConsultationRestreinteSousNav() {

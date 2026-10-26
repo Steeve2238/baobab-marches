@@ -139,6 +139,18 @@ function blocEditeur(doc, params, x, y, w, { mention } = {}) {
   return yy + 88 - y;
 }
 
+/**
+ * Signature electronique du client dans son cadre (image + mention horodatee sous le cadre).
+ * sig = { image_buf, mention } ; (x, y, w, h) = cadre deja trace.
+ */
+function signatureClient(doc, sig, x, y, w, h) {
+  if (!sig) return;
+  if (sig.image_buf) placerImage(doc, sig.image_buf, x + 6, y + 4, [w - 12, h - 8]);
+  if (sig.mention) {
+    doc.font("Helvetica-Oblique").fontSize(7.5).fillColor(GRIS).text(sig.mention, x, y + h + 3, { width: w, lineBreak: true });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tableau des lignes
 // ---------------------------------------------------------------------------
@@ -224,7 +236,7 @@ function corps(doc, texte, options = {}) {
 /**
  * @param {object} offre offre (getOffre) @param {object} params plateforme_parametres
  */
-async function offrePdf(offre, params) {
+async function offrePdf(offre, params, opts = {}) {
   const { doc, fini } = nouveauDocument();
   const x0 = doc.page.margins.left;
   const L = largeurUtile(doc);
@@ -276,8 +288,15 @@ async function offrePdf(offre, params) {
   const y = doc.y;
   doc.font("Helvetica-Bold").fontSize(9.5).fillColor(PETROLE).text("BON POUR ACCORD (client)", x0, y, { width: L / 2 - 10 });
   doc.font("Helvetica").fontSize(8.5).fillColor(GRIS).text("Date, nom et qualité du signataire, signature et cachet précédés de la mention « Lu et approuvé, bon pour accord ».", x0, doc.y + 2, { width: L / 2 - 10 });
-  doc.rect(x0, doc.y + 6, L / 2 - 10, 70).lineWidth(0.6).strokeColor(LIGNE).stroke();
+  const yCadre = doc.y + 6;
+  doc.rect(x0, yCadre, L / 2 - 10, 70).lineWidth(0.6).strokeColor(LIGNE).stroke();
+  signatureClient(doc, opts.signature, x0, yCadre, L / 2 - 10, 70);
   blocEditeur(doc, params, x0 + L / 2 + 15, y, L / 2 - 15, { mention: "Pour l'Éditeur" });
+  if (opts.apres) {
+    doc.addPage();
+    doc.x = x0;
+    opts.apres(doc);
+  }
 
   piedsDePage(doc, params, { paraphes: false, reference: offre.numero });
   doc.end();
@@ -296,7 +315,7 @@ function presentationPartie(p, role) {
   return `La société ${ou(p.raison_sociale)}${forme}${capital}, dont le siège est situé à ${ou(p.adresse)}${ident ? `, ${ident}` : ""}, ${rep}`;
 }
 
-async function contratPdf(contratRow, params) {
+async function contratPdf(contratRow, params, opts = {}) {
   const c = contratRow.contenu_json;
   const { doc, fini } = nouveauDocument();
   const x0 = doc.page.margins.left;
@@ -355,7 +374,9 @@ async function contratPdf(contratRow, params) {
   doc.font("Helvetica").fontSize(9).fillColor("#000").text(`${ou(c.client.raison_sociale)}`, x0, doc.y, { width: L / 2 - 10 });
   doc.text(`${ou(c.client.representant_nom)}, ${ou(c.client.representant_fonction, "qualité")}`, x0, doc.y, { width: L / 2 - 10 });
   doc.font("Helvetica-Oblique").fontSize(8).fillColor(GRIS).text("Date, signature et cachet précédés de la mention « Lu et approuvé, bon pour accord »", x0, doc.y + 1, { width: L / 2 - 10 });
-  doc.rect(x0, doc.y + 4, L / 2 - 10, 72).lineWidth(0.6).strokeColor(LIGNE).stroke();
+  const yCadreC = doc.y + 4;
+  doc.rect(x0, yCadreC, L / 2 - 10, 72).lineWidth(0.6).strokeColor(LIGNE).stroke();
+  signatureClient(doc, opts.signature, x0, yCadreC, L / 2 - 10, 72);
   blocEditeur(doc, ed, x0 + L / 2 + 15, y, L / 2 - 15, { mention: "Pour l'Éditeur - lu et approuvé, bon pour accord" });
 
   // Annexe 1
@@ -401,6 +422,12 @@ async function contratPdf(contratRow, params) {
     corps(doc, `Notifications à l'Éditeur : ${c.editeur.email}${c.client.email ? `  -  Notifications au Client : ${c.client.email}` : ""}`, { taille: 9, couleur: GRIS });
   }
 
+  if (opts.apres) {
+    doc.addPage();
+    doc.x = x0;
+    opts.apres(doc);
+  }
+
   piedsDePage(doc, ed, { paraphes: true, reference: contratRow.numero });
   doc.end();
   return fini;
@@ -410,5 +437,5 @@ module.exports = {
   offrePdf,
   contratPdf,
   // Briques reutilisees par les PDF RH (contrats de travail, DMT).
-  helpers: { nouveauDocument, largeurUtile, basPage, placerImage, image, titre, asseoir, section, corps, dateLongue, dateCourte, ou, fmt, PETROLE, ACCENT, GRIS, LIGNE, POINTS },
+  helpers: { signatureClient, nouveauDocument, largeurUtile, basPage, placerImage, image, titre, asseoir, section, corps, dateLongue, dateCourte, ou, fmt, PETROLE, ACCENT, GRIS, LIGNE, POINTS },
 };

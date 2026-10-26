@@ -44,6 +44,8 @@ const NAV_ITEMS = [
       { href: "/produits", key: "navProduits", moduleKeyAny: ["marches", "dossiers"] },
       // Avoirs et retours clients (lot 6c) : factures de la consultation restreinte et ventes.
       { href: "/ventes/avoirs", key: "navAvoirs", moduleKey: "marches" },
+      // Suivi des envois : factures et devis envoyes aux clients par lien securise (envoye, ouvert, telecharge, signe).
+      { href: "/ventes/envois", key: "navSuiviEnvois", moduleKey: "marches" },
       { href: "/courriers", key: "navLetters", moduleKey: "courriers" },
     ],
   },

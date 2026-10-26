@@ -48,6 +48,8 @@ const comptabiliteRoutes = require("./routes/comptabilite");
 const fiscaliteRoutes = require("./routes/fiscalite");
 const paieRoutes = require("./routes/paie");
 const contratsPrestationRoutes = require("./routes/contratsPrestation");
+const portailRoutes = require("./routes/portail");
+const partagesRoutes = require("./routes/partages");
 const { t } = require("./utils/i18n");
 
 const app = express();
@@ -57,6 +59,7 @@ app.use(cors());
 app.use("/api/rh/espace/signature", express.json({ limit: "1mb" }));
 app.use(/^\/api\/rh\/contrats\/[^/]+\/(scan|viser)$/, express.json({ limit: "12mb" }));
 // Contrats de prestation : exemplaire signe (scan) en base64.
+app.use("/api/portail", express.json({ limit: "1mb" }));
 app.use(/^\/api\/contrats-prestation\/[^/]+\/scan$/, express.json({ limit: "12mb" }));
 app.use(express.json());
 
@@ -101,6 +104,8 @@ app.use("/api/stock", stockRoutes);
 app.use("/api/avoirs", avoirsRoutes);
 app.use("/api/import-donnees", importDonneesRoutes);
 app.use("/api/contrats-prestation", contratsPrestationRoutes);
+app.use("/api/portail", portailRoutes);
+app.use("/api/partages", partagesRoutes);
 app.use("/api/calcul-prix", calculPrixRoutes);
 app.use("/api/produits", produitsRoutes);
 app.use("/api/receptions", receptionsRoutes);

@@ -17,9 +17,25 @@ const comptaAnalytique = require("../services/comptaAnalytique");
 const { verifierAffectationValide } = require("../utils/affectationTache");
 const { enregistrerMouvement, stockProduit } = require("../services/stockService");
 const valoStock = require("../services/valorisationStock");
+const portailSvc = require("../services/portail");
 
 const router = express.Router();
 router.use(requireAuth);
+
+// Un devis ou une facture envoye par lien securise (portail) n'est plus modifiable tant que le lien est actif, ni apres signature :
+// le client signe exactement le document recu. Pour le modifier, revoquer d'abord l'envoi (Suivi des envois).
+function verrouPortail(type) {
+  return async (req, res, next) => {
+    try {
+      if (await portailSvc.documentVerrouille(type, req.params.id)) {
+        return res.status(409).json({ error: t(req, "PORTAIL_DOCUMENT_VERROUILLE"), code: "PORTAIL_DOCUMENT_VERROUILLE" });
+      }
+      next();
+    } catch (e) {
+      next(e);
+    }
+  };
+}
 
 // Import Excel des devis historiques (30/09/2026) - meme limite que l'import
 // de fiches de temps RH (5 Mo, largement suffisant pour quelques centaines
@@ -1268,7 +1284,7 @@ router.post("/devis", async (req, res) => {
 // Garde-fou associe : si la modification fait baisser le total en dessous de
 // ce qui a deja ete facture dessus (factures non annulees), elle est
 // refusee - jamais de "reste a facturer" negatif.
-router.patch("/devis/:id", async (req, res) => {
+router.patch("/devis/:id", verrouPortail("DEVIS"), async (req, res) => {
   const { id } = req.params;
   const { objet, date_devis, conditions_paiement, delai_livraison, validite_offre, lignes, pourcentage_remise } = req.body;
   // NB : le numero n'est volontairement jamais accepte ici - un numero
@@ -1485,7 +1501,7 @@ router.patch("/devis/:id/section-analytique", requireRoleOuValidateurUniversel(.
   }
 });
 
-router.patch("/devis/:id/client", async (req, res) => {
+router.patch("/devis/:id/client", verrouPortail("DEVIS"), async (req, res) => {
   const { id } = req.params;
   const { client_commercial_id } = req.body;
   const estValidateurUniversel = req.user.roles.includes("ADMIN") || !!req.user.permissions?.validateurUniversel;
@@ -1589,7 +1605,7 @@ router.patch("/devis/:id/client", async (req, res) => {
 // qui a une trace comptable en aval, seulement en amont de toute
 // facturation - meme principe de prudence que le garde-fou anti-depassement
 // de generer-facture.
-router.delete("/devis/:id", async (req, res) => {
+router.delete("/devis/:id", verrouPortail("DEVIS"), async (req, res) => {
   const { id } = req.params;
   const estValidateurUniversel = req.user.roles.includes("ADMIN") || !!req.user.permissions?.validateurUniversel;
   if (!estValidateurUniversel) {
@@ -1669,6 +1685,7 @@ router.patch("/devis/:id/statut", requireRoleOuValidateurUniversel(...ROLES_CREA
     if (result.rows.length === 0) {
       return res.status(409).json({ error: t(req, "VENTE_DEVIS_NOT_EDITABLE") });
     }
+    if (statut !== "ENVOYE") await portailSvc.revoquerActifsDocument("DEVIS", id);
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -1782,7 +1799,7 @@ router.get("/devis/:id/remises", async (req, res) => {
 });
 
 // POST /api/ventes/devis/:id/appliquer-remise { mode, valeur, total_ttc_attendu?, motif? }
-router.post("/devis/:id/appliquer-remise", requireRoleOuValidateurUniversel(...ROLES_REMISE), async (req, res) => {
+router.post("/devis/:id/appliquer-remise", requireRoleOuValidateurUniversel(...ROLES_REMISE), verrouPortail("DEVIS"), async (req, res) => {
   const { id } = req.params;
   const { mode, valeur, total_ttc_attendu, motif } = req.body || {};
   const client = await db.pool.connect();
@@ -2083,7 +2100,7 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
   }
 });
 
-router.patch("/factures/:id", async (req, res) => {
+router.patch("/factures/:id", verrouPortail("FACTURE"), async (req, res) => {
   const { id } = req.params;
   const { reference_bc_client, date_echeance } = req.body;
   try {
@@ -2153,6 +2170,7 @@ router.patch("/factures/:id/annuler", async (req, res) => {
       return res.status(409).json({ error: t(req, "VENTE_FACTURE_STATUT_INVALID") });
     }
     await comptaVentes.apresAnnulationFacture(req.user.tenantId, req.user.sub, id);
+    await portailSvc.revoquerActifsDocument("FACTURE", id);
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);

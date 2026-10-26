@@ -10,6 +10,7 @@ import AppShell from "../../../../../lib/components/AppShell";
 import PiecesJointes from "../../../../../lib/components/PiecesJointes";
 import RemiseSimulateur from "../../../../../lib/components/RemiseSimulateur";
 import ValidationDevisMarge from "../../../../../lib/components/ValidationDevisMarge";
+import PartageVente from "../../../../../lib/components/PartageVente";
 import { remisesParLigne } from "../../../../../lib/remiseLignes";
 import EcheancierEditor from "../../../../../lib/components/EcheancierEditor";
 import { echeancierValide, pourApi } from "../../../../../lib/echeancier";
@@ -732,6 +733,8 @@ export default function DevisDetailPage() {
           </div>
         </form>
       )}
+
+      <PartageVente type="DEVIS" document={devis} peutCreer={!["REFUSE", "EXPIRE"].includes(devis.statut)} onChange={charger} />
 
       <div className="card print-letter" style={{ padding: "28px 32px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 24, borderBottom: "2px solid var(--petrol)", paddingBottom: 16, marginBottom: 20 }}>

@@ -8,6 +8,8 @@ const { t } = require("../utils/i18n");
 const svc = require("../services/offresContrats");
 const pdf = require("../services/offresContratsPdf");
 const { envoyerEmailAvecPieceJointe } = require("../utils/mailer");
+const portail = require("../services/portail");
+const { ipDe } = require("../services/rhSignature");
 
 const router = express.Router();
 const { CommercialError } = svc;
@@ -19,7 +21,7 @@ function gerer(fn) {
     try {
       await fn(req, res);
     } catch (err) {
-      if (err instanceof CommercialError) return res.status(err.status).json({ error: t(req, err.code), code: err.code, details: err.details });
+      if (err instanceof CommercialError || err instanceof portail.PortailError) return res.status(err.status).json({ error: t(req, err.code), code: err.code, details: err.details });
       if (err && err.code === "22P02") return res.status(400).json({ error: t(req, "OFFRE_INTROUVABLE") });
       console.error(err);
       res.status(500).json({ error: t(req, "COMMERCIAL_ERREUR_SERVEUR") });
@@ -52,6 +54,7 @@ router.get("/offres/:id", gerer(async (req, res) => {
 }));
 
 router.patch("/offres/:id", gerer(async (req, res) => {
+  if (await portail.documentVerrouille("OFFRE", req.params.id)) throw new portail.PortailError("PORTAIL_DOCUMENT_VERROUILLE", 409);
   res.json(await svc.modifierOffre(req.params.id, req.body));
 }));
 
@@ -86,15 +89,21 @@ router.post("/offres/:id/envoyer", gerer(async (req, res) => {
 }));
 
 router.post("/offres/:id/accepter", gerer(async (req, res) => {
-  res.json(await svc.accepterOffre(req.params.id, req.body || {}));
+  const resultat = await svc.accepterOffre(req.params.id, req.body || {});
+  await portail.revoquerActifsDocument("OFFRE", req.params.id, ipDe(req));
+  res.json(resultat);
 }));
 
 router.post("/offres/:id/refuser", gerer(async (req, res) => {
-  res.json(await svc.refuserOffre(req.params.id, (req.body || {}).motif));
+  const resultat = await svc.refuserOffre(req.params.id, (req.body || {}).motif);
+  await portail.revoquerActifsDocument("OFFRE", req.params.id, ipDe(req));
+  res.json(resultat);
 }));
 
 router.post("/offres/:id/annuler", gerer(async (req, res) => {
-  res.json(await svc.annulerOffre(req.params.id));
+  const resultat = await svc.annulerOffre(req.params.id);
+  await portail.revoquerActifsDocument("OFFRE", req.params.id, ipDe(req));
+  res.json(resultat);
 }));
 
 // --- Contrats ---------------------------------------------------------------------------------------------------------------
@@ -108,6 +117,7 @@ router.get("/contrats/:id", gerer(async (req, res) => {
 }));
 
 router.post("/contrats/:id/regenerer", gerer(async (req, res) => {
+  if (await portail.documentVerrouille("CONTRAT", req.params.id)) throw new portail.PortailError("PORTAIL_DOCUMENT_VERROUILLE", 409);
   res.json(await svc.regenererContrat(req.params.id, req.body || {}));
 }));
 
@@ -154,7 +164,9 @@ router.post(
     res.status(500).json({ error: t(req, "COMMERCIAL_ERREUR_SERVEUR") });
   }),
   gerer(async (req, res) => {
-    res.json(await svc.deposerContratSigne(req.params.id, req.file, req.body || {}));
+    const resultat = await svc.deposerContratSigne(req.params.id, req.file, req.body || {});
+    await portail.revoquerActifsDocument("CONTRAT", req.params.id, ipDe(req));
+    res.json(resultat);
   })
 );
 
@@ -162,6 +174,52 @@ router.get("/contrats/:id/signe", gerer(async (req, res) => {
   const f = await svc.getContratSigne(req.params.id);
   res.setHeader("Content-Type", f.mime);
   res.setHeader("Content-Disposition", `attachment; filename="${String(f.nom).replace(/"/g, "")}"`);
+  res.send(f.buffer);
+}));
+
+// --- Portail de remise tracee (lien + code + signature electronique) ------------------------------------------------------------
+
+async function creerPartage(type, req, res) {
+  const b = req.body || {};
+  const r = await portail.creerPartage({
+    type,
+    documentId: req.params.id,
+    adminId: req.superAdmin && req.superAdmin.id,
+    email: b.email,
+    telephone: b.telephone,
+    nom: b.nom,
+    jours: b.jours,
+    envoyerEmail: b.envoyer_email !== false,
+    message: b.message,
+    ip: ipDe(req),
+  });
+  res.status(201).json(r);
+}
+
+router.post("/offres/:id/partage", gerer((req, res) => creerPartage("OFFRE", req, res)));
+router.post("/contrats/:id/partage", gerer((req, res) => creerPartage("CONTRAT", req, res)));
+
+router.get("/partages", gerer(async (req, res) => {
+  res.json(await portail.lister({ type: req.query.type || null, documentId: req.query.document || null, tenantId: req.query.client || null, statut: req.query.statut || null }));
+}));
+
+router.get("/partages/:id", gerer(async (req, res) => {
+  res.json(await portail.getPartage(req.params.id));
+}));
+
+router.post("/partages/:id/renouveler", gerer(async (req, res) => {
+  const b = req.body || {};
+  res.json(await portail.renouveler(req.params.id, { envoyerEmail: b.envoyer_email === true, jours: b.jours, ip: ipDe(req) }));
+}));
+
+router.post("/partages/:id/revoquer", gerer(async (req, res) => {
+  res.json(await portail.revoquer(req.params.id, ipDe(req)));
+}));
+
+router.get("/partages/:id/pdf", gerer(async (req, res) => {
+  const f = await portail.pdfPourEditeur(req.params.id);
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${f.nom}"`);
   res.send(f.buffer);
 }));
 

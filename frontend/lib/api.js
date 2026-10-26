@@ -1174,4 +1174,12 @@ export const api = {
   comptaTresorerieComptes: () => request("/comptabilite/tresorerie/comptes"),
   comptaTresorerieCreerCompte: (data) => request("/comptabilite/tresorerie/comptes", { method: "POST", body: JSON.stringify(data) }),
   comptaTresorerieMouvement: (data) => request("/comptabilite/tresorerie/mouvements", { method: "POST", body: JSON.stringify(data) }),
+  // --- Envoi trace des factures et devis aux clients (lien + code + signature facultative) ---
+  getPartagesVente: (query = "") => request(`/partages${query}`),
+  preparationPartageVente: (genre, id) => request(`/partages/preparation/${genre}/${id}`),
+  creerPartageVente: (genre, id, data) => request(`/partages/${genre}/${id}`, { method: "POST", body: JSON.stringify(data) }),
+  getPartageVente: (id) => request(`/partages/${id}`),
+  renouvelerPartageVente: (id, data) => request(`/partages/${id}/renouveler`, { method: "POST", body: JSON.stringify(data || {}) }),
+  revoquerPartageVente: (id) => request(`/partages/${id}/revoquer`, { method: "POST", body: JSON.stringify({}) }),
+  telechargerPartageVente: (id) => requestDownload(`/partages/${id}/pdf`, "document.pdf"),
 };

@@ -1,0 +1,4 @@
+# Fins de ligne : scripts du serveur toujours en LF, scripts Windows en CRLF
+*.sh text eol=lf
+*.ps1 text eol=crlf
+*.bat text eol=crlf
