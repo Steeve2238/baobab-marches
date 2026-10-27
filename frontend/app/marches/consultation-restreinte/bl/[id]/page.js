@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { api, estAdmin, getUtilisateurCourant } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
+import PartageVente from "../../../../../lib/components/PartageVente";
 
 // Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
 // objet Date JS (qui reintroduirait une conversion de fuseau horaire cote
@@ -175,6 +176,8 @@ export default function BlDetailPage() {
         <p className="no-print" style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 12 }}>{t("venteBlPartialNote")}</p>
       )}
 
+      <PartageVente type="BON_LIVRAISON" document={{ ...bl, numero: `BL-${numeroComplet}` }} peutCreer onChange={charger} />
+
       <div className="card print-letter" style={{ padding: "28px 32px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 24, borderBottom: "2px solid var(--petrol)", paddingBottom: 16, marginBottom: 20 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
@@ -203,6 +206,7 @@ export default function BlDetailPage() {
           <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>{t("venteDeliverToLabel")}</div>
           <div style={{ fontWeight: 600, fontSize: 13.5 }}>{bl.client_nom}</div>
           {bl.client_adresse && <div style={{ fontSize: 12, color: "var(--sub)" }}>{bl.client_adresse}</div>}
+          {bl.incoterm && <div style={{ fontSize: 12, marginTop: 6 }}>{t("venteIncotermLabel")} : <strong>{[bl.incoterm, bl.incoterm_lieu].filter(Boolean).join(" ")}</strong></div>}
         </div>
 
         <table style={{ width: "100%", borderCollapse: "collapse" }}>

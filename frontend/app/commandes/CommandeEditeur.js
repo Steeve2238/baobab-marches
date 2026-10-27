@@ -11,6 +11,7 @@ import { echeancierValide, pourApi } from "../../lib/echeancier";
 import { useIncoterms, codesAvec } from "../../lib/incoterms";
 import PiecesJointes from "../../lib/components/PiecesJointes";
 import BonCommandeDocument from "../../lib/components/BonCommandeDocument";
+import PartageVente from "../../lib/components/PartageVente";
 
 // Saisie / suivi d'une commande fournisseur (Lot 5, 05/10/2026).
 // Brouillon modifiable -> "Confirmer" (commande envoyee au fournisseur) -> les
@@ -58,8 +59,7 @@ export default function CommandeEditeur({ id }) {
   });
   const [lignes, setLignes] = useState([{ ...LIGNE_VIDE }]);
   const [echeancier, setEcheancier] = useState([]);
-  // Correction administrateur d'une commande confirmee (prix, Incoterm, quantites, suppression de lignes) avec motif + historique.
-  const [estAdmin, setEstAdmin] = useState(false);
+  // Modification (« correction ») d'une commande confirmee (prix, Incoterm, quantites, suppression de lignes) avec motif + historique.
   const [modeCorrection, setModeCorrection] = useState(false);
   const [motif, setMotif] = useState("");
 
@@ -113,7 +113,6 @@ export default function CommandeEditeur({ id }) {
   }
 
   useEffect(() => {
-    api.getPermissions().then((p) => setEstAdmin(!!(p && p.admin))).catch(() => {});
     api.getFournisseursReception().then(setFournisseurs).catch(() => {});
     api.getTransitairesPerf().then(setTransitaires).catch(() => {});
     api.getCotationsTransitaires().then(setCotations).catch(() => {});
@@ -554,6 +553,10 @@ export default function CommandeEditeur({ id }) {
         </section>
       )}
 
+      {commande && confirmee && (
+        <PartageVente type="COMMANDE_FOURNISSEUR" document={commande} peutCreer onChange={() => api.getCommande(id).then(appliquer).catch(() => {})} />
+      )}
+
       {commande && statut !== "ANNULEE" && (
         <section className="card no-print" style={{ marginBottom: 16 }}>
           <h2 style={h2Style}>{t("cmdDocTitre")}</h2>
@@ -633,7 +636,7 @@ export default function CommandeEditeur({ id }) {
       )}
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-        {confirmee && estAdmin && !modeCorrection && (
+        {confirmee && !modeCorrection && (
           <button type="button" onClick={demarrerCorrection} style={{ ...boutonSecondaireStyle, borderColor: "var(--ocre)", color: "var(--ocre)" }}>{t("cmdCorrBouton")}</button>
         )}
         {statut !== "ANNULEE" && !enCorrection && (

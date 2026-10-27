@@ -6,6 +6,7 @@ const { t } = require("../utils/i18n");
 const echeancierSvc = require("../services/echeancier");
 const { chargerParametres } = require("../services/produitsCatalogue");
 const { calculerOffre } = require("../services/calculPrixEngine");
+const portailSvc = require("../services/portail");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -26,6 +27,19 @@ router.use((req, res, next) => {
   return res.status(403).json({ error: t(req, "MODULE_FORBIDDEN") });
 });
 router.use(blockLectureSeule);
+
+// Un bon de commande envoye au fournisseur par lien securise (accepte ou en attente de reponse) n'est plus modifiable :
+// le fournisseur accepte exactement le document recu. Pour le modifier, revoquer d'abord l'envoi (Suivi des envois).
+async function verrouPortail(req, res, next) {
+  try {
+    if (UUID_RE.test(String(req.params.id)) && (await portailSvc.documentVerrouille("COMMANDE_FOURNISSEUR", req.params.id))) {
+      return res.status(409).json({ error: t(req, "PORTAIL_DOCUMENT_VERROUILLE"), code: "PORTAIL_DOCUMENT_VERROUILLE" });
+    }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const arr2 = (n) => Math.round(n * 100) / 100;
@@ -627,7 +641,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", verrouPortail, async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "COMMANDE_NOT_FOUND") });
   const b = req.body || {};
@@ -724,7 +738,7 @@ router.patch("/:id", async (req, res) => {
 // PATCH /:id/document - informations du bon de commande imprime (Pack Commerce, lot 4) : conditions de paiement,
 // lieu de livraison, transmission au fournisseur et confirmation en retour. N'affecte ni lignes, ni prix, ni statut :
 // autorise tant que la commande n'est pas annulee, y compris confirmee.
-router.patch("/:id/document", async (req, res) => {
+router.patch("/:id/document", verrouPortail, async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "COMMANDE_NOT_FOUND") });
   const b = req.body || {};
@@ -761,10 +775,12 @@ router.patch("/:id/document", async (req, res) => {
 // POST /:id/corriger - correction ADMINISTRATEUR d'une commande confirmee (prix unitaires, Incoterm, quantites,
 // suppression de lignes), avec motif obligatoire et historique. Les receptions deja faites ne sont pas touchees.
 // Corps : { motif, incoterm?, lignes?: [{ id, prix_unitaire_devise?, quantite?, supprimer? }] }
-router.post("/:id/corriger", async (req, res) => {
+router.post("/:id/corriger", verrouPortail, async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "COMMANDE_NOT_FOUND") });
-  if (!req.user.permissions || !req.user.permissions.admin) {
+  // Ouvert (04/10/2026) a toute personne autorisee a ecrire sur les commandes (le client ne pouvait rien changer, ex. l'Incoterm,
+  // car la correction etait reservee a l'administrateur) ; motif obligatoire et historique restent la garantie de tracabilite.
+  if (!req.user.permissions) {
     return res.status(403).json({ error: t(req, "COMMANDE_CORRECTION_ADMIN") });
   }
   const b = req.body || {};
@@ -906,6 +922,7 @@ router.post("/:id/annuler", async (req, res) => {
     const rec = await db.query(`SELECT 1 FROM reception_marchandise WHERE commande_id = $1 AND statut <> 'ANNULEE' LIMIT 1`, [id]);
     if (rec.rows.length) return res.status(409).json({ error: t(req, "COMMANDE_ANNULATION_IMPOSSIBLE") });
     await db.query(`UPDATE commande_fournisseur SET statut = 'ANNULEE' WHERE id = $1`, [id]);
+    await portailSvc.revoquerActifsDocument("COMMANDE_FOURNISSEUR", id, null);
     res.json(await chargerCommande(req.user.tenantId, id));
   } catch (err) {
     console.error(err);

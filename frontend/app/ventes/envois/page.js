@@ -11,7 +11,7 @@ import { EtapesPartage, JournalPartage, pastilleEtat, cleTypeDocument, cleStatut
 import { boutonSecondaireStyle, thStyle, tdStyle } from "../../../lib/comptaUi";
 
 const FILTRES = ["TOUS", "ACTIF", "SIGNE", "EXPIRE", "REVOQUE", "BLOQUE"];
-const TYPES = ["TOUS", "FACTURE", "DEVIS"];
+const TYPES = ["TOUS", "FACTURE", "DEVIS", "BON_LIVRAISON", "AVOIR", "COMMANDE_FOURNISSEUR"];
 
 function Compteur({ libelle, valeur }) {
   return (

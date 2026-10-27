@@ -243,6 +243,139 @@ function blocsSignature(doc, e, { cadre, titreCadre, aide, signature }) {
   doc.y = y + 150;
 }
 
+
+/** « Incoterm : FOB Dakar » (code + lieu nomme), vide si l'entreprise n'en a pas choisi. */
+function libelleIncoterm(d) {
+  if (!d || !d.incoterm) return "";
+  return `Incoterm : ${[d.incoterm, d.incoterm_lieu].filter(Boolean).join(" ")}`;
+}
+
+/** Tableau simple a colonnes proportionnelles (BL, bon de commande). cols : [{ lib, p (poids), al, v: (ligne) => texte }]. */
+function tableauGenerique(doc, cols, lignes) {
+  const x0 = doc.page.margins.left;
+  const L = H.largeurUtile(doc);
+  const total = cols.reduce((s, c) => s + c.p, 0);
+  const xs = [x0];
+  const ws = cols.map((c) => (L * c.p) / total);
+  ws.forEach((w, i) => xs.push(xs[i] + w));
+  const iDes = cols.findIndex((c) => c.des);
+  const entete = () => {
+    const y = doc.y;
+    doc.rect(x0, y, L, 20).fill(PETROLE);
+    doc.font("Helvetica-Bold").fontSize(7.5).fillColor("#FFFFFF");
+    cols.forEach((c, i) => doc.text(c.lib, xs[i] + 3, y + 6.5, { width: ws[i] - 6, align: c.al || "left", lineBreak: false }));
+    doc.y = y + 20;
+  };
+  entete();
+  for (const l of lignes) {
+    doc.font("Helvetica").fontSize(8.5);
+    const h = Math.max(20, doc.heightOfString(String(cols[iDes >= 0 ? iDes : 0].v(l) || ""), { width: ws[iDes >= 0 ? iDes : 0] - 6 }) + 10);
+    if (doc.y + h > H.basPage(doc)) {
+      doc.addPage();
+      entete();
+    }
+    const y = doc.y;
+    doc.font("Helvetica").fontSize(8.5).fillColor("#000");
+    cols.forEach((c, i) => doc.text(String(c.v(l) ?? ""), xs[i] + 3, y + 5, { width: ws[i] - 6, align: c.al || "left", lineBreak: !!c.des }));
+    doc.moveTo(x0, y + h).lineTo(x0 + L, y + h).lineWidth(0.4).strokeColor(LIGNE).stroke();
+    doc.y = y + h;
+  }
+  doc.x = x0;
+}
+
+/** Fin commune des documents « a accepter » : cadre du client + signature de l'entreprise, page de certificat, pieds de page. */
+function terminer(doc, e, numero, opts, cadre) {
+  const x0 = doc.page.margins.left;
+  blocsSignature(doc, e, { cadre: !!opts.cadre, titreCadre: cadre.titre, aide: cadre.aide, signature: opts.signature });
+  if (opts.apres) {
+    doc.addPage();
+    doc.x = x0;
+    opts.apres(doc);
+  }
+  pieds(doc, e, numero);
+  doc.end();
+}
+
+/** Bon de livraison : quantites livrees (pas de prix), facture d'origine, Incoterm, cadre « reçu conforme ». */
+async function bonLivraisonPdf(d, e, opts = {}) {
+  const { doc, fini } = H.nouveauDocument();
+  const numero = d.numero_complet || `BL-${numeroFacture(d.numero, d.mois_emission)}`;
+  enteteEntreprise(doc, e, { titre: "Bon de livraison", lignes: [`N° ${numero}`, jour(d.date_bl), d.facture_numero ? `Facture : ${numeroFacture(d.facture_numero, d.mois_emission)}` : "", libelleIncoterm(d)] });
+  blocClient(doc, d, "Livrer à", null);
+  const lignes = d.lignes || [];
+  const aRef = lignes.some((l) => l.reference);
+  tableauGenerique(doc, [
+    ...(aRef ? [{ lib: "Réf.", p: 12, v: (l) => l.reference || "" }] : []),
+    { lib: "Désignation", p: 56, des: true, v: (l) => l.designation },
+    { lib: "Unité", p: 10, al: "center", v: (l) => l.unite || "" },
+    { lib: "Qté livrée", p: 14, al: "right", v: (l) => qte(l.quantite_livree) },
+  ], lignes);
+  terminer(doc, e, numero, opts, { titre: "RÉCEPTION (client)", aide: "Nom, qualité, signature et mention « Reçu conforme »." });
+  return fini;
+}
+
+/** Avoir client : lignes retournees ou creditees, TVA, total TTC en toutes lettres. */
+async function avoirPdf(d, e, opts = {}) {
+  const { doc, fini } = H.nouveauDocument();
+  const numero = d.numero;
+  const motifs = { RETOUR_MARCHANDISE: "Retour de marchandise", ERREUR_FACTURATION: "Erreur de facturation", REMISE_COMMERCIALE: "Remise commerciale", ANNULATION_VENTE: "Annulation de vente", AUTRE: "Autre motif" };
+  enteteEntreprise(doc, e, { titre: `Avoir N° ${numero}`, lignes: [jour(d.date_avoir), d.facture_numero ? `Sur facture : ${d.facture_numero}` : ""] });
+  blocClient(doc, d, "Avoir au profit de", `${motifs[d.motif_type] || d.motif_type || ""}${d.motif ? ` - ${d.motif}` : ""}`);
+  tableau(doc, { lignes: d.lignes || [] }, new Map());
+  doc.moveDown(0.5);
+  totaux(doc, d, false);
+  blocArrete(doc, "Arrêté le présent avoir à la somme de", d.total_ttc, false);
+  terminer(doc, e, numero, opts, { titre: "ACCUSÉ DE RÉCEPTION (client)", aide: "Nom, qualité et signature du client, confirmant la réception de cet avoir." });
+  return fini;
+}
+
+/** Bon de commande envoye au fournisseur : lignes en devise, Incoterm, livraison, conditions ; cadre « bon pour exécution ». */
+async function commandeFournisseurPdf(d, e, opts = {}) {
+  const { doc, fini } = H.nouveauDocument();
+  const x0 = doc.page.margins.left;
+  const numero = d.numero;
+  const devise = d.devise || "XOF";
+  const horsXof = devise !== "XOF";
+  enteteEntreprise(doc, e, { titre: "Bon de commande", lignes: [`N° ${numero}`, jour(d.date_commande), d.reference_fournisseur ? `Réf. fournisseur : ${d.reference_fournisseur}` : ""] });
+  blocClient(doc, { client_nom: d.fournisseur_nom, client_adresse: [d.fournisseur_adresse, d.fournisseur_pays].filter(Boolean).join(" - ") }, "Fournisseur", null);
+  const livraison = [
+    d.lieu_livraison ? `Lieu de livraison : ${d.lieu_livraison}` : "",
+    d.date_livraison_prevue ? `Date de livraison prévue : ${jour(d.date_livraison_prevue)}` : "",
+    d.incoterm ? `Incoterm : ${d.incoterm}` : "",
+    d.transitaire_nom ? `Transitaire : ${d.transitaire_nom}` : "",
+    `Devise : ${devise}`,
+  ].filter(Boolean);
+  doc.font("Helvetica").fontSize(9.5).fillColor(GRIS);
+  for (const l of livraison) doc.text(l, x0, doc.y, { width: H.largeurUtile(doc) });
+  doc.moveDown(0.8);
+  const lignes = d.lignes || [];
+  const aRef = lignes.some((l) => l.reference_fournisseur);
+  const dec = (n, k) => nb(Math.round(Number(n) * 10 ** k) / 10 ** k);
+  tableauGenerique(doc, [
+    ...(aRef ? [{ lib: "Réf.", p: 12, v: (l) => l.reference_fournisseur || "" }] : []),
+    { lib: "Désignation", p: 42, des: true, v: (l) => l.designation },
+    { lib: "Unité", p: 8, al: "center", v: (l) => l.unite || "" },
+    { lib: "Qté", p: 10, al: "right", v: (l) => qte(l.quantite) },
+    { lib: `Prix unit. (${devise})`, p: 15, al: "right", v: (l) => dec(l.prix_unitaire_devise, 4) },
+    { lib: `Montant (${devise})`, p: 16, al: "right", v: (l) => nb(Number(l.quantite) * Number(l.prix_unitaire_devise)) },
+  ], lignes);
+  doc.moveDown(0.5);
+  ligneTotal(doc, `Total (${devise})`, `${nb(d.total_devise)} ${devise}`, { fort: true });
+  if (horsXof) ligneTotal(doc, "Équivalent XOF", xof(d.total_xof), { couleur: GRIS });
+  let conditions = d.conditions_paiement || "";
+  if (!conditions && Array.isArray(d.echeancier_json) && d.echeancier_json.length) {
+    try { conditions = require("./echeancier").texte(d.echeancier_json); } catch { conditions = ""; }
+  }
+  const infos = [["Conditions de paiement", conditions], ["Notes", d.notes]].filter(([, v]) => v && String(v).trim());
+  if (infos.length) {
+    H.asseoir(doc, 20 + infos.length * 14);
+    doc.moveDown(0.8);
+    for (const [k, v] of infos) doc.font("Helvetica").fontSize(9).fillColor(GRIS).text(`${k} : ${v}`, x0, doc.y + 1, { width: H.largeurUtile(doc) });
+  }
+  terminer(doc, e, numero, opts, { titre: "ACCEPTATION (fournisseur)", aide: "Nom, qualité, signature et mention « Bon pour exécution »." });
+  return fini;
+}
+
 async function ventePdf(type, d, e, opts = {}) {
   const { doc, fini } = H.nouveauDocument();
   const x0 = doc.page.margins.left;
@@ -254,7 +387,7 @@ async function ventePdf(type, d, e, opts = {}) {
 
   enteteEntreprise(doc, e, {
     titre: estFacture ? `Facture N° ${numero}${d.reference_bc_client ? `/${d.reference_bc_client}` : ""}` : `Devis N° ${numero}`,
-    lignes: estFacture ? [jour(d.date_facture), d.date_echeance ? `Échéance : ${jour(d.date_echeance)}` : ""] : [jour(d.date_devis)],
+    lignes: [...(estFacture ? [jour(d.date_facture), d.date_echeance ? `Échéance : ${jour(d.date_echeance)}` : ""] : [jour(d.date_devis)]), libelleIncoterm(d)],
   });
   blocClient(doc, d, estFacture ? "Facturer à" : "Client", estFacture ? null : d.objet);
   tableau(doc, d, remises);
@@ -350,4 +483,4 @@ async function factureAbonnementPdf(d, e, opts = {}) {
   return fini;
 }
 
-module.exports = { factureAbonnementPdf, facturePdf: (d, e, o) => ventePdf("FACTURE", d, e, o), devisPdf: (d, e, o) => ventePdf("DEVIS", d, e, o), remisesParLigne, numeroFacture };
+module.exports = { bonLivraisonPdf, avoirPdf, commandeFournisseurPdf, factureAbonnementPdf, facturePdf: (d, e, o) => ventePdf("FACTURE", d, e, o), devisPdf: (d, e, o) => ventePdf("DEVIS", d, e, o), remisesParLigne, numeroFacture };

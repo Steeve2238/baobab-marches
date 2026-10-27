@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
+import IncotermChamp from "../../../../lib/components/IncotermChamp";
 import EcheancierEditor from "../../../../lib/components/EcheancierEditor";
 import { echeancierValide, pourApi } from "../../../../lib/echeancier";
 import LigneProduitOutils from "../../../../lib/components/LigneProduitOutils";
@@ -31,6 +32,8 @@ function NouveauDevisFormulaire() {
     conditions_paiement: "",
     delai_livraison: "",
     validite_offre: "",
+    incoterm: "",
+    incoterm_lieu: "",
   });
   const [lignes, setLignes] = useState([{ ...LIGNE_VIDE }]);
   const [echeancier, setEcheancier] = useState([]);
@@ -143,6 +146,10 @@ function NouveauDevisFormulaire() {
               placeholder={t("venteValiditeOffrePlaceholder")}
             />
           </div>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <IncotermChamp incoterm={form.incoterm} lieu={form.incoterm_lieu} onChange={({ incoterm, lieu }) => setForm((f) => ({ ...f, incoterm, incoterm_lieu: lieu }))} />
         </div>
 
         <div style={{ marginTop: 14 }}>

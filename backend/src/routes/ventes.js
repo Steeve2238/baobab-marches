@@ -37,6 +37,18 @@ function verrouPortail(type) {
   };
 }
 
+
+// Incoterm propose au client sur devis et factures (code du catalogue de l'entreprise + lieu nomme, ex. « FOB Dakar »).
+// Retourne { incoterm, lieu } normalises, ou { erreur } si le code est inconnu.
+async function normaliserIncoterm(tenantId, code, lieu) {
+  const c = String(code || "").trim().toUpperCase();
+  const l = String(lieu || "").trim().slice(0, 120) || null;
+  if (!c) return { incoterm: null, lieu: null };
+  const catalogue = await require("../services/incoterms").lireCatalogue(db, tenantId);
+  if (!catalogue.some((i) => i.code === c)) return { erreur: "VENTE_INCOTERM_INVALIDE" };
+  return { incoterm: c, lieu: l };
+}
+
 // Import Excel des devis historiques (30/09/2026) - meme limite que l'import
 // de fiches de temps RH (5 Mo, largement suffisant pour quelques centaines
 // de lignes de resume).
@@ -1150,6 +1162,8 @@ router.post("/devis", async (req, res) => {
   if (numeroManuelBrut && !req.user?.roles?.includes("ADMIN")) {
     return res.status(403).json({ error: t(req, "ROLE_FORBIDDEN") });
   }
+  const inco = await normaliserIncoterm(req.user.tenantId, req.body.incoterm, req.body.incoterm_lieu);
+  if (inco.erreur) return res.status(400).json({ error: t(req, inco.erreur) });
   const client = await db.pool.connect();
   try {
     await client.query("BEGIN");
@@ -1216,14 +1230,14 @@ router.post("/devis", async (req, res) => {
       `INSERT INTO devis (id, tenant_id, numero, consultation_id, client_commercial_id, objet, date_devis,
                            conditions_paiement, delai_livraison, validite_offre, taux_tva_pourcentage,
                            total_ht, pourcentage_remise, montant_remise, montant_tva, total_ttc, cree_par,
-                           nb_lignes_non_chiffrees)
-       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+                           nb_lignes_non_chiffrees, incoterm, incoterm_lieu)
+       VALUES ($1,$2,$3,$4,$5,$6,COALESCE($7, CURRENT_DATE),$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
        RETURNING *`,
       [
         uuidv4(), req.user.tenantId, numero, consultationDevisId, client_commercial_id, objet || null, date_devis || null,
         conditions_paiement || null, delai_livraison || null, validite_offre || null, tauxTva,
         calcul.total_ht, calcul.pourcentage_remise, calcul.montant_remise, calcul.montant_tva, calcul.total_ttc, req.user.sub,
-        calcul.nb_lignes_non_chiffrees,
+        calcul.nb_lignes_non_chiffrees, inco.incoterm, inco.lieu,
       ]
     );
     let devis = devisResult.rows[0];
@@ -1400,6 +1414,14 @@ router.patch("/devis/:id", verrouPortail("DEVIS"), async (req, res) => {
         repasseEnBrouillon, id, req.user.tenantId, totaux.nb_lignes_non_chiffrees || 0, tauxCible,
       ]
     );
+    if (req.body.incoterm !== undefined) {
+      const inco = await normaliserIncoterm(req.user.tenantId, req.body.incoterm, req.body.incoterm_lieu);
+      if (inco.erreur) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: t(req, inco.erreur) });
+      }
+      await client.query(`UPDATE devis SET incoterm = $1, incoterm_lieu = $2 WHERE id = $3 AND tenant_id = $4`, [inco.incoterm, inco.lieu, id, req.user.tenantId]);
+    }
     if (req.body.echeancier !== undefined) {
       const ech = echeancierSvc.normaliser(req.body.echeancier);
       if (ech.erreur) {
@@ -2062,13 +2084,13 @@ router.post("/devis/:id/generer-facture", async (req, res) => {
       `INSERT INTO facture_vente (id, tenant_id, numero, mois_emission, devis_id, client_commercial_id,
                                    reference_bc_client, taux_tva_pourcentage, total_ht, pourcentage_remise, montant_remise,
                                    montant_tva, total_ttc, date_echeance, cree_par, type_facturation, pourcentage_acompte,
-                                   montant_net_a_payer)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+                                   montant_net_a_payer, incoterm, incoterm_lieu)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
       [
         uuidv4(), req.user.tenantId, numero, mois, id, devis.client_commercial_id,
         reference_bc_client || devis.reference_bc_client || null, devis.taux_tva_pourcentage, devis.total_ht, devis.pourcentage_remise, devis.montant_remise,
         devis.montant_tva, devis.total_ttc, date_echeance || null, req.user.sub, typeFacturation, pourcentageAcompte,
-        montantNetAPayer,
+        montantNetAPayer, devis.incoterm || null, devis.incoterm_lieu || null,
       ]
     );
     const facture = factureResult.rows[0];
@@ -2104,10 +2126,17 @@ router.patch("/factures/:id", verrouPortail("FACTURE"), async (req, res) => {
   const { id } = req.params;
   const { reference_bc_client, date_echeance } = req.body;
   try {
+    // Incoterm facultatif : n'est modifie que s'il est present dans la requete.
+    let inco = null;
+    if (req.body.incoterm !== undefined) {
+      inco = await normaliserIncoterm(req.user.tenantId, req.body.incoterm, req.body.incoterm_lieu);
+      if (inco.erreur) return res.status(400).json({ error: t(req, inco.erreur) });
+    }
     const result = await db.query(
-      `UPDATE facture_vente SET reference_bc_client = $1, date_echeance = $2
+      `UPDATE facture_vente SET reference_bc_client = $1, date_echeance = $2,
+              incoterm = CASE WHEN $5 THEN $6 ELSE incoterm END, incoterm_lieu = CASE WHEN $5 THEN $7 ELSE incoterm_lieu END
        WHERE id = $3 AND tenant_id = $4 RETURNING *`,
-      [reference_bc_client || null, date_echeance || null, id, req.user.tenantId]
+      [reference_bc_client || null, date_echeance || null, id, req.user.tenantId, !!inco, inco ? inco.incoterm : null, inco ? inco.lieu : null]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "VENTE_FACTURE_NOT_FOUND") });
@@ -2212,7 +2241,7 @@ router.get("/bl/:id", async (req, res) => {
   const { id } = req.params;
   try {
     const result = await db.query(
-      `SELECT bl.*, cl.nom AS client_nom, cl.adresse AS client_adresse, f.numero AS facture_numero
+      `SELECT bl.*, cl.nom AS client_nom, cl.adresse AS client_adresse, f.numero AS facture_numero, f.incoterm, f.incoterm_lieu
        FROM bon_livraison bl
        JOIN client_commercial cl ON cl.id = bl.client_commercial_id
        JOIN facture_vente f ON f.id = bl.facture_vente_id
@@ -2305,7 +2334,7 @@ router.post("/factures/:id/generer-bl", async (req, res) => {
 
 // PATCH /bl/:id - edition des quantites livrees (livraison partielle),
 // uniquement tant que le BL est en brouillon.
-router.patch("/bl/:id", async (req, res) => {
+router.patch("/bl/:id", verrouPortail("BON_LIVRAISON"), async (req, res) => {
   const { id } = req.params;
   const { lignes, date_bl } = req.body;
 

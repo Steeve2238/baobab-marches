@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api, estAdmin } from "../../../../../lib/api";
 import { useLangue } from "../../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../../lib/components/AppShell";
+import IncotermChamp from "../../../../../lib/components/IncotermChamp";
 import EcheancierEditor from "../../../../../lib/components/EcheancierEditor";
 import { echeancierValide, pourApi } from "../../../../../lib/echeancier";
 import LigneProduitOutils from "../../../../../lib/components/LigneProduitOutils";
@@ -31,6 +32,8 @@ function NouveauDevisFormulaire() {
     conditions_paiement: "",
     delai_livraison: "",
     validite_offre: "",
+    incoterm: "",
+    incoterm_lieu: "",
     // Remise en pourcentage (chantier du 01/10/2026, demande ecrite du
     // client) : appliquee sur le HT avant TVA, voir calcul ci-dessous.
     pourcentage_remise: "",
@@ -158,6 +161,10 @@ function NouveauDevisFormulaire() {
               placeholder={t("venteValiditeOffrePlaceholder")}
             />
           </div>
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <IncotermChamp incoterm={form.incoterm} lieu={form.incoterm_lieu} onChange={({ incoterm, lieu }) => setForm((f) => ({ ...f, incoterm, incoterm_lieu: lieu }))} />
         </div>
 
         {estAdmin() && (

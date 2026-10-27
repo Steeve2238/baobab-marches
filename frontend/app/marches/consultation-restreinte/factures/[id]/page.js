@@ -9,6 +9,7 @@ import AppShell from "../../../../../lib/components/AppShell";
 import MontantLettresBloc from "../../../../../lib/components/MontantLettresBloc";
 import ModeReglementSelect from "../../../../../lib/components/ModeReglementSelect";
 import PartageVente from "../../../../../lib/components/PartageVente";
+import IncotermChamp from "../../../../../lib/components/IncotermChamp";
 import { remisesParLigne } from "../../../../../lib/remiseLignes";
 
 // Formate une date "YYYY-MM-DD" en "JJ/MM/AAAA" sans jamais passer par un
@@ -51,11 +52,15 @@ export default function FactureVenteDetailPage() {
   const [chargement, setChargement] = useState(true);
   const [action, setAction] = useState(false);
   const [modePaiement, setModePaiement] = useState("");
+  // Incoterm propose au client (repris du devis, modifiable tant que la facture n'est pas verrouillee par un envoi securise).
+  const [inco, setInco] = useState({ incoterm: "", lieu: "" });
+  const [incoInfo, setIncoInfo] = useState("");
 
   function charger() {
     Promise.all([api.getFactureVente(params.id), api.getEntete(), api.getParametresVentes()])
       .then(([factureData, enteteData, parametresData]) => {
         setFacture(factureData);
+        setInco({ incoterm: factureData.incoterm || "", lieu: factureData.incoterm_lieu || "" });
         setEntete({ ...enteteData, ...parametresData });
       })
       .catch((err) => {
@@ -260,6 +265,41 @@ export default function FactureVenteDetailPage() {
         </div>
       )}
 
+      {facture.statut !== "ANNULEE" && (
+        <div className="card no-print" style={{ marginBottom: 16 }}>
+          <IncotermChamp incoterm={inco.incoterm} lieu={inco.lieu} onChange={setInco} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+            <button
+              type="button"
+              disabled={action || (inco.incoterm === (facture.incoterm || "") && inco.lieu === (facture.incoterm_lieu || ""))}
+              style={boutonSecondaireStyle}
+              onClick={async () => {
+                setAction(true);
+                setErreur("");
+                setIncoInfo("");
+                try {
+                  await api.patchFactureVente(facture.id, {
+                    reference_bc_client: facture.reference_bc_client || null,
+                    date_echeance: facture.date_echeance ? String(facture.date_echeance).slice(0, 10) : null,
+                    incoterm: inco.incoterm,
+                    incoterm_lieu: inco.lieu,
+                  });
+                  setIncoInfo(t("venteIncotermEnregistre"));
+                  charger();
+                } catch (err) {
+                  setErreur(err.message);
+                } finally {
+                  setAction(false);
+                }
+              }}
+            >
+              {t("venteIncotermEnregistrer")}
+            </button>
+            {incoInfo && <span style={{ fontSize: 12, color: "#2E7D5B" }}>{incoInfo}</span>}
+          </div>
+        </div>
+      )}
+
       <PartageVente type="FACTURE" document={facture} peutCreer={facture.statut !== "ANNULEE"} onChange={charger} />
 
       <div className="card print-letter" style={{ padding: "28px 32px" }}>
@@ -294,6 +334,7 @@ export default function FactureVenteDetailPage() {
           <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase" }}>{t("venteBillToLabel")}</div>
           <div style={{ fontWeight: 600, fontSize: 13.5 }}>{facture.client_nom}</div>
           {facture.client_adresse && <div style={{ fontSize: 12, color: "var(--sub)" }}>{facture.client_adresse}</div>}
+          {facture.incoterm && <div style={{ fontSize: 12, marginTop: 6 }}>{t("venteIncotermLabel")} : <strong>{[facture.incoterm, facture.incoterm_lieu].filter(Boolean).join(" ")}</strong></div>}
         </div>
 
         <table style={{ width: "100%", borderCollapse: "collapse" }}>

@@ -10,6 +10,7 @@ import AppShell from "../../../../../lib/components/AppShell";
 import PiecesJointes from "../../../../../lib/components/PiecesJointes";
 import RemiseSimulateur from "../../../../../lib/components/RemiseSimulateur";
 import ValidationDevisMarge from "../../../../../lib/components/ValidationDevisMarge";
+import IncotermChamp from "../../../../../lib/components/IncotermChamp";
 import PartageVente from "../../../../../lib/components/PartageVente";
 import { remisesParLigne } from "../../../../../lib/remiseLignes";
 import EcheancierEditor from "../../../../../lib/components/EcheancierEditor";
@@ -198,6 +199,8 @@ export default function DevisDetailPage() {
       conditions_paiement: devis.conditions_paiement || "",
       delai_livraison: devis.delai_livraison || "",
       validite_offre: devis.validite_offre || "",
+      incoterm: devis.incoterm || "",
+      incoterm_lieu: devis.incoterm_lieu || "",
       pourcentage_remise: devis.pourcentage_remise || "0",
       client_commercial_id: devis.client_commercial_id,
     });
@@ -652,6 +655,9 @@ export default function DevisDetailPage() {
               <input value={formDevis.delai_livraison} onChange={(e) => setFormDevis((f) => ({ ...f, delai_livraison: e.target.value }))} style={inputStyle} placeholder={t("venteDelaiLivraisonPlaceholder")} />
             </div>
           </div>
+          <div style={{ marginTop: 12 }}>
+            <IncotermChamp incoterm={formDevis.incoterm} lieu={formDevis.incoterm_lieu} onChange={({ incoterm, lieu }) => setFormDevis((f) => ({ ...f, incoterm, incoterm_lieu: lieu }))} />
+          </div>
 
           <div style={{ marginTop: 14 }}>
             <EcheancierEditor sens="CLIENT" valeur={echeancierEdition} onChange={setEcheancierEdition} aide={t("echRepris")} />
@@ -856,11 +862,12 @@ export default function DevisDetailPage() {
           partiel={totalPartiel}
         />
 
-        {(devis.conditions_paiement || devis.delai_livraison || devis.validite_offre) && (
+        {(devis.conditions_paiement || devis.delai_livraison || devis.validite_offre || devis.incoterm) && (
           <div style={{ marginTop: 18, fontSize: 11.5, color: "var(--sub)", display: "grid", gap: 3 }}>
             {devis.conditions_paiement && <div>{t("venteConditionsPaiementLabel")} : {devis.conditions_paiement}</div>}
             {devis.delai_livraison && <div>{t("venteDelaiLivraisonLabel")} : {devis.delai_livraison}</div>}
             {devis.validite_offre && <div>{t("venteValiditeOffreLabel")} : {devis.validite_offre}</div>}
+            {devis.incoterm && <div>{t("venteIncotermLabel")} : {[devis.incoterm, devis.incoterm_lieu].filter(Boolean).join(" ")}</div>}
           </div>
         )}
 

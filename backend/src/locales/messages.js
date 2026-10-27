@@ -389,6 +389,7 @@ const MESSAGES = {
 
     VENTE_DEVIS_NOT_FOUND: "Devis introuvable.",
     VENTE_DEVIS_FIELDS_REQUIRED: "Le client et au moins une ligne de produit sont requis.",
+    VENTE_INCOTERM_INVALIDE: "Incoterm inconnu : choisissez un code du catalogue de l'entreprise.",
     VENTE_DEVIS_LIGNE_INVALID: "Chaque ligne doit avoir une designation, une quantite et un prix unitaire valides.",
     VENTE_REMISE_MODE_INVALID: "Mode de saisie de la remise invalide (pourcentage, montant ou net TTC).",
     VENTE_REMISE_FACTURE_EXISTANTE: "Une facture existe deja sur ce devis : la remise ne peut plus etre modifiee ici (administrateur uniquement).",
@@ -727,6 +728,7 @@ const MESSAGES = {
     PORTAIL_EMAIL_INVALIDE: "Adresse e-mail invalide.",
     PORTAIL_TEL_INVALIDE: "Numéro de téléphone invalide (8 chiffres au moins).",
     PORTAIL_DOCUMENT_NON_PARTAGEABLE: "Ce document ne peut plus être envoyé pour signature dans son état actuel.",
+    PORTAIL_COMMANDE_A_CONFIRMER: "Confirmez d'abord la commande fournisseur avant de l'envoyer au fournisseur.",
     PORTAIL_SIGNATURE_NON_DEMANDEE: "Aucune signature n'est demandée pour ce document.",
     PORTAIL_MODE_INVALIDE: "Ce type de réponse n'est pas possible pour ce document.",
     PORTAIL_CONTRAT_INCOMPLET: "Le contrat n'est pas prêt à être mis à la signature : des mentions des parties sont manquantes. Complétez-les, ou confirmez l'envoi malgré tout.",
@@ -1376,6 +1378,7 @@ const MESSAGES = {
 
     VENTE_DEVIS_NOT_FOUND: "Quote not found.",
     VENTE_DEVIS_FIELDS_REQUIRED: "The client and at least one product line are required.",
+    VENTE_INCOTERM_INVALIDE: "Unknown Incoterm: choose a code from the company catalogue.",
     VENTE_DEVIS_LIGNE_INVALID: "Each line must have a valid designation, quantity and unit price.",
     VENTE_REMISE_MODE_INVALID: "Invalid discount input mode (percentage, amount or net incl. VAT).",
     VENTE_REMISE_FACTURE_EXISTANTE: "An invoice already exists on this quote: the discount can no longer be changed here (administrator only).",
@@ -1714,6 +1717,7 @@ const MESSAGES = {
     PORTAIL_EMAIL_INVALIDE: "Invalid e-mail address.",
     PORTAIL_TEL_INVALIDE: "Invalid phone number (at least 8 digits).",
     PORTAIL_DOCUMENT_NON_PARTAGEABLE: "This document can no longer be sent for signature in its current state.",
+    PORTAIL_COMMANDE_A_CONFIRMER: "Confirm the supplier order first before sending it to the supplier.",
     PORTAIL_SIGNATURE_NON_DEMANDEE: "No signature is requested for this document.",
     PORTAIL_MODE_INVALIDE: "This type of response is not possible for this document.",
     PORTAIL_CONTRAT_INCOMPLET: "The contract is not ready for signature: some details of the parties are missing. Complete them, or confirm sending anyway.",

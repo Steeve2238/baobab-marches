@@ -64,6 +64,11 @@ const DOCS = {
   FACTURE: { lib: "Facture", art: "la facture", pr: "la", origine: "TENANT", modes: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"], defaut: "CONSULTATION" },
   DEVIS: { lib: "Devis", art: "le devis", pr: "le", origine: "TENANT", modes: ["ACCEPTATION", "SIGNATURE", "CONSULTATION"], defaut: "ACCEPTATION" },
   FACTURE_ABO: { lib: "Facture", art: "la facture", pr: "la", origine: "EDITEUR", modes: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"], defaut: "CONSULTATION" },
+  // Bon de livraison : le client confirme la reception (acceptation = « marchandise reçue »).
+  BON_LIVRAISON: { lib: "Bon de livraison", art: "le bon de livraison", pr: "le", origine: "TENANT", modes: ["ACCEPTATION", "SIGNATURE", "CONSULTATION"], defaut: "ACCEPTATION" },
+  AVOIR: { lib: "Avoir", art: "l'avoir", pr: "l'", origine: "TENANT", modes: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"], defaut: "CONSULTATION" },
+  // Bon de commande envoye au fournisseur, qui l'accepte ou le signe.
+  COMMANDE_FOURNISSEUR: { lib: "Bon de commande", art: "le bon de commande", pr: "le", origine: "TENANT", modes: ["ACCEPTATION", "SIGNATURE", "CONSULTATION"], defaut: "ACCEPTATION" },
 };
 
 /** Reponse demandee au client : explicite si valide, sinon deduite de l'ancien indicateur signature_requise, sinon valeur par defaut du type. */
@@ -78,6 +83,14 @@ function modeReponseDe(type, modeReponse, signatureRequise) {
   if (signatureRequise === true || signatureRequise === "true") return d.defaut === "CONSULTATION" ? "ACCEPTATION" : d.defaut;
   return d.defaut;
 }
+// Mention portee sur le PDF une fois le document accepte ou signe.
+const MENTIONS = {
+  FACTURE: "Facture reçue, accusé de réception.",
+  FACTURE_ABO: "Facture reçue, accusé de réception.",
+  AVOIR: "Avoir reçu, accusé de réception.",
+  BON_LIVRAISON: "Marchandise reçue conforme au présent bon de livraison.",
+  COMMANDE_FOURNISSEUR: "Bon de commande accepté, bon pour exécution.",
+};
 const estFacture = (type) => type === "FACTURE" || type === "FACTURE_ABO";
 const libelleType = (type) => (DOCS[type] || DOCS.CONTRAT).lib;
 const PORTEE_EDITEUR = { origine: "EDITEUR" };
@@ -273,6 +286,7 @@ async function creerPartage({ type, documentId, adminId, email, telephone, nom, 
   if (type === "OFFRE") await oc.marquerEnvoyee(documentId, cible);
   else if (type === "CONTRAT") await oc.marquerContratEnvoye(documentId, cible);
   else if (type === "DEVIS") await pv.marquerDevisEnvoye(documentId, tenantEmetteur);
+  else if (type === "COMMANDE_FOURNISSEUR") await db.query(`UPDATE commande_fournisseur SET date_transmission = COALESCE(date_transmission, CURRENT_DATE) WHERE id = $1 AND tenant_id = $2`, [documentId, tenantEmetteur]);
 
   const lien = lienPour(token);
   const ligne = (await db.query(`${SELECT_PARTAGE} WHERE p.id = $1`, [id])).rows[0];
@@ -507,6 +521,12 @@ function resumeDocument(ligne) {
       return { montant: nombre(d.montant_net_a_payer) != null && d.type_facturation && d.type_facturation !== "INTEGRALE" ? nombre(d.montant_net_a_payer) : nombre(d.total_ttc), date: jour(d.date_facture), echeance: jour(d.date_echeance) };
     case "FACTURE_ABO":
       return { montant: nombre(d.montant_xof), date: jour(d.date_generation), objet: d.periode || null };
+    case "BON_LIVRAISON":
+      return { date: jour(d.date_bl), objet: d.facture_numero ? `Facture ${d.facture_numero}` : null };
+    case "AVOIR":
+      return { montant: nombre(d.total_ttc), date: jour(d.date_avoir), objet: d.facture_numero ? `Facture ${d.facture_numero}` : null };
+    case "COMMANDE_FOURNISSEUR":
+      return { montant: nombre(d.total_xof), date: jour(d.date_commande), objet: d.devise && d.devise !== "XOF" ? `${d.total_devise} ${d.devise}` : null };
     default:
       return {};
   }
@@ -586,13 +606,16 @@ async function rendrePdf(ligne) {
     opts.signature = {
       image_buf: sig.image_base64 ? Buffer.from(sig.image_base64, "base64") : null,
       tampon: accepte ? { titre: "ACCEPTÉ EN LIGNE", ligne: sig.nom_signataire, date: quand } : null,
-      mention: `${estFacture(ligne.type_document) ? "Facture reçue, accusé de réception." : "Lu et approuvé, bon pour accord."} ${accepte ? "Accepté" : "Signé"} électroniquement par ${qui}, le ${quand}.`,
+      mention: `${MENTIONS[ligne.type_document] || "Lu et approuvé, bon pour accord."} ${accepte ? "Accepté" : "Signé"} électroniquement par ${qui}, le ${quand}.`,
     };
     opts.apres = (doc) => pageCertificat(doc, ligne, sig, evenements);
   }
   if (ligne.type_document === "FACTURE") return ventesPdf.facturePdf(snap.document, snap.params, opts);
   if (ligne.type_document === "FACTURE_ABO") return ventesPdf.factureAbonnementPdf(snap.document, snap.params, opts);
   if (ligne.type_document === "DEVIS") return ventesPdf.devisPdf(snap.document, snap.params, opts);
+  if (ligne.type_document === "BON_LIVRAISON") return ventesPdf.bonLivraisonPdf(snap.document, snap.params, opts);
+  if (ligne.type_document === "AVOIR") return ventesPdf.avoirPdf(snap.document, snap.params, opts);
+  if (ligne.type_document === "COMMANDE_FOURNISSEUR") return ventesPdf.commandeFournisseurPdf(snap.document, snap.params, opts);
   return ligne.type_document === "OFFRE" ? pdfs.offrePdf(snap.document, snap.params, opts) : pdfs.contratPdf(snap.document, snap.params, opts);
 }
 
@@ -703,6 +726,9 @@ async function signer(ligne, corps, identifiantMasque, ctx) {
         `UPDATE contrat_client SET statut = 'SIGNE', date_signature_client = $2, date_modification = now() WHERE id = $1 AND statut IN ('PREPARE', 'ENVOYE')`,
         [ligne.document_id, jour]
       );
+    }
+    else if (ligne.type_document === "COMMANDE_FOURNISSEUR") {
+      await db.query(`UPDATE commande_fournisseur SET date_confirmation_fournisseur = COALESCE(date_confirmation_fournisseur, CURRENT_DATE) WHERE id = $1`, [ligne.document_id]);
     }
   } catch (e) {
     console.error(e);

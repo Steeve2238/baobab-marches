@@ -49,7 +49,7 @@ export default function PortailPage() {
   const [signature, setSignature] = useState(null);
   const urlRef = useRef("");
 
-  const libelleType = (type) => ({ OFFRE: t("prtpOffre"), CONTRAT: t("prtpContrat"), FACTURE: t("prtpFacture"), FACTURE_ABO: t("prtpFacture"), DEVIS: t("prtpDevis") }[type] || t("prtpContrat"));
+  const libelleType = (type) => ({ OFFRE: t("prtpOffre"), CONTRAT: t("prtpContrat"), FACTURE: t("prtpFacture"), FACTURE_ABO: t("prtpFacture"), DEVIS: t("prtpDevis"), BON_LIVRAISON: t("prtpBonLivraison"), AVOIR: t("prtpAvoir"), COMMANDE_FOURNISSEUR: t("prtpCommande") }[type] || t("prtpContrat"));
 
   const chargerPdf = useCallback(async (sess) => {
     try {

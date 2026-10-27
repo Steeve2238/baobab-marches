@@ -6,6 +6,7 @@ import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import AppShell from "../../../../lib/components/AppShell";
 import { boutonSecondaireStyle } from "../../../../lib/comptaUi";
+import PartageVente from "../../../../lib/components/PartageVente";
 
 const nf = (n, d = 2) => Number(n || 0).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: d }).replace(/[  ]/g, " ");
 const il = (d) => (d ? String(d).slice(0, 10).split("-").reverse().join("/") : "");
@@ -32,6 +33,9 @@ export default function AvoirPage() {
         <>
           <div className="no-print" style={{ marginBottom: 12 }}>
             <button type="button" onClick={() => window.print()} style={boutonSecondaireStyle}>{t("avoImprimer")}</button>
+          </div>
+          <div style={{ maxWidth: 860 }}>
+            <PartageVente type="AVOIR" document={a} peutCreer />
           </div>
           <div className="card print-letter" style={{ padding: "28px 32px", background: "#fff", color: "#111", maxWidth: 860 }}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 24, borderBottom: "2px solid var(--petrol)", paddingBottom: 16, marginBottom: 20 }}>

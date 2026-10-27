@@ -33,9 +33,11 @@ const PASSERELLE_EDITEUR = {
   detail: (id) => superAdminApi.getPartage(id),
   telecharger: (id) => superAdminApi.telechargerPartage(id),
 };
+/** Segment d'URL de l'API /partages pour chaque document d'entreprise. */
+export const GENRE_PAR_TYPE = { FACTURE: "factures", DEVIS: "devis", BON_LIVRAISON: "bons-livraison", AVOIR: "avoirs", COMMANDE_FOURNISSEUR: "commandes" };
 export const PASSERELLE_ENTREPRISE = {
   lister: (type, id) => apiEntreprise.getPartagesVente(`?type=${type}&document=${id}`),
-  creer: (type, id, f) => apiEntreprise.creerPartageVente(type === "FACTURE" ? "factures" : "devis", id, f),
+  creer: (type, id, f) => apiEntreprise.creerPartageVente(GENRE_PAR_TYPE[type] || "devis", id, f),
   renouveler: (id, d) => apiEntreprise.renouvelerPartageVente(id, d),
   revoquer: (id) => apiEntreprise.revoquerPartageVente(id),
   detail: (id) => apiEntreprise.getPartageVente(id),
@@ -48,10 +50,13 @@ export const MODES_PAR_TYPE = {
   DEVIS: ["ACCEPTATION", "SIGNATURE", "CONSULTATION"],
   FACTURE: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"],
   FACTURE_ABO: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"],
+  BON_LIVRAISON: ["ACCEPTATION", "SIGNATURE", "CONSULTATION"],
+  AVOIR: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"],
+  COMMANDE_FOURNISSEUR: ["ACCEPTATION", "SIGNATURE", "CONSULTATION"],
 };
 /** Cle de traduction de l'etat d'un envoi : « Accepte » quand la reponse etait une acceptation. */
 export const cleStatut = (p) => (p.statut === "SIGNE" && p.mode_reponse === "ACCEPTATION" ? "prtStatut_ACCEPTE" : `prtStatut_${p.statut}`);
-const TYPE_CLE = { OFFRE: "prtTypeOffre", CONTRAT: "prtTypeContrat", FACTURE: "prtTypeFacture", DEVIS: "prtTypeDevis", FACTURE_ABO: "prtTypeFacture" };
+const TYPE_CLE = { OFFRE: "prtTypeOffre", CONTRAT: "prtTypeContrat", FACTURE: "prtTypeFacture", DEVIS: "prtTypeDevis", FACTURE_ABO: "prtTypeFacture", BON_LIVRAISON: "prtTypeBonLivraison", AVOIR: "prtTypeAvoir", COMMANDE_FOURNISSEUR: "prtTypeCommande" };
 export const cleTypeDocument = (type) => TYPE_CLE[type] || "prtTypeContrat";
 
 /** Les cinq etapes suivies, avec la date quand elles sont atteintes. */
@@ -209,8 +214,8 @@ export default function PartageDocument({ type, documentId, numero, emailParDefa
 
   return (
     <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 16, marginTop: 14, background: "#fff" }}>
-      <h3 style={{ fontSize: 14, color: "var(--petrol)" }}>{t(vente ? "prtCarteTitreVente" : "prtCarteTitre")}</h3>
-      <p style={{ fontSize: 12, color: "var(--sub)", margin: "4px 0 12px", maxWidth: 680 }}>{t(vente ? "prtCarteAideVente" : "prtCarteAide")}</p>
+      <h3 style={{ fontSize: 14, color: "var(--petrol)" }}>{t(type === "COMMANDE_FOURNISSEUR" ? "prtCarteTitreCommande" : vente ? "prtCarteTitreVente" : "prtCarteTitre")}</h3>
+      <p style={{ fontSize: 12, color: "var(--sub)", margin: "4px 0 12px", maxWidth: 680 }}>{t(type === "COMMANDE_FOURNISSEUR" ? "prtCarteAideCommande" : vente ? "prtCarteAideVente" : "prtCarteAide")}</p>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 8 }}>{erreur}</p>}
 
       {resultat && (

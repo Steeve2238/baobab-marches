@@ -11,7 +11,12 @@ const { ipDe } = require("../services/rhSignature");
 
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireModule("marches"));
+// Envois de factures, devis, BL, avoirs (module marches) et bons de commande fournisseur (module marches ou fournisseurs).
+router.use((req, res, next) => {
+  const p = req.user && req.user.permissions;
+  if (p && (p.admin || (p.modules || []).some((m) => m === "marches" || m === "fournisseurs"))) return next();
+  return requireModule("marches")(req, res, next);
+});
 router.use(blockLectureSeule);
 
 function gerer(fn) {
@@ -28,17 +33,17 @@ function gerer(fn) {
 }
 
 const portee = (req) => ({ origine: "TENANT", tenantId: req.user.tenantId });
-const TYPES = { factures: "FACTURE", devis: "DEVIS" };
+const TYPES = { factures: "FACTURE", devis: "DEVIS", "bons-livraison": "BON_LIVRAISON", avoirs: "AVOIR", commandes: "COMMANDE_FOURNISSEUR" };
 
 // Pre-remplissage du formulaire d'envoi : contact du client, signature demandee par defaut, partage deja en cours.
-router.get("/preparation/:genre(factures|devis)/:id", gerer(async (req, res) => {
+router.get("/preparation/:genre(factures|devis|bons-livraison|avoirs|commandes)/:id", gerer(async (req, res) => {
   const type = TYPES[req.params.genre];
   if (!type) throw new portail.PortailError("PORTAIL_TYPE_INVALIDE", 400);
   const c = await pv.chargerDocumentVente(type, req.params.id, req.user.tenantId);
-  res.json({ type_document: type, numero: c.numero, statut: c.document.statut, contact: c.contact, signature_par_defaut: type === "DEVIS" });
+  res.json({ type_document: type, numero: c.numero, statut: c.document.statut, contact: c.contact, signature_par_defaut: ["DEVIS", "BON_LIVRAISON", "COMMANDE_FOURNISSEUR"].includes(type) });
 }));
 
-router.post("/:genre(factures|devis)/:id", gerer(async (req, res) => {
+router.post("/:genre(factures|devis|bons-livraison|avoirs|commandes)/:id", gerer(async (req, res) => {
   const type = TYPES[req.params.genre];
   if (!type) throw new portail.PortailError("PORTAIL_TYPE_INVALIDE", 400);
   const b = req.body || {};

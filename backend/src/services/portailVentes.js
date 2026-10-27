@@ -23,6 +23,9 @@ async function enteteTenant(tenantId) {
 
 /** Facture ou devis du tenant, avec ses lignes et les informations du client (meme contenu que l'ecran d'impression). */
 async function chargerDocumentVente(type, id, tenantId) {
+  if (type === "BON_LIVRAISON") return chargerBonLivraison(id, tenantId);
+  if (type === "AVOIR") return chargerAvoir(id, tenantId);
+  if (type === "COMMANDE_FOURNISSEUR") return chargerCommandeFournisseur(id, tenantId);
   const table = type === "FACTURE" ? "facture_vente" : "devis";
   const lignesSql = type === "FACTURE"
     ? `SELECT id, ordre, designation, unite, quantite, prix_unitaire_ht, montant_ht, non_chiffre, mention_prix, reference FROM facture_vente_ligne WHERE facture_vente_id = $1 ORDER BY ordre ASC`
@@ -53,10 +56,84 @@ async function chargerDocumentVente(type, id, tenantId) {
   };
 }
 
+
+/** Bon de livraison du tenant (lignes livrees, client, facture d'origine, Incoterm de la facture). */
+async function chargerBonLivraison(id, tenantId) {
+  let r;
+  try {
+    r = await db.query(
+      `SELECT bl.*, cl.nom AS client_nom, cl.adresse AS client_adresse, cl.email AS client_email, cl.telephone AS client_telephone,
+              f.numero AS facture_numero, f.incoterm, f.incoterm_lieu
+       FROM bon_livraison bl JOIN client_commercial cl ON cl.id = bl.client_commercial_id JOIN facture_vente f ON f.id = bl.facture_vente_id
+       WHERE bl.id = $1 AND bl.tenant_id = $2`,
+      [id, tenantId]
+    );
+  } catch (e) {
+    if (e && e.code === "22P02") throw new VenteDocError("PORTAIL_DOCUMENT_INTROUVABLE", 404);
+    throw e;
+  }
+  const bl = r.rows[0];
+  if (!bl) throw new VenteDocError("PORTAIL_DOCUMENT_INTROUVABLE", 404);
+  const lignes = (await db.query(`SELECT id, ordre, designation, unite, quantite_livree, reference FROM bon_livraison_ligne WHERE bon_livraison_id = $1 ORDER BY ordre ASC`, [id])).rows;
+  const { client_email, client_telephone, ...document } = bl;
+  const { numeroFacture } = require("./ventesPdf");
+  const numero = `BL-${numeroFacture(bl.numero, bl.mois_emission)}${Number(bl.rang) > 1 ? `/${bl.rang}` : ""}`;
+  return { document: { ...document, lignes, numero_complet: numero }, params: await enteteTenant(tenantId), numero, contact: { nom: bl.client_nom, email: client_email || "", telephone: client_telephone || "" } };
+}
+
+/** Avoir client du tenant (meme contenu que l'ecran d'impression). */
+async function chargerAvoir(id, tenantId) {
+  const avoirs = require("./avoirs");
+  let a;
+  try {
+    a = await avoirs.detail(tenantId, id);
+  } catch (e) {
+    if (e && e.status === 404) throw new VenteDocError("PORTAIL_DOCUMENT_INTROUVABLE", 404);
+    if (e && e.code === "22P02") throw new VenteDocError("PORTAIL_DOCUMENT_INTROUVABLE", 404);
+    throw e;
+  }
+  const { client_email, client_telephone, ecritures, ...document } = a;
+  return { document, params: await enteteTenant(tenantId), numero: a.numero, contact: { nom: a.client_nom, email: client_email || "", telephone: client_telephone || "" } };
+}
+
+/** Commande fournisseur du tenant, envoyee au FOURNISSEUR (contact = fournisseur) pour acceptation du bon de commande. */
+async function chargerCommandeFournisseur(id, tenantId) {
+  let r;
+  try {
+    r = await db.query(
+      `SELECT c.*, f.nom AS fournisseur_nom, f.pays AS fournisseur_pays, f.adresse AS fournisseur_adresse, f.email AS fournisseur_email,
+              f.telephone AS fournisseur_telephone, f.contact_nom AS fournisseur_contact, tr.nom AS transitaire_nom
+       FROM commande_fournisseur c JOIN fournisseur f ON f.id = c.fournisseur_id LEFT JOIN transitaire tr ON tr.id = c.transitaire_id
+       WHERE c.id = $1 AND c.tenant_id = $2`,
+      [id, tenantId]
+    );
+  } catch (e) {
+    if (e && e.code === "22P02") throw new VenteDocError("PORTAIL_DOCUMENT_INTROUVABLE", 404);
+    throw e;
+  }
+  const c = r.rows[0];
+  if (!c) throw new VenteDocError("PORTAIL_DOCUMENT_INTROUVABLE", 404);
+  const lignes = (await db.query(`SELECT id, ordre, reference_fournisseur, designation, unite, quantite, prix_unitaire_devise FROM commande_fournisseur_ligne WHERE commande_id = $1 ORDER BY ordre ASC`, [id])).rows
+    .map((l) => ({ ...l, quantite: Number(l.quantite), prix_unitaire_devise: Number(l.prix_unitaire_devise) }));
+  const totalDevise = Math.round(lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire_devise, 0) * 100) / 100;
+  const cours = Number(c.cours_devise) || 1;
+  const { fournisseur_email, fournisseur_telephone, ...document } = c;
+  return {
+    document: { ...document, fournisseur_email, fournisseur_telephone, cours_devise: cours, lignes, total_devise: totalDevise, total_xof: Math.round(totalDevise * cours * 100) / 100 },
+    params: await enteteTenant(tenantId),
+    numero: c.numero,
+    contact: { nom: c.fournisseur_contact || c.fournisseur_nom, email: fournisseur_email || "", telephone: fournisseur_telephone || "" },
+  };
+}
+
 /** Controle du statut : une facture annulee, un devis refuse ou expire ne se partagent pas. */
 function verifierPartageable(type, document) {
   if (type === "FACTURE" && document.statut === "ANNULEE") throw new VenteDocError("PORTAIL_DOCUMENT_NON_PARTAGEABLE", 409);
   if (type === "DEVIS" && ["REFUSE", "EXPIRE"].includes(document.statut)) throw new VenteDocError("PORTAIL_DOCUMENT_NON_PARTAGEABLE", 409);
+  if (type === "COMMANDE_FOURNISSEUR") {
+    if (document.statut === "ANNULEE") throw new VenteDocError("PORTAIL_DOCUMENT_NON_PARTAGEABLE", 409);
+    if (document.statut !== "CONFIRMEE") throw new VenteDocError("PORTAIL_COMMANDE_A_CONFIRMER", 409);
+  }
 }
 
 /** Un devis brouillon passe a « envoye » (les autres statuts ne bougent pas). */
