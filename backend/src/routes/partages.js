@@ -53,6 +53,8 @@ router.post("/:genre(factures|devis)/:id", gerer(async (req, res) => {
     nom: b.nom,
     jours: b.jours,
     signatureRequise: b.signature_requise,
+    modeReponse: b.mode_reponse,
+    forcer: b.forcer === true,
     envoyerEmail: b.envoyer_email !== false,
     message: b.message,
     ip: ipDe(req),

@@ -70,6 +70,8 @@ async function request(path, options = {}) {
   if (!res.ok) {
     const erreur = new Error(data.error || `Erreur ${res.status}`);
     erreur.status = res.status;
+    erreur.code = data.code;
+    erreur.details = data.details;
     throw erreur;
   }
   return data;
@@ -230,6 +232,8 @@ export const superAdminApi = {
 
   // --- Remise tracee (lien + code + signature en ligne) ---
   creerPartageOffre: (id, data) => request(`/super-admin/offres/${id}/partage`, { method: "POST", body: JSON.stringify(data) }),
+  creerPartageFacture: (id, data) => request(`/super-admin/factures/${id}/partage`, { method: "POST", body: JSON.stringify(data) }),
+  preparationPartageFacture: (id) => request(`/super-admin/factures/${id}/partage-preparation`),
   creerPartageContrat: (id, data) => request(`/super-admin/contrats/${id}/partage`, { method: "POST", body: JSON.stringify(data) }),
   getPartages: (query = "") => request(`/super-admin/partages${query}`),
   getPartage: (id) => request(`/super-admin/partages/${id}`),

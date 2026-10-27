@@ -7,7 +7,7 @@ import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import AppShell from "../../../lib/components/AppShell";
 import ConsultationRestreinteSousNav from "../../../lib/components/ConsultationRestreinteSousNav";
-import { EtapesPartage, JournalPartage, pastilleEtat, cleTypeDocument } from "../../../lib/components/PartageDocument";
+import { EtapesPartage, JournalPartage, pastilleEtat, cleTypeDocument, cleStatut } from "../../../lib/components/PartageDocument";
 import { boutonSecondaireStyle, thStyle, tdStyle } from "../../../lib/comptaUi";
 
 const FILTRES = ["TOUS", "ACTIF", "SIGNE", "EXPIRE", "REVOQUE", "BLOQUE"];
@@ -85,7 +85,7 @@ export default function SuiviEnvoisPage() {
         <Compteur libelle={t("prtEtapeCree")} valeur={compteurs.total} />
         <Compteur libelle={t("prtEtapeOuvert")} valeur={compteurs.ouverts} />
         <Compteur libelle={t("prtEtapeTelecharge")} valeur={compteurs.telecharges} />
-        <Compteur libelle={t("prtEtapeSigne")} valeur={compteurs.signes} />
+        <Compteur libelle={t("prtFiltreSigneAccepte")} valeur={compteurs.signes} />
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
         {TYPES.map((x) => (
@@ -97,7 +97,7 @@ export default function SuiviEnvoisPage() {
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {FILTRES.map((f) => (
           <button key={f} onClick={() => setFiltre(f)} style={pill(filtre === f)}>
-            {f === "TOUS" ? t("prtFiltreTous") : t(`prtStatut_${f}`)}
+            {f === "TOUS" ? t("prtFiltreTous") : f === "SIGNE" ? t("prtFiltreSigneAccepte") : t(`prtStatut_${f}`)}
           </button>
         ))}
       </div>
@@ -129,7 +129,7 @@ export default function SuiviEnvoisPage() {
                     </td>
                     <td style={tdStyle}>{p.client_raison_sociale}</td>
                     <td style={tdStyle}>{p.destinataire_nom || ""}<div style={{ fontSize: 11, color: "var(--sub)" }}>{p.destinataire_email || p.destinataire_tel}</div></td>
-                    <td style={tdStyle}><span style={pastilleEtat(p.statut)}>{t(`prtStatut_${p.statut}`)}</span></td>
+                    <td style={tdStyle}><span style={pastilleEtat(p.statut)}>{t(cleStatut(p))}</span></td>
                     <td style={{ ...tdStyle, minWidth: 320 }}><EtapesPartage p={p} t={t} langue={langue} /></td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

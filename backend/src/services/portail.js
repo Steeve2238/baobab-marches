@@ -59,11 +59,26 @@ function jsonStable(v) {
 }
 
 const DOCS = {
-  OFFRE: { lib: "Offre commerciale", art: "l'offre commerciale", pr: "la", origine: "EDITEUR" },
-  CONTRAT: { lib: "Contrat", art: "le contrat", pr: "le", origine: "EDITEUR" },
-  FACTURE: { lib: "Facture", art: "la facture", pr: "la", origine: "TENANT" },
-  DEVIS: { lib: "Devis", art: "le devis", pr: "le", origine: "TENANT" },
+  OFFRE: { lib: "Offre commerciale", art: "l'offre commerciale", pr: "la", origine: "EDITEUR", modes: ["ACCEPTATION", "SIGNATURE"], defaut: "ACCEPTATION" },
+  CONTRAT: { lib: "Contrat", art: "le contrat", pr: "le", origine: "EDITEUR", modes: ["SIGNATURE"], defaut: "SIGNATURE" },
+  FACTURE: { lib: "Facture", art: "la facture", pr: "la", origine: "TENANT", modes: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"], defaut: "CONSULTATION" },
+  DEVIS: { lib: "Devis", art: "le devis", pr: "le", origine: "TENANT", modes: ["ACCEPTATION", "SIGNATURE", "CONSULTATION"], defaut: "ACCEPTATION" },
+  FACTURE_ABO: { lib: "Facture", art: "la facture", pr: "la", origine: "EDITEUR", modes: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"], defaut: "CONSULTATION" },
 };
+
+/** Reponse demandee au client : explicite si valide, sinon deduite de l'ancien indicateur signature_requise, sinon valeur par defaut du type. */
+function modeReponseDe(type, modeReponse, signatureRequise) {
+  const d = DOCS[type];
+  const demande = String(modeReponse || "").toUpperCase();
+  if (demande) {
+    if (!d.modes.includes(demande)) throw new PortailError("PORTAIL_MODE_INVALIDE", 400);
+    return demande;
+  }
+  if (signatureRequise === false || signatureRequise === "false") return d.modes.includes("CONSULTATION") ? "CONSULTATION" : d.defaut;
+  if (signatureRequise === true || signatureRequise === "true") return d.defaut === "CONSULTATION" ? "ACCEPTATION" : d.defaut;
+  return d.defaut;
+}
+const estFacture = (type) => type === "FACTURE" || type === "FACTURE_ABO";
 const libelleType = (type) => (DOCS[type] || DOCS.CONTRAT).lib;
 const PORTEE_EDITEUR = { origine: "EDITEUR" };
 
@@ -119,6 +134,7 @@ function versResume(r) {
     client_raison_sociale: r.client_raison_sociale || null,
     origine: r.origine,
     signature_requise: r.signature_requise !== false,
+    mode_reponse: r.mode_reponse || (r.signature_requise === false ? "CONSULTATION" : "SIGNATURE"),
     destinataire_nom: r.destinataire_nom,
     destinataire_email: r.destinataire_email,
     destinataire_tel: r.destinataire_tel,
@@ -141,7 +157,7 @@ function versResume(r) {
 const SELECT_PARTAGE = `
   SELECT p.id, p.type_document, p.document_id, p.tenant_id, p.numero_document, p.destinataire_nom, p.destinataire_email, p.destinataire_tel,
          p.statut, p.expire_le, p.tentatives_echec, p.bloque_jusqua, p.date_envoi_email, p.envoye_a, p.premiere_ouverture, p.dernier_acces,
-         p.date_consultation, p.date_telechargement, p.date_signature, p.date_creation, p.empreinte_document, p.origine, p.signature_requise,
+         p.date_consultation, p.date_telechargement, p.date_signature, p.date_creation, p.empreinte_document, p.origine, p.signature_requise, p.mode_reponse,
          CASE WHEN p.origine = 'TENANT' THEN p.snapshot_json->'document'->>'client_nom' ELSE te.raison_sociale END AS client_raison_sociale, s.nom_signataire, cc.offre_id AS contrat_offre_id
   FROM portail_partage p
   LEFT JOIN contrat_client cc ON p.type_document = 'CONTRAT' AND cc.id = p.document_id
@@ -157,13 +173,15 @@ async function envoyerLien({ partage, lien, params, message }) {
   const emetteur = params.raison_sociale || "Baobab Marchés";
   const validite = new Date(partage.expire_le).toLocaleDateString("fr-FR");
   const d = DOCS[partage.type_document] || DOCS.CONTRAT;
-  const actions = partage.signature_requise === false ? `${d.pr === "la" ? "la" : "le"} consulter et ${d.pr === "la" ? "la" : "le"} télécharger` : `${d.pr === "la" ? "la" : "le"} consulter, ${d.pr === "la" ? "la" : "le"} télécharger et ${d.pr === "la" ? "la" : "le"} signer`;
+  const lui = d.pr === "la" ? "la" : "le";
+  const verbe = partage.mode_reponse === "ACCEPTATION" ? "accepter" : "signer";
+  const actions = partage.signature_requise === false ? `${lui} consulter et ${lui} télécharger` : `${lui} consulter, ${lui} télécharger et ${lui} ${verbe}`;
   const corps =
     message ||
     `Bonjour${partage.destinataire_nom ? ` ${partage.destinataire_nom}` : ""},\n\n${emetteur} vous transmet ${d.art} ${partage.numero_document}. Vous pouvez ${actions} en ligne depuis ce lien sécurisé :\n\n${lien}\n\nPour y accéder, vous aurez besoin de votre adresse e-mail ou de votre numéro de téléphone, ainsi que d'un code d'accès que nous vous communiquons séparément (WhatsApp ou téléphone).\n\nCe lien est valable jusqu'au ${validite}.\n\nCordialement,\n${emetteur}`;
   await mailer.envoyerEmailAvecPieceJointe({
     destinataire: partage.destinataire_email,
-    sujet: `${d.lib} ${partage.numero_document} - ${partage.signature_requise === false ? "à consulter" : "à consulter et signer"}`,
+    sujet: `${d.lib} ${partage.numero_document} - ${partage.signature_requise === false ? "à consulter" : partage.mode_reponse === "ACCEPTATION" ? "à consulter et accepter" : "à consulter et signer"}`,
     message: corps,
     pieces: [],
     repondreA: params.email || null,
@@ -171,11 +189,16 @@ async function envoyerLien({ partage, lien, params, message }) {
   });
 }
 
-async function chargerDocument(type, documentId, tenantEmetteur) {
+async function chargerDocument(type, documentId, tenantEmetteur, { forcer = false } = {}) {
   if (DOCS[type] && DOCS[type].origine === "TENANT") {
     const c = await pv.chargerDocumentVente(type, documentId, tenantEmetteur);
     pv.verifierPartageable(type, c.document);
     return { document: c.document, tenantId: tenantEmetteur, numero: c.numero, params: c.params };
+  }
+  if (type === "FACTURE_ABO") {
+    const f = await pv.chargerFactureAbonnement(documentId);
+    if (f.statut === "ANNULEE") throw new PortailError("PORTAIL_DOCUMENT_NON_PARTAGEABLE", 409);
+    return { document: f, tenantId: f.tenant_id, numero: f.numero, params: null };
   }
   if (type === "OFFRE") {
     const o = await oc.getOffre(documentId);
@@ -184,6 +207,9 @@ async function chargerDocument(type, documentId, tenantEmetteur) {
   }
   const c = await oc.getContratComplet(documentId);
   if (!["PREPARE", "ENVOYE"].includes(c.statut)) throw new PortailError("PORTAIL_DOCUMENT_NON_PARTAGEABLE", 409);
+  // « Mise a la signature » : le contrat n'est envoye que si les mentions des deux parties sont completes (sauf decision expresse de l'emetteur).
+  const manque = Array.isArray(c.avertissements_json) ? c.avertissements_json : [];
+  if (manque.length && !forcer) throw new PortailError("PORTAIL_CONTRAT_INCOMPLET", 409, { manque });
   const { signe_base64, ...reste } = c;
   return { document: reste, tenantId: c.tenant_id, numero: c.numero, params: null };
 }
@@ -192,11 +218,12 @@ async function chargerDocument(type, documentId, tenantEmetteur) {
  * Cree (ou remplace) le partage d'un document. Retourne le lien et le code EN CLAIR, une seule fois.
  * @returns {{ partage, lien, code, email_envoye, email_erreur }}
  */
-async function creerPartage({ type, documentId, adminId, email, telephone, nom, jours, envoyerEmail = true, message, ip, tenantId: tenantEmetteur, signatureRequise, creeParEmail }) {
+async function creerPartage({ type, documentId, adminId, email, telephone, nom, jours, envoyerEmail = true, message, ip, tenantId: tenantEmetteur, signatureRequise, modeReponse, forcer = false, creeParEmail }) {
   if (!DOCS[type]) throw new PortailError("PORTAIL_TYPE_INVALIDE", 400);
   const origine = DOCS[type].origine;
   if (origine === "TENANT" && !tenantEmetteur) throw new PortailError("PORTAIL_TYPE_INVALIDE", 400);
-  const signature = origine === "EDITEUR" ? true : signatureRequise === undefined || signatureRequise === null ? type === "DEVIS" : signatureRequise === true || signatureRequise === "true";
+  const mode = modeReponseDe(type, modeReponse, signatureRequise);
+  const signature = mode !== "CONSULTATION";
   const emailN = String(email || "").trim().toLowerCase();
   const tel = String(telephone || "").trim();
   if (!emailN && !chiffres(tel)) throw new PortailError("PORTAIL_DESTINATAIRE_REQUIS", 400);
@@ -209,7 +236,7 @@ async function creerPartage({ type, documentId, adminId, email, telephone, nom, 
 
   let chargement;
   try {
-    chargement = await chargerDocument(type, documentId, tenantEmetteur);
+    chargement = await chargerDocument(type, documentId, tenantEmetteur, { forcer: forcer === true || forcer === "true" });
   } catch (e) {
     if (e instanceof pv.VenteDocError) throw new PortailError(e.code, e.status);
     throw e;
@@ -228,9 +255,9 @@ async function creerPartage({ type, documentId, adminId, email, telephone, nom, 
     await client.query(`UPDATE portail_partage SET statut = 'REVOQUE' WHERE type_document = $1 AND document_id = $2 AND statut = 'ACTIF'`, [type, documentId]);
     await client.query(
       `INSERT INTO portail_partage (id, type_document, document_id, tenant_id, numero_document, token_hash, code_hash, destinataire_nom, destinataire_email, destinataire_tel,
-         expire_le, snapshot_json, empreinte_document, cree_par, origine, signature_requise, cree_par_email)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-      [id, type, documentId, tenantId, numero, hashToken(token), hashCode(code, id), String(nom || "").trim().slice(0, 120) || null, emailN || null, tel || null, expire, JSON.stringify(snapshot), empreinte, adminId || null, origine, signature, creeParEmail || null]
+         expire_le, snapshot_json, empreinte_document, cree_par, origine, signature_requise, cree_par_email, mode_reponse)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+      [id, type, documentId, tenantId, numero, hashToken(token), hashCode(code, id), String(nom || "").trim().slice(0, 120) || null, emailN || null, tel || null, expire, JSON.stringify(snapshot), empreinte, adminId || null, origine, signature, creeParEmail || null, mode]
     );
     await client.query("COMMIT");
   } catch (e) {
@@ -377,6 +404,7 @@ async function infoPublique(token, ctx) {
     numero_document: ligne.numero_document,
     emetteur: params.raison_sociale || "Baobab Marchés",
     signature_requise: ligne.signature_requise !== false,
+    mode_reponse: ligne.mode_reponse || (ligne.signature_requise === false ? "CONSULTATION" : "SIGNATURE"),
     statut: statutAffiche(ligne),
     bloque_jusqua: ligne.bloque_jusqua && new Date(ligne.bloque_jusqua) > new Date() ? ligne.bloque_jusqua : null,
     expire_le: ligne.expire_le,
@@ -439,7 +467,7 @@ async function signatureDe(partageId) {
 
 function resumeSignature(s) {
   if (!s) return null;
-  return { nom_signataire: s.nom_signataire, qualite_signataire: s.qualite_signataire, date_signature: s.date_signature, ip: s.ip, empreinte_document: s.empreinte_document };
+  return { nom_signataire: s.nom_signataire, qualite_signataire: s.qualite_signataire, date_signature: s.date_signature, ip: s.ip, empreinte_document: s.empreinte_document, mode: s.mode };
 }
 
 async function consulter(ligne, ctx) {
@@ -454,9 +482,34 @@ async function consulter(ligne, ctx) {
     destinataire_nom: ligne.destinataire_nom,
     a_signer: ligne.statut === "ACTIF" && ligne.signature_requise !== false,
     signature_requise: ligne.signature_requise !== false,
+    mode_reponse: ligne.mode_reponse || (ligne.signature_requise === false ? "CONSULTATION" : "SIGNATURE"),
+    resume: resumeDocument(ligne),
     signature: resumeSignature(sig),
     expire_le: ligne.expire_le,
   };
+}
+
+/** Quelques chiffres cles du document, affiches au client avant qu'il ouvre le PDF (montant, date, objet). */
+function resumeDocument(ligne) {
+  const d = (ligne.snapshot_json && ligne.snapshot_json.document) || {};
+  const nombre = (v) => (v === undefined || v === null || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+  const jour = (v) => (v ? String(v).slice(0, 10) : null);
+  switch (ligne.type_document) {
+    case "OFFRE":
+      return { montant: nombre(d.total_ttc_xof), date: jour(d.date_offre), objet: d.formule_nom || null, validite_jours: nombre(d.validite_jours) };
+    case "CONTRAT": {
+      const c = d.contenu_json || {};
+      return { montant: nombre(c.totaux && c.totaux.total_ttc), date: jour(d.date_contrat), objet: d.offre_numero ? `Offre ${d.offre_numero}` : null, date_effet: jour(d.date_effet) };
+    }
+    case "DEVIS":
+      return { montant: nombre(d.total_ttc), date: jour(d.date_devis), objet: d.objet || null, validite: d.validite_offre || null };
+    case "FACTURE":
+      return { montant: nombre(d.montant_net_a_payer) != null && d.type_facturation && d.type_facturation !== "INTEGRALE" ? nombre(d.montant_net_a_payer) : nombre(d.total_ttc), date: jour(d.date_facture), echeance: jour(d.date_echeance) };
+    case "FACTURE_ABO":
+      return { montant: nombre(d.montant_xof), date: jour(d.date_generation), objet: d.periode || null };
+    default:
+      return {};
+  }
 }
 
 // --- PDF (version figee, avec la signature et le certificat une fois signe) ----------------------------------------------------
@@ -473,6 +526,7 @@ const LIBELLES_EVENEMENT = {
   PDF_AFFICHE: "PDF affiché",
   PDF_TELECHARGE: "PDF téléchargé",
   SIGNE: "Document signé électroniquement",
+  ACCEPTE: "Document accepté en ligne (« J'accepte »)",
   RENOUVELE: "Nouveau lien et nouveau code générés",
   REVOQUE: "Partage révoqué",
   COPIE_ENVOYEE: "Copie signée envoyée par e-mail",
@@ -482,17 +536,18 @@ function pageCertificat(doc, ligne, sig, evenements) {
   const H = pdfs.helpers;
   const x0 = doc.page.margins.left;
   const L = H.largeurUtile(doc);
-  H.titre(doc, "CERTIFICAT DE SIGNATURE ÉLECTRONIQUE", `${libelleType(ligne.type_document)} n° ${ligne.numero_document}`);
+  const accepte = sig.mode === "ACCEPTATION";
+  H.titre(doc, accepte ? "ATTESTATION D'ACCEPTATION EN LIGNE" : "CERTIFICAT DE SIGNATURE ÉLECTRONIQUE", `${libelleType(ligne.type_document)} n° ${ligne.numero_document}`);
   const lignes = [
     ["Document", `${libelleType(ligne.type_document)} n° ${ligne.numero_document}`],
-    ["Signataire", `${sig.nom_signataire}${sig.qualite_signataire ? `, ${sig.qualite_signataire}` : ""}`],
-    ["Date et heure de signature", dateHeure(sig.date_signature)],
+    [accepte ? "Accepté par" : "Signataire", `${sig.nom_signataire}${sig.qualite_signataire ? `, ${sig.qualite_signataire}` : ""}`],
+    [accepte ? "Date et heure d'acceptation" : "Date et heure de signature", dateHeure(sig.date_signature)],
     ["Adresse IP du signataire", sig.ip || "non disponible"],
     ["Navigateur", (sig.user_agent || "non disponible").slice(0, 120)],
     ["Accès contrôlé par", `${sig.identifiant_masque || "identifiant et code d'accès"} et code à 6 chiffres`],
-    ["Mode de signature", sig.mode === "IMPORTEE" ? "Image de signature importée" : "Signature dessinée à l'écran"],
+    [accepte ? "Mode de réponse" : "Mode de signature", accepte ? "Acceptation en ligne (bouton « J'accepte »), sans signature manuscrite" : sig.mode === "IMPORTEE" ? "Image de signature importée" : "Signature dessinée à l'écran"],
     ["Empreinte du document (SHA-256)", sig.empreinte_document],
-    ["Empreinte de la signature (SHA-256)", sig.empreinte_signature],
+    [accepte ? "Empreinte de l'acceptation (SHA-256)" : "Empreinte de la signature (SHA-256)", sig.empreinte_signature],
   ];
   for (const [k, v] of lignes) {
     H.asseoir(doc, 22);
@@ -514,7 +569,9 @@ function pageCertificat(doc, ligne, sig, evenements) {
     doc.y = Math.max(doc.y, y1 + 12) + 1;
   }
   doc.moveDown(0.8);
-  H.corps(doc, "Ce certificat atteste de la signature électronique simple du document ci-dessus par la personne désignée, après contrôle de son identifiant (e-mail ou téléphone) et d'un code d'accès à usage limité. Le document signé est celui figé lors de l'envoi : toute modification ultérieure produirait une empreinte différente. Cette signature ne remplace pas une signature électronique qualifiée.", { taille: 8.5, couleur: H.GRIS, align: "justify" });
+  H.corps(doc, accepte
+    ? "Cette attestation établit que la personne désignée a accepté en ligne le document ci-dessus, après contrôle de son identifiant (e-mail ou téléphone) et d'un code d'accès à usage limité. Le document accepté est celui figé lors de l'envoi : toute modification ultérieure produirait une empreinte différente. Il s'agit d'une acceptation électronique simple, sans signature manuscrite ; elle ne remplace pas une signature électronique qualifiée."
+    : "Ce certificat atteste de la signature électronique simple du document ci-dessus par la personne désignée, après contrôle de son identifiant (e-mail ou téléphone) et d'un code d'accès à usage limité. Le document signé est celui figé lors de l'envoi : toute modification ultérieure produirait une empreinte différente. Cette signature ne remplace pas une signature électronique qualifiée.", { taille: 8.5, couleur: H.GRIS, align: "justify" });
 }
 
 async function rendrePdf(ligne) {
@@ -523,13 +580,18 @@ async function rendrePdf(ligne) {
   const opts = { cadre: ligne.signature_requise !== false };
   if (sig) {
     const evenements = (await db.query(`SELECT evenement, ip, date_evenement FROM portail_evenement WHERE partage_id = $1 AND evenement <> 'COPIE_ENVOYEE' ORDER BY date_evenement, id`, [ligne.id])).rows;
+    const accepte = sig.mode === "ACCEPTATION";
+    const quand = dateHeure(sig.date_signature).replace(" (heure de Dakar)", "");
+    const qui = `${sig.nom_signataire}${sig.qualite_signataire ? `, ${sig.qualite_signataire}` : ""}`;
     opts.signature = {
-      image_buf: Buffer.from(sig.image_base64, "base64"),
-      mention: `${ligne.type_document === "FACTURE" ? "Facture reçue, accusé de réception." : "Lu et approuvé, bon pour accord."} Signé électroniquement par ${sig.nom_signataire}${sig.qualite_signataire ? `, ${sig.qualite_signataire}` : ""}, le ${dateHeure(sig.date_signature).replace(" (heure de Dakar)", "")}.`,
+      image_buf: sig.image_base64 ? Buffer.from(sig.image_base64, "base64") : null,
+      tampon: accepte ? { titre: "ACCEPTÉ EN LIGNE", ligne: sig.nom_signataire, date: quand } : null,
+      mention: `${estFacture(ligne.type_document) ? "Facture reçue, accusé de réception." : "Lu et approuvé, bon pour accord."} ${accepte ? "Accepté" : "Signé"} électroniquement par ${qui}, le ${quand}.`,
     };
     opts.apres = (doc) => pageCertificat(doc, ligne, sig, evenements);
   }
   if (ligne.type_document === "FACTURE") return ventesPdf.facturePdf(snap.document, snap.params, opts);
+  if (ligne.type_document === "FACTURE_ABO") return ventesPdf.factureAbonnementPdf(snap.document, snap.params, opts);
   if (ligne.type_document === "DEVIS") return ventesPdf.devisPdf(snap.document, snap.params, opts);
   return ligne.type_document === "OFFRE" ? pdfs.offrePdf(snap.document, snap.params, opts) : pdfs.contratPdf(snap.document, snap.params, opts);
 }
@@ -560,16 +622,17 @@ async function pdfPourEditeur(id, portee) {
 async function notifierSignature(ligne, sig) {
   const params = ligne.snapshot_json.params || {};
   const libelle = `${libelleType(ligne.type_document)} ${ligne.numero_document}`;
+  const accepte = sig.mode === "ACCEPTATION";
   const ou = ligne.origine === "TENANT"
-    ? `Le document signé et son certificat sont disponibles dans la plateforme, rubrique Ventes > Suivi des envois.`
-    : `Le document signé et son certificat sont disponibles dans le Super Admin, rubrique Suivi des documents.`;
+    ? `Le document ${accepte ? "accepté et son attestation sont disponibles" : "signé et son certificat sont disponibles"} dans la plateforme, rubrique Ventes > Suivi des envois.`
+    : `Le document ${accepte ? "accepté et son attestation sont disponibles" : "signé et son certificat sont disponibles"} dans le Super Admin, rubrique Suivi des documents.`;
   const dests = [...new Set([params.email, ligne.cree_par_email].filter(Boolean).map((x) => String(x).toLowerCase()))];
   for (const dest of dests) {
     try {
       await mailer.envoyerEmailSimple({
         destinataire: dest,
-        sujet: `${libelle} signé par ${sig.nom_signataire}`,
-        message: `Bonjour,\n\n${libelle} a été signé électroniquement par ${sig.nom_signataire}${sig.qualite_signataire ? ` (${sig.qualite_signataire})` : ""} le ${dateHeure(sig.date_signature)}, depuis l'adresse IP ${sig.ip || "inconnue"}.\n\n${ou}\n\nBaobab Marchés`,
+        sujet: `${libelle} ${accepte ? "accepté" : "signé"} par ${sig.nom_signataire}`,
+        message: `Bonjour,\n\n${libelle} a été ${accepte ? "accepté en ligne" : "signé électroniquement"} par ${sig.nom_signataire}${sig.qualite_signataire ? ` (${sig.qualite_signataire})` : ""} le ${dateHeure(sig.date_signature)}, depuis l'adresse IP ${sig.ip || "inconnue"}.\n\n${ou}\n\nBaobab Marchés`,
       });
     } catch (e) {
       console.error(e);
@@ -581,8 +644,8 @@ async function notifierSignature(ligne, sig) {
       const buf = await rendrePdf(fraiche);
       await mailer.envoyerEmailAvecPieceJointe({
         destinataire: ligne.destinataire_email,
-        sujet: `${libelle} - copie signée`,
-        message: `Bonjour ${sig.nom_signataire},\n\nNous vous confirmons la signature de ${DOCS[ligne.type_document].art} ${ligne.numero_document} le ${dateHeure(sig.date_signature)}. Vous trouverez ci-joint votre copie signée, avec son certificat de signature.\n\nCordialement,\n${params.raison_sociale || "Baobab Marchés"}`,
+        sujet: `${libelle} - ${accepte ? "copie acceptée" : "copie signée"}`,
+        message: `Bonjour ${sig.nom_signataire},\n\nNous vous confirmons ${accepte ? "votre acceptation de" : "la signature de"} ${DOCS[ligne.type_document].art} ${ligne.numero_document} le ${dateHeure(sig.date_signature)}. Vous trouverez ci-joint votre copie ${accepte ? "acceptée, avec son attestation d'acceptation" : "signée, avec son certificat de signature"}.\n\nCordialement,\n${params.raison_sociale || "Baobab Marchés"}`,
         pieces: [{ nom: nomPdf(ligne, true), contenu: buf, type: "application/pdf" }],
         repondreA: params.email || null,
         copie: params.email || null,
@@ -596,15 +659,16 @@ async function notifierSignature(ligne, sig) {
 
 async function signer(ligne, corps, identifiantMasque, ctx) {
   if (ligne.statut === "SIGNE") throw new PortailError("PORTAIL_DEJA_SIGNE", 409);
-  if (ligne.signature_requise === false) throw new PortailError("PORTAIL_SIGNATURE_NON_DEMANDEE", 409);
+  if (ligne.signature_requise === false || ligne.mode_reponse === "CONSULTATION") throw new PortailError("PORTAIL_SIGNATURE_NON_DEMANDEE", 409);
+  const acceptation = ligne.mode_reponse === "ACCEPTATION";
   const nom = String((corps && corps.nom) || "").trim();
   const qualite = String((corps && corps.qualite) || "").trim();
   if (nom.length < 3 || nom.length > 120) throw new PortailError("PORTAIL_NOM_REQUIS", 400);
   if (qualite.length > 120) throw new PortailError("PORTAIL_NOM_REQUIS", 400);
   if (!corps || corps.lu_approuve !== true) throw new PortailError("PORTAIL_ACCEPTATION_REQUISE", 400);
-  const img = imageValide(corps.signature, 400 * 1024);
-  if (!img) throw new PortailError("PORTAIL_SIGNATURE_INVALIDE", 400);
-  const mode = corps.mode === "IMPORTEE" ? "IMPORTEE" : "DESSINEE";
+  const img = acceptation ? null : imageValide(corps.signature, 400 * 1024);
+  if (!acceptation && !img) throw new PortailError("PORTAIL_SIGNATURE_INVALIDE", 400);
+  const mode = acceptation ? "ACCEPTATION" : corps.mode === "IMPORTEE" ? "IMPORTEE" : "DESSINEE";
   if (sha(jsonStable(ligne.snapshot_json)) !== ligne.empreinte_document) throw new PortailError("PORTAIL_DOCUMENT_ALTERE", 409);
 
   const client = await db.pool.connect();
@@ -616,7 +680,7 @@ async function signer(ligne, corps, identifiantMasque, ctx) {
     const ins = await client.query(
       `INSERT INTO portail_signature (id, partage_id, nom_signataire, qualite_signataire, mode, image_base64, image_mime, identifiant_masque, ip, user_agent, empreinte_document, empreinte_signature)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-      [uuidv4(), ligne.id, nom, qualite || null, mode, img.base64, img.mime, identifiantMasque || null, ctx.ip || null, ctx.ua ? String(ctx.ua).slice(0, 300) : null, ligne.empreinte_document, sha(img.base64)]
+      [uuidv4(), ligne.id, nom, qualite || null, mode, img ? img.base64 : null, img ? img.mime : "image/png", identifiantMasque || null, ctx.ip || null, ctx.ua ? String(ctx.ua).slice(0, 300) : null, ligne.empreinte_document, img ? sha(img.base64) : sha(jsonStable({ nom, qualite, ip: ctx.ip || null, empreinte_document: ligne.empreinte_document, ua: ctx.ua || null }) + new Date().toISOString())]
     );
     signature = ins.rows[0];
     await client.query(`UPDATE portail_partage SET statut = 'SIGNE', date_signature = $2 WHERE id = $1`, [ligne.id, signature.date_signature]);
@@ -627,13 +691,13 @@ async function signer(ligne, corps, identifiantMasque, ctx) {
   } finally {
     client.release();
   }
-  await journaliser(ligne.id, "SIGNE", { ...ctx, details: { nom, qualite: qualite || null } });
+  await journaliser(ligne.id, acceptation ? "ACCEPTE" : "SIGNE", { ...ctx, details: { nom, qualite: qualite || null } });
 
   // Effet sur le document lui-meme.
   const jour = new Date().toISOString().slice(0, 10);
   try {
     if (ligne.type_document === "OFFRE") {
-      await oc.accepterOffre(ligne.document_id, { date_acceptation: jour, note: `Acceptée par signature électronique de ${nom} (portail, IP ${ctx.ip || "inconnue"})` });
+      await oc.accepterOffre(ligne.document_id, { date_acceptation: jour, note: `Acceptée ${acceptation ? "en ligne" : "par signature électronique"} par ${nom} (portail, IP ${ctx.ip || "inconnue"})` });
     } else if (ligne.type_document === "CONTRAT") {
       await db.query(
         `UPDATE contrat_client SET statut = 'SIGNE', date_signature_client = $2, date_modification = now() WHERE id = $1 AND statut IN ('PREPARE', 'ENVOYE')`,

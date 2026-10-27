@@ -9,6 +9,7 @@ const svc = require("../services/offresContrats");
 const pdf = require("../services/offresContratsPdf");
 const { envoyerEmailAvecPieceJointe } = require("../utils/mailer");
 const portail = require("../services/portail");
+const pv = require("../services/portailVentes");
 const { ipDe } = require("../services/rhSignature");
 
 const router = express.Router();
@@ -191,6 +192,9 @@ async function creerPartage(type, req, res) {
     jours: b.jours,
     envoyerEmail: b.envoyer_email !== false,
     message: b.message,
+    signatureRequise: b.signature_requise,
+    modeReponse: b.mode_reponse,
+    forcer: b.forcer === true,
     ip: ipDe(req),
   });
   res.status(201).json(r);
@@ -198,6 +202,13 @@ async function creerPartage(type, req, res) {
 
 router.post("/offres/:id/partage", gerer((req, res) => creerPartage("OFFRE", req, res)));
 router.post("/contrats/:id/partage", gerer((req, res) => creerPartage("CONTRAT", req, res)));
+router.post("/factures/:id/partage", gerer((req, res) => creerPartage("FACTURE_ABO", req, res)));
+
+// Contact a pre-remplir dans la carte d'envoi d'une facture d'abonnement.
+router.get("/factures/:id/partage-preparation", gerer(async (req, res) => {
+  const f = await pv.chargerFactureAbonnement(req.params.id);
+  res.json({ numero: f.numero, statut: f.statut, contact: await pv.contactEntrepriseCliente(f.tenant_id) });
+}));
 
 router.get("/partages", gerer(async (req, res) => {
   res.json(await portail.lister({ type: req.query.type || null, documentId: req.query.document || null, tenantId: req.query.client || null, statut: req.query.statut || null }));

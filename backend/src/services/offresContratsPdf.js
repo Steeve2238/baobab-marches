@@ -146,6 +146,12 @@ function blocEditeur(doc, params, x, y, w, { mention } = {}) {
 function signatureClient(doc, sig, x, y, w, h) {
   if (!sig) return;
   if (sig.image_buf) placerImage(doc, sig.image_buf, x + 6, y + 4, [w - 12, h - 8]);
+  else if (sig.tampon) {
+    // Acceptation en ligne : pas de dessin, un tampon textuel dans le cadre.
+    doc.font("Helvetica-Bold").fontSize(12).fillColor(PETROLE).text(sig.tampon.titre, x + 6, y + h / 2 - 22, { width: w - 12, align: "center", lineBreak: false });
+    doc.font("Helvetica").fontSize(9).fillColor("#000").text(sig.tampon.ligne || "", x + 6, y + h / 2 - 4, { width: w - 12, align: "center", lineBreak: false });
+    doc.font("Helvetica").fontSize(8).fillColor(GRIS).text(sig.tampon.date || "", x + 6, y + h / 2 + 10, { width: w - 12, align: "center", lineBreak: false });
+  }
   if (sig.mention) {
     doc.font("Helvetica-Oblique").fontSize(7.5).fillColor(GRIS).text(sig.mention, x, y + h + 3, { width: w, lineBreak: true });
   }

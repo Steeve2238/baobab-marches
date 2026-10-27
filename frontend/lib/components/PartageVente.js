@@ -35,8 +35,6 @@ export default function PartageVente({ type, document, peutCreer, onChange }) {
         peutCreer={peutCreer}
         onChange={onChange}
         passerelle={PASSERELLE_ENTREPRISE}
-        optionSignature
-        signatureDefaut={!!prep.signature_par_defaut}
       />
     </div>
   );

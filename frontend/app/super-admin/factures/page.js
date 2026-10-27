@@ -6,6 +6,7 @@ import Link from "next/link";
 import { superAdminApi } from "../../../lib/superAdminApi";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import SuperAdminShell from "../../../lib/components/SuperAdminShell";
+import { pastilleEtat, cleStatut } from "../../../lib/components/PartageDocument";
 
 const STATUT_FACTURE_STYLE = {
   IMPAYEE: { color: "var(--brique)", background: "rgba(196,74,58,0.1)" },
@@ -28,6 +29,19 @@ export default function SuperAdminFacturesPage() {
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
   const [modePaiementFacture, setModePaiementFacture] = useState({});
+  const [envois, setEnvois] = useState({});
+
+  // Dernier envoi par lien de chaque facture (le plus recent d'abord), pour voir d'un coup d'oeil qui l'a recue, ouverte ou consultee.
+  useEffect(() => {
+    superAdminApi
+      .getPartages("?type=FACTURE_ABO")
+      .then((l) => {
+        const par = {};
+        for (const p of l) if (!par[p.document_id]) par[p.document_id] = p;
+        setEnvois(par);
+      })
+      .catch(() => {});
+  }, []);
 
   function charger(statutFiltre) {
     setChargement(true);
@@ -124,8 +138,28 @@ export default function SuperAdminFacturesPage() {
                     <Link href={`/super-admin/factures/${facture.id}`} style={boutonSecondaireStyle}>
                       {t("saViewButton")}
                     </Link>
+                    {facture.statut !== "ANNULEE" && (
+                      <Link href={`/super-admin/factures/${facture.id}#envoi`} style={{ ...boutonSecondaireStyle, background: "var(--petrol)", color: "#fff" }}>
+                        {t("prtEnvoyerSuivre")}
+                      </Link>
+                    )}
                   </div>
                 </div>
+                {facture.statut !== "ANNULEE" && (
+                  <div style={{ marginTop: 8, fontSize: 11.5, color: "var(--sub)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    {envois[facture.id] ? (
+                      <>
+                        <span style={pastilleEtat(envois[facture.id].statut)}>{t(cleStatut(envois[facture.id]))}</span>
+                        <span>
+                          {envois[facture.id].destinataire_email || envois[facture.id].destinataire_tel}
+                          {envois[facture.id].date_telechargement ? ` · ${t("prtEtapeTelecharge")}` : envois[facture.id].date_consultation ? ` · ${t("prtEtapeConsulte")}` : envois[facture.id].premiere_ouverture ? ` · ${t("prtEtapeOuvert")}` : ""}
+                        </span>
+                      </>
+                    ) : (
+                      <span>{t("prtNonEnvoyee")}</span>
+                    )}
+                  </div>
+                )}
                 {facture.statut === "IMPAYEE" && (
                   <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
                     <input
@@ -134,7 +168,7 @@ export default function SuperAdminFacturesPage() {
                       onChange={(e) =>
                         setModePaiementFacture((prev) => ({ ...prev, [facture.id]: e.target.value }))
                       }
-                      style={{ ...inputStyle, width: 180 }}
+                      style={{ ...inputStyle, width: 260 }}
                     />
                     <button onClick={() => handleMarquerPayee(facture.id)} style={boutonSecondaireStyle}>
                       {t("saMarkPaidButton")}

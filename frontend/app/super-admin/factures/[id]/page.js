@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { superAdminApi } from "../../../../lib/superAdminApi";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
 import SuperAdminShell from "../../../../lib/components/SuperAdminShell";
+import PartageFactureAbo from "../../../../lib/components/PartageFactureAbo";
 
 const STATUT_STYLE = {
   IMPAYEE: { color: "var(--brique)", background: "rgba(196,74,58,0.1)" },
@@ -166,7 +167,9 @@ export default function SuperAdminFactureDetailPage() {
         </div>
       </div>
 
-      <div className="card print-letter" style={{ padding: "28px 32px" }}>
+      <PartageFactureAbo facture={facture} />
+
+      <div className="card print-letter" style={{ padding: "28px 32px", marginTop: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 24, borderBottom: "2px solid var(--petrol)", paddingBottom: 16, marginBottom: 20 }}>
           <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
             {entete?.logo_base64 && (

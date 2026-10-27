@@ -6,7 +6,7 @@ import Link from "next/link";
 import { superAdminApi } from "../../../lib/superAdminApi";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
 import SuperAdminShell from "../../../lib/components/SuperAdminShell";
-import { EtapesPartage, JournalPartage, pastilleEtat } from "../../../lib/components/PartageDocument";
+import { EtapesPartage, JournalPartage, pastilleEtat, cleTypeDocument, cleStatut } from "../../../lib/components/PartageDocument";
 import { boutonSecondaireStyle, thStyle, tdStyle } from "../../../lib/comptaUi";
 
 const FILTRES = ["TOUS", "ACTIF", "SIGNE", "EXPIRE", "REVOQUE", "BLOQUE"];
@@ -49,15 +49,19 @@ export default function SuperAdminSuiviPage() {
     }
   }
 
-  const lienDocument = (p) => (p.offre_id ? `/super-admin/offres/${p.offre_id}` : null);
+  const lienDocument = (p) => (p.type_document === "FACTURE_ABO" ? `/super-admin/factures/${p.document_id}#envoi` : p.offre_id ? `/super-admin/offres/${p.offre_id}` : null);
 
   return (
     <SuperAdminShell title={t("prtSuiviTitre")}>
-      <p style={{ fontSize: 12.5, color: "var(--sub)", maxWidth: 700, marginBottom: 14 }}>{t("prtSuiviAide")}</p>
+      <p style={{ fontSize: 12.5, color: "var(--sub)", maxWidth: 700, marginBottom: 6 }}>{t("prtSuiviAide")}</p>
+      <p style={{ fontSize: 12.5, color: "var(--sub)", maxWidth: 700, marginBottom: 14 }}>
+        {t("prtSuiviOuEnvoyer")}{" "}
+        <Link href="/super-admin/offres" style={{ color: "var(--petrol)", fontWeight: 600 }}>{t("saNavOffres")}</Link> · <Link href="/super-admin/factures" style={{ color: "var(--petrol)", fontWeight: 600 }}>{t("saNavFactures")}</Link>
+      </p>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         {FILTRES.map((f) => (
           <button key={f} onClick={() => setFiltre(f)} style={{ border: "1px solid var(--line)", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: 600, background: filtre === f ? "var(--petrol)" : "transparent", color: filtre === f ? "#fff" : "var(--petrol)" }}>
-            {f === "TOUS" ? t("prtFiltreTous") : t(`prtStatut_${f}`)}
+            {f === "TOUS" ? t("prtFiltreTous") : f === "SIGNE" ? t("prtFiltreSigneAccepte") : t(`prtStatut_${f}`)}
           </button>
         ))}
       </div>
@@ -85,11 +89,11 @@ export default function SuperAdminSuiviPage() {
                   <tr>
                     <td style={tdStyle}>
                       <strong>{p.numero_document}</strong>
-                      <div style={{ fontSize: 11, color: "var(--sub)" }}>{p.type_document === "OFFRE" ? t("prtTypeOffre") : t("prtTypeContrat")}</div>
+                      <div style={{ fontSize: 11, color: "var(--sub)" }}>{t(cleTypeDocument(p.type_document))}</div>
                     </td>
                     <td style={tdStyle}>{p.client_raison_sociale}</td>
                     <td style={tdStyle}>{p.destinataire_nom || ""}<div style={{ fontSize: 11, color: "var(--sub)" }}>{p.destinataire_email || p.destinataire_tel}</div></td>
-                    <td style={tdStyle}><span style={pastilleEtat(p.statut)}>{t(`prtStatut_${p.statut}`)}</span></td>
+                    <td style={tdStyle}><span style={pastilleEtat(p.statut)}>{t(cleStatut(p))}</span></td>
                     <td style={{ ...tdStyle, minWidth: 320 }}><EtapesPartage p={p} t={t} langue={langue} /></td>
                     <td style={tdStyle}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>

@@ -70,4 +70,36 @@ async function utilisateurEmail(userId) {
   return (r.rows[0] && r.rows[0].email) || null;
 }
 
-module.exports = { VenteDocError, chargerDocumentVente, verifierPartageable, marquerDevisEnvoye, utilisateurEmail, enteteTenant };
+/**
+ * Facture d'abonnement, d'installation ou de licence emise par l'editeur (Super Admin) a une entreprise cliente.
+ * Meme contenu que l'ecran d'impression ; numero = periode (c'est l'identifiant affiche a l'ecran).
+ */
+async function chargerFactureAbonnement(id) {
+  const r = await db.query(
+    `SELECT f.id, f.tenant_id, f.formule_nom, f.periode, f.montant_xof, f.plafond_utilisateurs_facture, f.supplement_comptabilite_xof,
+            f.supplement_fiscalite_xof, f.supplement_paie_xof, f.type_facture, f.statut, f.date_generation, f.date_paiement, f.mode_paiement,
+            te.raison_sociale AS client_nom, te.adresse AS client_adresse
+     FROM facture_abonnement f JOIN tenant te ON te.id = f.tenant_id WHERE f.id = $1`,
+    [id]
+  );
+  if (!r.rows[0]) throw new VenteDocError("PORTAIL_DOCUMENT_INTROUVABLE", 404);
+  const f = r.rows[0];
+  return { ...f, numero: f.periode, date_generation: f.date_generation && new Date(f.date_generation).toISOString() };
+}
+
+/** Contact a pre-remplir : coordonnees de l'entreprise, a defaut l'e-mail du destinataire de sa derniere offre. */
+async function contactEntrepriseCliente(tenantId) {
+  const t = (await db.query(`SELECT raison_sociale, email, telephone FROM tenant WHERE id = $1`, [tenantId])).rows[0] || {};
+  let email = t.email || null;
+  let nom = null;
+  if (!email) {
+    const o = (await db.query(`SELECT destinataire_email, representant_nom FROM offre_commerciale WHERE tenant_id = $1 AND destinataire_email IS NOT NULL ORDER BY date_creation DESC LIMIT 1`, [tenantId])).rows[0];
+    if (o) {
+      email = o.destinataire_email;
+      nom = o.representant_nom || null;
+    }
+  }
+  return { email: email || "", telephone: t.telephone || "", nom: nom || "" };
+}
+
+module.exports = { VenteDocError, chargerDocumentVente, verifierPartageable, marquerDevisEnvoye, utilisateurEmail, enteteTenant, chargerFactureAbonnement, contactEntrepriseCliente };

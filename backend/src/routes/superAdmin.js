@@ -10,6 +10,8 @@ const { t } = require("../utils/i18n");
 const { genererMotDePasseTemporaire } = require("../utils/motDePasseTemporaire");
 const { envoyerEmailReinitialisation } = require("../utils/mailer");
 const licenceSvc = require("../services/licence");
+const portail = require("../services/portail");
+const { ipDe } = require("../services/rhSignature");
 
 const router = express.Router();
 
@@ -1252,6 +1254,8 @@ router.patch("/factures/:id/annuler", async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: t(req, "SUPER_ADMIN_FACTURE_NOT_FOUND") });
     }
+    // Une facture annulee ne doit plus etre consultable par le client : les liens actifs sont desactives.
+    await portail.revoquerActifsDocument("FACTURE_ABO", req.params.id, ipDe(req));
     const factureResult = await db.query(`${SELECT_FACTURE} WHERE f.id = $1`, [req.params.id]);
     res.json(factureResult.rows[0]);
   } catch (err) {

@@ -27,7 +27,7 @@ export function numeroWhatsApp(tel) {
 /** Passerelles vers l'API : Super Admin (offres, contrats) ou entreprise (factures, devis). */
 const PASSERELLE_EDITEUR = {
   lister: (type, id) => superAdminApi.getPartages(`?type=${type}&document=${id}`),
-  creer: (type, id, f) => (type === "OFFRE" ? superAdminApi.creerPartageOffre(id, f) : superAdminApi.creerPartageContrat(id, f)),
+  creer: (type, id, f) => (type === "OFFRE" ? superAdminApi.creerPartageOffre(id, f) : type === "FACTURE_ABO" ? superAdminApi.creerPartageFacture(id, f) : superAdminApi.creerPartageContrat(id, f)),
   renouveler: (id, d) => superAdminApi.renouvelerPartage(id, d),
   revoquer: (id) => superAdminApi.revoquerPartage(id),
   detail: (id) => superAdminApi.getPartage(id),
@@ -41,7 +41,17 @@ export const PASSERELLE_ENTREPRISE = {
   detail: (id) => apiEntreprise.getPartageVente(id),
   telecharger: (id) => apiEntreprise.telechargerPartageVente(id),
 };
-const TYPE_CLE = { OFFRE: "prtTypeOffre", CONTRAT: "prtTypeContrat", FACTURE: "prtTypeFacture", DEVIS: "prtTypeDevis" };
+/** Reponses possibles du client selon le document (le premier mode est celui par defaut). */
+export const MODES_PAR_TYPE = {
+  OFFRE: ["ACCEPTATION", "SIGNATURE"],
+  CONTRAT: ["SIGNATURE"],
+  DEVIS: ["ACCEPTATION", "SIGNATURE", "CONSULTATION"],
+  FACTURE: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"],
+  FACTURE_ABO: ["CONSULTATION", "ACCEPTATION", "SIGNATURE"],
+};
+/** Cle de traduction de l'etat d'un envoi : « Accepte » quand la reponse etait une acceptation. */
+export const cleStatut = (p) => (p.statut === "SIGNE" && p.mode_reponse === "ACCEPTATION" ? "prtStatut_ACCEPTE" : `prtStatut_${p.statut}`);
+const TYPE_CLE = { OFFRE: "prtTypeOffre", CONTRAT: "prtTypeContrat", FACTURE: "prtTypeFacture", DEVIS: "prtTypeDevis", FACTURE_ABO: "prtTypeFacture" };
 export const cleTypeDocument = (type) => TYPE_CLE[type] || "prtTypeContrat";
 
 /** Les cinq etapes suivies, avec la date quand elles sont atteintes. */
@@ -52,7 +62,7 @@ export function EtapesPartage({ p, t, langue }) {
     ["prtEtapeOuvert", p.premiere_ouverture],
     ["prtEtapeConsulte", p.date_consultation],
     ["prtEtapeTelecharge", p.date_telechargement],
-    ...(p.signature_requise !== false ? [["prtEtapeSigne", p.date_signature]] : []),
+    ...(p.signature_requise !== false ? [[p.mode_reponse === "ACCEPTATION" ? "prtEtapeAccepte" : "prtEtapeSigne", p.date_signature]] : []),
   ];
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -90,15 +100,16 @@ export function JournalPartage({ evenements, t, langue }) {
  * @param type "OFFRE" | "CONTRAT" | "FACTURE" | "DEVIS"  @param peutCreer le document est encore dans un etat ou l'on peut l'envoyer
  * @param passerelle PASSERELLE_ENTREPRISE pour une facture/un devis ; par defaut Super Admin (offres, contrats)
  * @param contact { email, telephone, nom } du client, pour pre-remplir l'envoi
- * @param optionSignature affiche « Demander la signature du client » (factures, devis) ; signatureDefaut = valeur initiale
  */
-export default function PartageDocument({ type, documentId, numero, emailParDefaut, contact, peutCreer, onChange, passerelle = PASSERELLE_EDITEUR, optionSignature = false, signatureDefaut = false }) {
-  const vente = passerelle !== PASSERELLE_EDITEUR;
+export default function PartageDocument({ type, documentId, numero, emailParDefaut, contact, peutCreer, onChange, passerelle = PASSERELLE_EDITEUR }) {
+  // Presentation « envoi au client » (signature facultative) : factures et devis des entreprises, et factures d'abonnement de l'editeur.
+  const vente = passerelle !== PASSERELLE_EDITEUR || type === "FACTURE_ABO";
   const { t, langue } = useLangue();
   const [liste, setListe] = useState([]);
   const [detail, setDetail] = useState(null);
   const [formOuvert, setFormOuvert] = useState(false);
-  const [form, setForm] = useState({ email: (contact && contact.email) || emailParDefaut || "", telephone: (contact && contact.telephone) || "", nom: (contact && contact.nom) || "", jours: 30, envoyer_email: true, message: "", signature_requise: signatureDefaut });
+  const [form, setForm] = useState({ email: (contact && contact.email) || emailParDefaut || "", telephone: (contact && contact.telephone) || "", nom: (contact && contact.nom) || "", jours: 30, envoyer_email: true, message: "", mode_reponse: (MODES_PAR_TYPE[type] || ["SIGNATURE"])[0] });
+  const [manque, setManque] = useState(null);
   const [renvoyerMail, setRenvoyerMail] = useState(false);
   const [resultat, setResultat] = useState(null);
   const [copie, setCopie] = useState("");
@@ -141,11 +152,22 @@ export default function PartageDocument({ type, documentId, numero, emailParDefa
     }
   }
 
-  async function creer() {
-    const r = await agir(() => passerelle.creer(type, documentId, form));
-    if (r) {
+  async function creer(forcer = false) {
+    setManque(null);
+    setErreur("");
+    setOccupe(true);
+    try {
+      const r = await passerelle.creer(type, documentId, { ...form, forcer });
+      await charger();
+      if (onChange) onChange();
       setResultat({ ...r, tel: form.telephone, email: form.email });
       setFormOuvert(false);
+    } catch (e) {
+      // Contrat dont les mentions sont incompletes : on liste ce qui manque et on laisse l'emetteur decider.
+      if (e.code === "PORTAIL_CONTRAT_INCOMPLET") setManque((e.details && e.details.manque) || []);
+      else setErreur(e.message);
+    } finally {
+      setOccupe(false);
     }
   }
 
@@ -224,7 +246,7 @@ export default function PartageDocument({ type, documentId, numero, emailParDefa
       {courant && (
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 8 }}>
-            <span style={pastilleEtat(courant.statut)}>{t(`prtStatut_${courant.statut}`)}</span>
+            <span style={pastilleEtat(courant.statut)}>{t(cleStatut(courant))}</span>
             <span style={{ fontSize: 12, color: "var(--sub)" }}>
               {courant.destinataire_email || courant.destinataire_tel}
               {courant.destinataire_nom ? ` · ${courant.destinataire_nom}` : ""} · {t("prtCreeLe")} {fmtDateHeure(courant.date_creation, langue)}
@@ -234,14 +256,14 @@ export default function PartageDocument({ type, documentId, numero, emailParDefa
           <EtapesPartage p={courant} t={t} langue={langue} />
           {courant.statut === "SIGNE" && (
             <p style={{ fontSize: 12.5, color: "#2E7D5B", marginTop: 8 }}>
-              {t("prtSigneLe").replace("{date}", fmtDateHeure(courant.date_signature, langue)).replace("{nom}", courant.signataire || "")}
+              {t(courant.mode_reponse === "ACCEPTATION" ? "prtAccepteLe" : "prtSigneLe").replace("{date}", fmtDateHeure(courant.date_signature, langue)).replace("{nom}", courant.signataire || "")}
             </p>
           )}
           {courant.statut === "SIGNE" && type === "DEVIS" && <p style={{ fontSize: 12, color: "var(--sub)", marginTop: 4 }}>{t("prtDevisSigneAide")}</p>}
           {courant.signature_requise === false && <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 6 }}>{t("prtSansSignature")}</p>}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12, alignItems: "center" }}>
             <button style={boutonSecondaireStyle} disabled={occupe} onClick={() => agir(() => passerelle.telecharger(courant.id))}>
-              {courant.statut === "SIGNE" ? t("prtTelechargerSigne") : t("prtTelechargerEnvoye")}
+              {courant.statut === "SIGNE" ? t(courant.mode_reponse === "ACCEPTATION" ? "prtTelechargerAccepte" : "prtTelechargerSigne") : t("prtTelechargerEnvoye")}
             </button>
             {courant.statut !== "SIGNE" && courant.statut !== "REVOQUE" && (
               <>
@@ -292,13 +314,18 @@ export default function PartageDocument({ type, documentId, numero, emailParDefa
             </div>
           </div>
           <p style={{ fontSize: 11.5, color: "var(--sub)", margin: "6px 0 10px" }}>{t("prtDestinataireAide")}</p>
-          {optionSignature && (
-            <div style={{ marginBottom: 10 }}>
-              <label htmlFor={`prt-${type}-signature`} style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center" }}>
-                <input id={`prt-${type}-signature`} type="checkbox" checked={!!form.signature_requise} onChange={(e) => setForm({ ...form, signature_requise: e.target.checked })} /> {t("prtSignatureDemander")}
-              </label>
-              <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 3 }}>{t(type === "FACTURE" ? "prtSignatureAideFacture" : "prtSignatureAideDevis")}</p>
+          {(MODES_PAR_TYPE[type] || []).length > 1 ? (
+            <div style={{ marginBottom: 10, maxWidth: 520 }}>
+              <label htmlFor={`prt-${type}-mode`} style={labelStyle}>{t("prtModeTitre")}</label>
+              <select id={`prt-${type}-mode`} style={inputStyle} value={form.mode_reponse} onChange={(e) => setForm({ ...form, mode_reponse: e.target.value })}>
+                {MODES_PAR_TYPE[type].map((m) => (
+                  <option key={m} value={m}>{t(`prtMode_${m}`)}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 3 }}>{t(`prtModeAide_${form.mode_reponse}`)}</p>
             </div>
+          ) : (
+            <p style={{ fontSize: 11.5, color: "var(--sub)", marginBottom: 10 }}>{t(`prtModeAide_${form.mode_reponse}`)}</p>
           )}
           <label style={{ fontSize: 12.5, display: "flex", gap: 6, alignItems: "center", marginBottom: 8 }}>
             <input type="checkbox" checked={form.envoyer_email} disabled={!form.email} onChange={(e) => setForm({ ...form, envoyer_email: e.target.checked })} /> {t("prtEnvoyerEmail")}
@@ -310,8 +337,20 @@ export default function PartageDocument({ type, documentId, numero, emailParDefa
               <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 3 }}>{t("prtMessageAide")}</p>
             </div>
           )}
+          {manque && (
+            <div role="alert" style={{ border: "1px solid var(--brique)", borderRadius: 8, padding: "10px 12px", marginBottom: 10, background: "rgba(196,74,58,0.06)" }}>
+              <strong style={{ fontSize: 12.5, color: "var(--brique)" }}>{t("prtContratIncomplet")}</strong>
+              <ul style={{ margin: "6px 0 8px 18px", fontSize: 12.5 }}>
+                {manque.map((m) => (
+                  <li key={m}>{t(`saCtrWarn_${m}`)}</li>
+                ))}
+              </ul>
+              <p style={{ fontSize: 12, color: "var(--sub)", marginBottom: 8 }}>{t("prtCorriger")}</p>
+              <button style={boutonDangerStyle} disabled={occupe} onClick={() => creer(true)}>{t("prtEnvoyerQuandMeme")}</button>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
-            <button style={boutonPrincipalStyle} disabled={occupe || (!form.email && !form.telephone)} onClick={creer}>{t("prtGenerer")}</button>
+            <button style={boutonPrincipalStyle} disabled={occupe || (!form.email && !form.telephone)} onClick={() => creer(false)}>{t("prtGenerer")}</button>
             <button style={boutonSecondaireStyle} onClick={() => setFormOuvert(false)}>{t("prtAnnuler")}</button>
           </div>
         </div>

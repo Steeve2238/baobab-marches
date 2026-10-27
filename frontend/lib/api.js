@@ -111,6 +111,8 @@ async function request(path, options = {}) {
   if (!res.ok) {
     const erreur = new Error(data.error || `Erreur ${res.status}`);
     erreur.status = res.status;
+    erreur.code = data.code;
+    erreur.details = data.details;
     erreur.data = data;
     throw erreur;
   }

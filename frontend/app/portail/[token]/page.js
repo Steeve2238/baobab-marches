@@ -49,7 +49,7 @@ export default function PortailPage() {
   const [signature, setSignature] = useState(null);
   const urlRef = useRef("");
 
-  const libelleType = (type) => ({ OFFRE: t("prtpOffre"), CONTRAT: t("prtpContrat"), FACTURE: t("prtpFacture"), DEVIS: t("prtpDevis") }[type] || t("prtpContrat"));
+  const libelleType = (type) => ({ OFFRE: t("prtpOffre"), CONTRAT: t("prtpContrat"), FACTURE: t("prtpFacture"), FACTURE_ABO: t("prtpFacture"), DEVIS: t("prtpDevis") }[type] || t("prtpContrat"));
 
   const chargerPdf = useCallback(async (sess) => {
     try {
@@ -142,7 +142,7 @@ export default function PortailPage() {
     setErreur("");
     setOccupe(true);
     try {
-      await portailApi.signer(token, session, { nom, qualite, lu_approuve: lu, signature: signature && signature.image, mode: signature && signature.mode });
+      await portailApi.signer(token, session, doc.mode_reponse === "ACCEPTATION" ? { nom, qualite, lu_approuve: lu } : { nom, qualite, lu_approuve: lu, signature: signature && signature.image, mode: signature && signature.mode });
       setInfo((i) => ({ ...i, statut: "SIGNE" }));
       await chargerDocument(session);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -180,7 +180,7 @@ export default function PortailPage() {
 
       {info && (
         <div style={{ ...carte, paddingBottom: 18 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--sub)" }}>{t(info.signature_requise === false ? "prtpTitreSimple" : "prtpTitre")}</div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--sub)" }}>{t(info.signature_requise === false ? "prtpTitreSimple" : info.mode_reponse === "ACCEPTATION" ? "prtpTitreAccepter" : "prtpTitre")}</div>
           <h1 style={{ fontSize: 22, color: "var(--petrol)", margin: "4px 0" }}>{libelleType(info.type_document)} {info.numero_document}</h1>
           <p style={{ fontSize: 13, color: "var(--sub)" }}>{t("prtpDe").replace("{emetteur}", info.emetteur)}</p>
         </div>
@@ -189,6 +189,18 @@ export default function PortailPage() {
       {bloqueEtat && (
         <div style={carte}>
           <p style={{ color: "var(--brique)", fontSize: 14 }}>{t(`prtpEtat_${info.statut}`)}</p>
+        </div>
+      )}
+
+      {info && !bloqueEtat && !doc && (
+        <div style={carte}>
+          <h2 style={{ fontSize: 16, color: "var(--petrol)", marginBottom: 10 }}>{t("prtpAccueilTitre")}</h2>
+          <ol style={{ margin: "0 0 10px 20px", padding: 0, fontSize: 13.5, display: "grid", gap: 6 }}>
+            <li>{t("prtpEtape1")}</li>
+            <li>{t("prtpEtape2")}</li>
+            <li>{t(`prtpEtape3_${info.mode_reponse || (info.signature_requise === false ? "CONSULTATION" : "SIGNATURE")}`)}</li>
+          </ol>
+          <p style={{ fontSize: 12, color: "var(--sub)", maxWidth: 640 }}>{t("prtpTracabilite")}</p>
         </div>
       )}
 
@@ -215,10 +227,34 @@ export default function PortailPage() {
         <>
           {doc.signature && (
             <div style={{ ...carte, borderColor: "#2E7D5B", background: "rgba(46,125,91,0.06)" }}>
-              <h2 style={{ fontSize: 16, color: "#2E7D5B", marginBottom: 6 }}>✓ {t("prtpSigneTitre")}</h2>
-              <p style={{ fontSize: 13.5 }}>{t("prtpSigneLe").replace("{date}", fmtDateHeure(doc.signature.date_signature, langue)).replace("{nom}", doc.signature.nom_signataire)}</p>
-              <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>{t("prtpCopieEmail")}</p>
-              <button style={{ ...boutonPrincipalStyle, marginTop: 12 }} onClick={telecharger}>{t("prtpTelechargerSigne")}</button>
+              <h2 style={{ fontSize: 16, color: "#2E7D5B", marginBottom: 6 }}>✓ {t(doc.signature.mode === "ACCEPTATION" ? "prtpAccepteTitre" : "prtpSigneTitre")}</h2>
+              <p style={{ fontSize: 13.5 }}>{t(doc.signature.mode === "ACCEPTATION" ? "prtpAccepteLe" : "prtpSigneLe").replace("{date}", fmtDateHeure(doc.signature.date_signature, langue)).replace("{nom}", doc.signature.nom_signataire)}</p>
+              <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>{t(doc.signature.mode === "ACCEPTATION" ? "prtpCopieAcceptee" : "prtpCopieEmail")}</p>
+              <button style={{ ...boutonPrincipalStyle, marginTop: 12 }} onClick={telecharger}>{t(doc.signature.mode === "ACCEPTATION" ? "prtpTelechargerAccepte" : "prtpTelechargerSigne")}</button>
+            </div>
+          )}
+
+          {doc.resume && (doc.resume.montant != null || doc.resume.date || doc.resume.objet) && (
+            <div style={carte}>
+              <h2 style={{ fontSize: 16, color: "var(--petrol)", marginBottom: 10 }}>{t("prtpResumeTitre")}</h2>
+              <dl style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px 20px", margin: 0 }}>
+                {doc.resume.objet && (
+                  <div><dt style={{ fontSize: 11.5, color: "var(--sub)" }}>{t("prtpResumeObjet")}</dt><dd style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{doc.resume.objet}</dd></div>
+                )}
+                {doc.resume.montant != null && (
+                  <div><dt style={{ fontSize: 11.5, color: "var(--sub)" }}>{t("prtpResumeMontant")}</dt><dd className="mono" style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--petrol)" }}>{Math.round(doc.resume.montant).toLocaleString(langue === "en" ? "en-GB" : "fr-FR")} XOF</dd></div>
+                )}
+                {doc.resume.date && (
+                  <div><dt style={{ fontSize: 11.5, color: "var(--sub)" }}>{t("prtpResumeDate")}</dt><dd style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{doc.resume.date.split("-").reverse().join("/")}</dd></div>
+                )}
+                {doc.resume.echeance && (
+                  <div><dt style={{ fontSize: 11.5, color: "var(--sub)" }}>{t("prtpResumeEcheance")}</dt><dd style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{doc.resume.echeance.split("-").reverse().join("/")}</dd></div>
+                )}
+                {doc.resume.validite && (
+                  <div><dt style={{ fontSize: 11.5, color: "var(--sub)" }}>{t("prtpResumeValidite")}</dt><dd style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{doc.resume.validite}</dd></div>
+                )}
+              </dl>
+              {doc.a_signer && <p style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 10 }}>{t("prtpOuvrirDoc")}</p>}
             </div>
           )}
 
@@ -239,7 +275,29 @@ export default function PortailPage() {
             {!doc.signature && <p style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 4 }}>{t("prtpExpire")} {fmtDateHeure(doc.expire_le, langue)}</p>}
           </div>
 
-          {doc.a_signer && (
+          {doc.a_signer && doc.mode_reponse === "ACCEPTATION" && (
+            <form onSubmit={signer} style={carte}>
+              <h2 style={{ fontSize: 16, color: "var(--petrol)", marginBottom: 6 }}>{t("prtpAccepterTitre")}</h2>
+              <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 12, maxWidth: 620 }}>{t("prtpAccepterAide")}</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, maxWidth: 640, marginBottom: 14 }}>
+                <div>
+                  <label htmlFor="portail-nom" style={labelStyle}>{t("prtpNomAccepte")}</label>
+                  <input id="portail-nom" style={inputStyle} value={nom} onChange={(e) => setNom(e.target.value)} required />
+                </div>
+                <div>
+                  <label htmlFor="portail-qualite" style={labelStyle}>{t("prtpQualite")}</label>
+                  <input id="portail-qualite" style={inputStyle} value={qualite} onChange={(e) => setQualite(e.target.value)} />
+                </div>
+              </div>
+              <label htmlFor="portail-lu" style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13.5, fontWeight: 600, margin: "4px 0 12px" }}>
+                <input id="portail-lu" type="checkbox" checked={lu} onChange={(e) => setLu(e.target.checked)} /> {t("prtpLuAccepte")}
+              </label>
+              {erreur && <p role="alert" style={{ color: "var(--brique)", fontSize: 13, marginBottom: 10 }}>{erreur}</p>}
+              <button type="submit" disabled={occupe || !lu || nom.trim().length < 3} style={boutonPrincipalStyle}>{t("prtpAccepter")}</button>
+            </form>
+          )}
+
+          {doc.a_signer && doc.mode_reponse !== "ACCEPTATION" && (
             <form onSubmit={signer} style={carte}>
               <h2 style={{ fontSize: 16, color: "var(--petrol)", marginBottom: 12 }}>{t("prtpSignerTitre")}</h2>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14, maxWidth: 640, marginBottom: 14 }}>

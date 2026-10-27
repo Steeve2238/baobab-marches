@@ -306,4 +306,48 @@ async function ventePdf(type, d, e, opts = {}) {
   return fini;
 }
 
-module.exports = { facturePdf: (d, e, o) => ventePdf("FACTURE", d, e, o), devisPdf: (d, e, o) => ventePdf("DEVIS", d, e, o), remisesParLigne, numeroFacture };
+/**
+ * Facture de l'editeur a une entreprise cliente (abonnement mensuel, installation ou licence) : une ligne de formule, les modules
+ * en supplement, le total, puis l'accuse de reception facultatif. Calque sur l'ecran frontend/app/super-admin/factures/[id]/page.js.
+ */
+async function factureAbonnementPdf(d, e, opts = {}) {
+  const { doc, fini } = H.nouveauDocument();
+  const x0 = doc.page.margins.left;
+  const ed = { ...e, signataire_nom: e.signataire_nom || e.representant_nom || "La Direction", signataire_titre: e.signataire_titre || (e.representant_nom ? e.representant_fonction : "") || "" };
+  const plafond = d.plafond_utilisateurs_facture;
+  const textePlafond = plafond === null || plafond === undefined ? "utilisateurs illimités" : `jusqu'à ${nb(plafond)} utilisateurs`;
+  const sCompta = Number(d.supplement_comptabilite_xof) || 0;
+  const sFisc = Number(d.supplement_fiscalite_xof) || 0;
+  const sPaie = Number(d.supplement_paie_xof) || 0;
+  const total = Number(d.montant_xof) || 0;
+  const montantFormule = total - sCompta - sFisc - sPaie;
+  const designation = d.type_facture === "INSTALLATION" ? `Frais d'installation — formule ${d.formule_nom}` : d.type_facture === "LICENCE" ? `Licence annuelle — formule ${d.formule_nom}` : `Abonnement mensuel — formule ${d.formule_nom} (${textePlafond}) — période ${d.periode}`;
+  const lignes = [{ id: "formule", designation, quantite: 1, unite: "", prix_unitaire_ht: montantFormule, montant_ht: montantFormule }];
+  if (sCompta > 0) lignes.push({ id: "compta", designation: `Module Comptabilité — supplément — période ${d.periode}`, quantite: 1, unite: "", prix_unitaire_ht: sCompta, montant_ht: sCompta });
+  if (sFisc > 0) lignes.push({ id: "fisc", designation: `Module Fiscalité — supplément — période ${d.periode}`, quantite: 1, unite: "", prix_unitaire_ht: sFisc, montant_ht: sFisc });
+  if (sPaie > 0) lignes.push({ id: "paie", designation: `Module Paie — supplément — période ${d.periode}`, quantite: 1, unite: "", prix_unitaire_ht: sPaie, montant_ht: sPaie });
+  const numero = d.periode;
+
+  enteteEntreprise(doc, ed, { titre: `Facture N° ${numero}`, lignes: [jour(d.date_generation)] });
+  blocClient(doc, { client_nom: d.client_nom, client_adresse: d.client_adresse }, "Facturer à", null);
+  tableau(doc, { lignes }, new Map());
+  doc.moveDown(0.5);
+  ligneTotal(doc, "Total TTC", xof(total), { fort: true });
+  blocArrete(doc, "Arrêtée la présente facture à la somme de", total, false);
+  blocsSignature(doc, ed, {
+    cadre: !!opts.cadre,
+    titreCadre: "ACCUSÉ DE RÉCEPTION (client)",
+    aide: "Nom, qualité et signature du client, confirmant la réception de cette facture.",
+    signature: opts.signature,
+  });
+  if (opts.apres) {
+    doc.addPage();
+    doc.x = x0;
+    opts.apres(doc);
+  }
+  pieds(doc, ed, numero);
+  doc.end();
+  return fini;
+}
+
+module.exports = { factureAbonnementPdf, facturePdf: (d, e, o) => ventePdf("FACTURE", d, e, o), devisPdf: (d, e, o) => ventePdf("DEVIS", d, e, o), remisesParLigne, numeroFacture };
