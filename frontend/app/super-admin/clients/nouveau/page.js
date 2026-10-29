@@ -162,6 +162,7 @@ export default function SuperAdminNouveauClientPage() {
           <option value="LES_DEUX">{t("profilActiviteLES_DEUX")}</option>
           <option value="NEGOCE">{t("profilActiviteNEGOCE")}</option>
           <option value="MARCHES">{t("profilActiviteMARCHES")}</option>
+          <option value="MODULES">{t("profilActiviteMODULES")}</option>
         </select>
         <p style={{ fontSize: 11, color: "var(--sub)", marginTop: 4 }}>{t(`packContenu_${form.profil_activite}`)}</p>
         <label style={{ ...labelStyle, marginTop: 10 }}>{t("saFormuleLabel")}</label>

@@ -2,6 +2,17 @@ const { verifyToken } = require("../utils/jwt");
 const { t } = require("../utils/i18n");
 const db = require("../db");
 
+// Points de montage (index.js) des routes « commerce », fermees aux clients du pack Modules seuls.
+// parc-auto, contrats-prestation, parametres, modes-reglement et import RH restent ouverts (utilises par la RH).
+const PREFIXES_COMMERCE = [
+  "/api/dossiers", "/api/chronogramme", "/api/signaux", "/api/tableau-bord", "/api/regles", "/api/financement",
+  "/api/marge", "/api/logistique", "/api/courriers", "/api/fournisseurs", "/api/echeanciers", "/api/extraction",
+  "/api/maitres-ouvrage", "/api/concurrence", "/api/ventes", "/api/caisse", "/api/bons-commande", "/api/depenses",
+  "/api/stock", "/api/avoirs", "/api/import-donnees", "/api/calcul-prix", "/api/produits", "/api/receptions",
+  "/api/prix-fournisseurs", "/api/transitaires", "/api/commandes", "/api/incoterms", "/api/livraisons-dossier",
+  "/api/partages",
+];
+
 /**
  * Verifie le token JWT PUIS recalcule l'identite complete de l'utilisateur
  * depuis la base (tenant, statut actif, roles a jour) a chaque requete,
@@ -96,6 +107,13 @@ async function requireAuth(req, res, next) {
     permissions.paieActive = !!user.module_paie_actif;
     // Profil d'activite (migration 068) : adapte menus et libelles cote frontend (MARCHES | NEGOCE | LES_DEUX).
     permissions.profilActivite = user.profil_activite || "LES_DEUX";
+
+    // Pack « Modules seuls » (migration 087) : les fonctions commerce sont refusees cote serveur, meme pour un ADMIN.
+    // Les routes concernees sont reperees par leur point de montage (req.baseUrl) ; Comptabilite, Fiscalite, RH, Paie,
+    // roles, utilisateurs et parametres restent accessibles.
+    if (permissions.profilActivite === "MODULES" && PREFIXES_COMMERCE.some((p) => (req.baseUrl || "").startsWith(p))) {
+      return res.status(403).json({ error: t(req, "PACK_COMMERCE_REQUIS"), code: "PACK_COMMERCE_REQUIS" });
+    }
 
     req.user = {
       sub: user.id,

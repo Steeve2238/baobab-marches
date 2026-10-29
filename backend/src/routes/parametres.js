@@ -328,7 +328,7 @@ router.patch("/calcul-prix", requireRole("ADMIN"), async (req, res) => {
 // aucune permission. Modifiable par l'ADMIN du client (et par le Super Admin).
 // ----------------------------------------------------------------------------
 
-const PROFILS_ACTIVITE = ["MARCHES", "NEGOCE", "LES_DEUX"];
+const PROFILS_ACTIVITE = ["MARCHES", "NEGOCE", "LES_DEUX", "MODULES"];
 
 router.get("/profil-activite", async (req, res) => {
   try {

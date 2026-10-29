@@ -7,6 +7,7 @@ import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
 import DashboardNegoce from "../../lib/components/DashboardNegoce";
 import AppShell from "../../lib/components/AppShell";
+import { useProfilActivite } from "../../lib/useProfilActivite";
 
 // Regroupement des statuts detailles du dossier en 4 grandes categories pour
 // les cartes de statistiques du tableau de bord (le statut precis reste
@@ -24,7 +25,51 @@ const GROUPES_STATUT = {
   NO_GO: "REJETE",
 };
 
+// Point d'entree : un client du pack « Modules seuls » (migration 087) n'a pas de portefeuille de dossiers ni de
+// ventes ; il arrive sur une page qui renvoie vers les modules activés. Les autres packs gardent le tableau de bord
+// habituel, inchangé (DashboardCommerce).
 export default function DashboardPage() {
+  const profil = useProfilActivite();
+  if (profil === null) return null;
+  return profil === "MODULES" ? <DashboardModules /> : <DashboardCommerce />;
+}
+
+function DashboardModules() {
+  const { t } = useLangue();
+  const [permissions, setPermissions] = useState(null);
+  useEffect(() => {
+    let actif = true;
+    api.getPermissions().then((p) => actif && setPermissions(p || {})).catch(() => actif && setPermissions({}));
+    return () => {
+      actif = false;
+    };
+  }, []);
+  const voit = (modules) => !!permissions && (permissions.admin || (permissions.modules || []).some((m) => modules.includes(m)));
+  const cartes = permissions
+    ? [
+        { href: "/rh/mon-espace", titre: t("modulesSeulsRH"), desc: t("modulesSeulsRHDesc") },
+        permissions.comptabiliteActive && voit(["comptabilite", "comptabilite-validation"]) ? { href: "/comptabilite", titre: t("modulesSeulsCompta"), desc: t("modulesSeulsComptaDesc") } : null,
+        permissions.fiscaliteActive && voit(["fiscalite", "fiscalite-validation"]) ? { href: "/fiscalite", titre: t("modulesSeulsFiscalite"), desc: t("modulesSeulsFiscaliteDesc") } : null,
+        permissions.paieActive && voit(["paie", "paie-validation"]) ? { href: "/paie", titre: t("modulesSeulsPaie"), desc: t("modulesSeulsPaieDesc") } : null,
+      ].filter(Boolean)
+    : [];
+  return (
+    <AppShell title={t("modulesSeulsTitre")}>
+      <p style={{ fontSize: 13, color: "var(--sub)", marginTop: 0 }}>{t("modulesSeulsIntro")}</p>
+      {permissions && cartes.length === 0 && <p style={{ fontSize: 13 }}>{t("modulesSeulsAucun")}</p>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
+        {cartes.map((c) => (
+          <Link key={c.href} href={c.href} style={{ display: "block", border: "1px solid var(--line)", borderRadius: 8, background: "#fff", padding: "16px 18px", textDecoration: "none", color: "inherit" }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--petrol)", marginBottom: 6 }}>{c.titre}</div>
+            <div style={{ fontSize: 12.5, color: "var(--sub)", lineHeight: 1.45 }}>{c.desc}</div>
+          </Link>
+        ))}
+      </div>
+    </AppShell>
+  );
+}
+
+function DashboardCommerce() {
   const router = useRouter();
   const { t, statutLabel, dict, typeDemandeRHLabel } = useLangue();
   const [dossiers, setDossiers] = useState([]);

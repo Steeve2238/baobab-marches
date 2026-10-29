@@ -473,8 +473,8 @@ router.post("/clients", async (req, res) => {
   }
   // Mode d'hebergement : HEBERGE (chez Steeve, defaut) ou LOCAL (version installee chez le client).
   const modeHebergement = req.body.mode_hebergement === "LOCAL" ? "LOCAL" : "HEBERGE";
-  // Pack de licence a la creation (MARCHES | NEGOCE | LES_DEUX = Complet) ; defaut : Complet.
-  const profilActivite = ["MARCHES", "NEGOCE", "LES_DEUX"].includes(req.body.profil_activite) ? req.body.profil_activite : "LES_DEUX";
+  // Pack de licence a la creation (MARCHES | NEGOCE | LES_DEUX = Complet | MODULES = Modules seuls) ; defaut : Complet.
+  const profilActivite = ["MARCHES", "NEGOCE", "LES_DEUX", "MODULES"].includes(req.body.profil_activite) ? req.body.profil_activite : "LES_DEUX";
 
   const client = await db.pool.connect();
   try {
@@ -707,11 +707,11 @@ router.patch("/clients/:id/module-paie", async (req, res) => {
   }
 });
 
-// PATCH /api/super-admin/clients/:id/profil-activite - profil d'activite du client (MARCHES | NEGOCE | LES_DEUX),
+// PATCH /api/super-admin/clients/:id/profil-activite - profil d'activite du client (MARCHES | NEGOCE | LES_DEUX | MODULES),
 // qui adapte menus et libelles (migration 068). Aucune donnee ni permission n'est modifiee.
 router.patch("/clients/:id/profil-activite", async (req, res) => {
   const profil = req.body && req.body.profil_activite;
-  if (!["MARCHES", "NEGOCE", "LES_DEUX"].includes(profil)) {
+  if (!["MARCHES", "NEGOCE", "LES_DEUX", "MODULES"].includes(profil)) {
     return res.status(400).json({ error: t(req, "PROFIL_ACTIVITE_INVALIDE") });
   }
   try {

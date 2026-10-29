@@ -208,6 +208,19 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
   // n'est modifiee : seuls l'intitule et la destination des entrees changent.
   const profilActivite = permissions?.profilActivite || "LES_DEUX";
   function adapterProfil(entry) {
+    // Pack « Modules seuls » (migration 087) : seuls Comptabilite, Fiscalite, RH et Paie restent visibles, meme pour
+    // un ADMIN. Les groupes commerce disparaissent ; les contrats de prestation (RH) passent dans le groupe RH.
+    if (profilActivite === "MODULES") {
+      if (entry.id === "marches-ventes" || entry.id === "achats-moyens") return { ...entry, items: [] };
+      if (entry.id === "finance") return { ...entry, items: entry.items.filter((i) => i.href !== "/financement") };
+      if (entry.id === "administration") {
+        return { ...entry, items: entry.items.filter((i) => i.href !== "/parametres/import-donnees" && i.href !== "/parametres/modes-reglement") };
+      }
+      if (entry.id === "rh") {
+        return { ...entry, items: [...entry.items, { href: "/contrats-prestation", key: "navContratsPrestation", moduleKeyAny: ["rh"] }] };
+      }
+      return entry;
+    }
     // Depenses et resultat (Pack Commerce, lot 5) : profils NEGOCE et LES_DEUX.
     if (profilActivite !== "MARCHES" && entry.id === "finance") {
       return { ...entry, items: [{ href: "/depenses", key: "navDepenses", moduleKey: "marches" }, { href: "/resultat", key: "navResultat", moduleKey: "marches" }, ...entry.items] };
@@ -231,7 +244,8 @@ export default function AppShell({ children, title, backHref, backLabelKey, subN
         ),
     };
   }
-  const navItems = NAV_ITEMS.map(adapterProfil)
+  const navItems = NAV_ITEMS.filter((e) => !(profilActivite === "MODULES" && e.href === "/mes-taches"))
+    .map(adapterProfil)
     .map((entry) => (entry.items ? { ...entry, items: entry.items.filter(itemVisible) } : entry))
     .filter((entry) => (entry.items ? entry.items.length > 0 : itemVisible(entry)));
 
