@@ -774,7 +774,7 @@ router.patch("/:id/document", verrouPortail, async (req, res) => {
 
 // POST /:id/corriger - correction ADMINISTRATEUR d'une commande confirmee (prix unitaires, Incoterm, quantites,
 // suppression de lignes, ajout de lignes), avec motif obligatoire et historique. Les receptions deja faites ne sont pas touchees.
-// Corps : { motif, incoterm?, lignes?: [{ id, prix_unitaire_devise?, quantite?, supprimer? }],
+// Corps : { motif, incoterm?, lignes?: [{ id, prix_unitaire_devise?, quantite?, designation?, reference_fournisseur?, supprimer? }],
 //           ajouts?: [{ designation, quantite, prix_unitaire_devise, unite?, reference_fournisseur?, produit_id? }] }
 router.post("/:id/corriger", verrouPortail, async (req, res) => {
   const { id } = req.params;
@@ -830,6 +830,27 @@ router.post("/:id/corriger", verrouPortail, async (req, res) => {
       }
       let prix = Number(l.prix_unitaire_devise);
       let quantite = Number(l.quantite);
+      let designation = l.designation;
+      let reference = l.reference_fournisseur || null;
+      // Libelle et reference fournisseur : modifiables (faute de frappe, precision demandee par le client). Une designation vide est refusee.
+      if (demande.designation !== undefined && demande.designation !== null) {
+        const d = String(demande.designation).trim().slice(0, 500);
+        if (!d) {
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: t(req, "COMMANDE_CORRECTION_LIGNE_INVALIDE") });
+        }
+        if (d !== l.designation) {
+          modifs.push({ type: "DESIGNATION", ligne_id: l.id, designation: l.designation, avant: l.designation, apres: d });
+          designation = d;
+        }
+      }
+      if (demande.reference_fournisseur !== undefined && demande.reference_fournisseur !== null) {
+        const r = String(demande.reference_fournisseur).trim().slice(0, 120) || null;
+        if (r !== (l.reference_fournisseur || null)) {
+          modifs.push({ type: "REFERENCE", ligne_id: l.id, designation: l.designation, avant: l.reference_fournisseur || null, apres: r });
+          reference = r;
+        }
+      }
       if (demande.prix_unitaire_devise !== undefined && demande.prix_unitaire_devise !== null && demande.prix_unitaire_devise !== "") {
         const p = Math.round(Number(demande.prix_unitaire_devise) * 10000) / 10000;
         if (!Number.isFinite(p) || p < 0) {
@@ -856,7 +877,9 @@ router.post("/:id/corriger", verrouPortail, async (req, res) => {
           quantite = q;
         }
       }
-      if (prix !== Number(l.prix_unitaire_devise) || quantite !== Number(l.quantite)) majLignes.push({ id: l.id, prix, quantite });
+      if (prix !== Number(l.prix_unitaire_devise) || quantite !== Number(l.quantite) || designation !== l.designation || reference !== (l.reference_fournisseur || null)) {
+        majLignes.push({ id: l.id, prix, quantite, designation, reference });
+      }
     }
     // Lignes ajoutees (produit oublie a la saisie) : designation et quantite > 0 obligatoires, prix >= 0 ; une ligne
     // totalement vide est ignoree. Elles s'ajoutent en fin de commande, sans toucher aux lignes existantes.
@@ -908,7 +931,10 @@ router.post("/:id/corriger", verrouPortail, async (req, res) => {
       return res.status(400).json({ error: t(req, "COMMANDE_CORRECTION_AUCUN_CHANGEMENT") });
     }
     for (const m of majLignes) {
-      await client.query(`UPDATE commande_fournisseur_ligne SET prix_unitaire_devise = $1, quantite = $2 WHERE id = $3`, [m.prix, m.quantite, m.id]);
+      await client.query(
+        `UPDATE commande_fournisseur_ligne SET prix_unitaire_devise = $1, quantite = $2, designation = $3, reference_fournisseur = $4 WHERE id = $5`,
+        [m.prix, m.quantite, m.designation, m.reference, m.id]
+      );
     }
     if (aSupprimer.length) await client.query(`DELETE FROM commande_fournisseur_ligne WHERE id = ANY($1)`, [aSupprimer]);
     if (ajoutsNets.length) {

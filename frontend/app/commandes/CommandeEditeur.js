@@ -277,7 +277,11 @@ export default function CommandeEditeur({ id }) {
     }
     const lignesEnvoyees = lignes
       .filter((l) => l.id)
-      .map((l) => (l.supprimee ? { id: l.id, supprimer: true } : { id: l.id, prix_unitaire_devise: num(l.prix_unitaire_devise), quantite: num(l.quantite) }));
+      .map((l) => (l.supprimee ? { id: l.id, supprimer: true } : { id: l.id, prix_unitaire_devise: num(l.prix_unitaire_devise), quantite: num(l.quantite), designation: l.designation, reference_fournisseur: l.reference_fournisseur }));
+    if (lignesEnvoyees.some((l) => !l.supprimer && !String(l.designation || "").trim())) {
+      setErreur(t("cmdCorrDesignationVide"));
+      return;
+    }
     // Lignes oubliees a la saisie : une ligne entierement vide est ignoree, une ligne incomplete bloque l'envoi.
     const nouvelles = lignes.filter((l) => !l.id && l.nouvelle && (String(l.designation || "").trim() || (num(l.quantite) > 0 && String(l.prix_unitaire_devise ?? "").trim())));
     if (nouvelles.some((l) => !String(l.designation || "").trim() || num(l.quantite) <= 0)) {
@@ -455,8 +459,8 @@ export default function CommandeEditeur({ id }) {
             <tbody>
               {lignes.map((l, i) => (
                 <tr key={i} style={{ borderTop: "1px solid var(--line-soft, var(--line))", ...(l.supprimee ? { opacity: 0.45, textDecoration: "line-through" } : {}) }}>
-                  <td style={td}><input disabled={!editable && !l.nouvelle} value={l.reference_fournisseur} onChange={(e) => majLigne(i, "reference_fournisseur", e.target.value)} style={inputCompact} /></td>
-                  <td style={td}><input disabled={!editable && !l.nouvelle} value={l.designation} onChange={(e) => majLigne(i, "designation", e.target.value)} style={inputCompact} /></td>
+                  <td style={td}><input disabled={!editable && !l.nouvelle && !(enCorrection && !l.supprimee)} value={l.reference_fournisseur} onChange={(e) => majLigne(i, "reference_fournisseur", e.target.value)} style={inputCompact} /></td>
+                  <td style={td}><input disabled={!editable && !l.nouvelle && !(enCorrection && !l.supprimee)} value={l.designation} onChange={(e) => majLigne(i, "designation", e.target.value)} style={inputCompact} /></td>
                   <td style={td}><input disabled={!editable && !l.nouvelle} value={l.unite} onChange={(e) => majLigne(i, "unite", e.target.value)} style={inputCompact} /></td>
                   <td style={td}><input disabled={!editable && !(enCorrection && !l.supprimee)} inputMode="decimal" value={l.quantite} onChange={(e) => majLigne(i, "quantite", e.target.value)} style={inputCompact} /></td>
                   <td style={td}>
@@ -647,6 +651,8 @@ export default function CommandeEditeur({ id }) {
                       {m.type === "INCOTERM" && `${t("receptionsIncoterm")} : ${m.avant || "—"} → ${m.apres || "—"}`}
                       {m.type === "PRIX" && `${m.designation} — ${t("cmdColPu")} : ${nf(m.avant)} → ${nf(m.apres)}`}
                       {m.type === "QUANTITE" && `${m.designation} — ${t("cmdColQuantite")} : ${nf(m.avant)} → ${nf(m.apres)}`}
+                      {m.type === "DESIGNATION" && `${t("cmdColDesignation")} : ${m.avant || "—"} → ${m.apres || "—"}`}
+                      {m.type === "REFERENCE" && `${m.designation} — ${t("cmdColRef")} : ${m.avant || "—"} → ${m.apres || "—"}`}
                       {m.type === "LIGNE_SUPPRIMEE" && `${m.designation} — ${t("cmdCorrLigneSupprimee")}`}
                       {m.type === "LIGNE_AJOUTEE" && `${m.designation} — ${t("cmdCorrLigneAjoutee")} (${nf(m.apres?.quantite)} × ${nf(m.apres?.prix_unitaire_devise)} ${commande.devise})`}
                     </li>
