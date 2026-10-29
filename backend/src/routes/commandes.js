@@ -773,8 +773,9 @@ router.patch("/:id/document", verrouPortail, async (req, res) => {
 });
 
 // POST /:id/corriger - correction ADMINISTRATEUR d'une commande confirmee (prix unitaires, Incoterm, quantites,
-// suppression de lignes), avec motif obligatoire et historique. Les receptions deja faites ne sont pas touchees.
-// Corps : { motif, incoterm?, lignes?: [{ id, prix_unitaire_devise?, quantite?, supprimer? }] }
+// suppression de lignes, ajout de lignes), avec motif obligatoire et historique. Les receptions deja faites ne sont pas touchees.
+// Corps : { motif, incoterm?, lignes?: [{ id, prix_unitaire_devise?, quantite?, supprimer? }],
+//           ajouts?: [{ designation, quantite, prix_unitaire_devise, unite?, reference_fournisseur?, produit_id? }] }
 router.post("/:id/corriger", verrouPortail, async (req, res) => {
   const { id } = req.params;
   if (!UUID_RE.test(id)) return res.status(404).json({ error: t(req, "COMMANDE_NOT_FOUND") });
@@ -857,9 +858,43 @@ router.post("/:id/corriger", verrouPortail, async (req, res) => {
       }
       if (prix !== Number(l.prix_unitaire_devise) || quantite !== Number(l.quantite)) majLignes.push({ id: l.id, prix, quantite });
     }
-    if (aSupprimer.length >= lignes.length) {
+    // Lignes ajoutees (produit oublie a la saisie) : designation et quantite > 0 obligatoires, prix >= 0 ; une ligne
+    // totalement vide est ignoree. Elles s'ajoutent en fin de commande, sans toucher aux lignes existantes.
+    const ajoutsNets = [];
+    const ajoutsDemandes = Array.isArray(b.ajouts) ? b.ajouts : [];
+    if (ajoutsDemandes.length > 200) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: t(req, "COMMANDE_CORRECTION_LIGNE_INVALIDE") });
+    }
+    for (const a of ajoutsDemandes) {
+      const designation = String((a && a.designation) ?? "").trim();
+      const quantite = Number(a && a.quantite);
+      const brutPu = a ? a.prix_unitaire_devise : undefined;
+      const pu = brutPu === "" || brutPu === undefined || brutPu === null ? 0 : Number(brutPu);
+      if (!designation && !(Number.isFinite(quantite) && quantite > 0)) continue; // ligne vide ignoree
+      if (!designation || !Number.isFinite(quantite) || quantite <= 0 || !Number.isFinite(pu) || pu < 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: t(req, "COMMANDE_CORRECTION_LIGNE_INVALIDE") });
+      }
+      ajoutsNets.push({
+        id: uuidv4(),
+        designation: designation.slice(0, 500),
+        unite: String(a.unite ?? "").trim().slice(0, 20) || "U",
+        reference_fournisseur: String(a.reference_fournisseur ?? "").trim().slice(0, 120) || null,
+        quantite: Math.round(quantite * 1000) / 1000,
+        prix_unitaire_devise: Math.round(pu * 10000) / 10000,
+        produit_id: uuidOuNull(a.produit_id),
+      });
+    }
+    if (aSupprimer.length >= lignes.length && ajoutsNets.length === 0) {
       await client.query("ROLLBACK");
       return res.status(409).json({ error: t(req, "COMMANDE_CORRECTION_DERNIERE_LIGNE") });
+    }
+    for (const a of ajoutsNets) {
+      modifs.push({
+        type: "LIGNE_AJOUTEE", ligne_id: a.id, designation: a.designation, avant: null,
+        apres: { quantite: a.quantite, prix_unitaire_devise: a.prix_unitaire_devise, unite: a.unite, reference_fournisseur: a.reference_fournisseur },
+      });
     }
     if (b.incoterm !== undefined) {
       const inco = String(b.incoterm || "").trim().toUpperCase().slice(0, 10) || null;
@@ -876,6 +911,16 @@ router.post("/:id/corriger", verrouPortail, async (req, res) => {
       await client.query(`UPDATE commande_fournisseur_ligne SET prix_unitaire_devise = $1, quantite = $2 WHERE id = $3`, [m.prix, m.quantite, m.id]);
     }
     if (aSupprimer.length) await client.query(`DELETE FROM commande_fournisseur_ligne WHERE id = ANY($1)`, [aSupprimer]);
+    if (ajoutsNets.length) {
+      let ordre = lignes.reduce((m, l) => Math.max(m, Number(l.ordre) || 0), -1) + 1;
+      for (const a of ajoutsNets) {
+        await client.query(
+          `INSERT INTO commande_fournisseur_ligne (id, commande_id, ordre, reference_fournisseur, designation, unite, quantite, prix_unitaire_devise, produit_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,(SELECT id FROM produit WHERE id = $9 AND tenant_id = $10))`,
+          [a.id, id, ordre++, a.reference_fournisseur, a.designation, a.unite, a.quantite, a.prix_unitaire_devise, a.produit_id, req.user.tenantId]
+        );
+      }
+    }
     const totalApres = arr2(
       (await client.query(`SELECT COALESCE(SUM(quantite * prix_unitaire_devise), 0) AS t FROM commande_fournisseur_ligne WHERE commande_id = $1`, [id])).rows[0].t
     );

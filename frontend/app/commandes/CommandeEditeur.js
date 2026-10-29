@@ -278,12 +278,25 @@ export default function CommandeEditeur({ id }) {
     const lignesEnvoyees = lignes
       .filter((l) => l.id)
       .map((l) => (l.supprimee ? { id: l.id, supprimer: true } : { id: l.id, prix_unitaire_devise: num(l.prix_unitaire_devise), quantite: num(l.quantite) }));
+    // Lignes oubliees a la saisie : une ligne entierement vide est ignoree, une ligne incomplete bloque l'envoi.
+    const nouvelles = lignes.filter((l) => !l.id && l.nouvelle && (String(l.designation || "").trim() || (num(l.quantite) > 0 && String(l.prix_unitaire_devise ?? "").trim())));
+    if (nouvelles.some((l) => !String(l.designation || "").trim() || num(l.quantite) <= 0)) {
+      setErreur(t("cmdCorrLigneIncomplete"));
+      return;
+    }
+    const ajouts = nouvelles.map((l) => ({
+      reference_fournisseur: l.reference_fournisseur,
+      designation: l.designation,
+      unite: l.unite,
+      quantite: num(l.quantite),
+      prix_unitaire_devise: num(l.prix_unitaire_devise),
+    }));
     const msg = t("cmdCorrConfirm") + (commande.receptions && commande.receptions.some((r) => r.statut === "VALIDEE") ? `\n\n${t("cmdCorrAvertReceptions")}` : "");
     if (!window.confirm(msg)) return;
     setEnCours(true);
     setErreur("");
     try {
-      const c = await api.corrigerCommande(id, { motif: motif.trim(), incoterm: form.incoterm, lignes: lignesEnvoyees });
+      const c = await api.corrigerCommande(id, { motif: motif.trim(), incoterm: form.incoterm, lignes: lignesEnvoyees, ajouts });
       setModeCorrection(false);
       setMotif("");
       appliquer(c);
@@ -442,9 +455,9 @@ export default function CommandeEditeur({ id }) {
             <tbody>
               {lignes.map((l, i) => (
                 <tr key={i} style={{ borderTop: "1px solid var(--line-soft, var(--line))", ...(l.supprimee ? { opacity: 0.45, textDecoration: "line-through" } : {}) }}>
-                  <td style={td}><input disabled={!editable} value={l.reference_fournisseur} onChange={(e) => majLigne(i, "reference_fournisseur", e.target.value)} style={inputCompact} /></td>
-                  <td style={td}><input disabled={!editable} value={l.designation} onChange={(e) => majLigne(i, "designation", e.target.value)} style={inputCompact} /></td>
-                  <td style={td}><input disabled={!editable} value={l.unite} onChange={(e) => majLigne(i, "unite", e.target.value)} style={inputCompact} /></td>
+                  <td style={td}><input disabled={!editable && !l.nouvelle} value={l.reference_fournisseur} onChange={(e) => majLigne(i, "reference_fournisseur", e.target.value)} style={inputCompact} /></td>
+                  <td style={td}><input disabled={!editable && !l.nouvelle} value={l.designation} onChange={(e) => majLigne(i, "designation", e.target.value)} style={inputCompact} /></td>
+                  <td style={td}><input disabled={!editable && !l.nouvelle} value={l.unite} onChange={(e) => majLigne(i, "unite", e.target.value)} style={inputCompact} /></td>
                   <td style={td}><input disabled={!editable && !(enCorrection && !l.supprimee)} inputMode="decimal" value={l.quantite} onChange={(e) => majLigne(i, "quantite", e.target.value)} style={inputCompact} /></td>
                   <td style={td}>
                     <input disabled={!editable && !(enCorrection && !l.supprimee)} inputMode="decimal" value={l.prix_unitaire_devise} onChange={(e) => majLigne(i, "prix_unitaire_devise", e.target.value)} style={inputCompact} />
@@ -480,15 +493,19 @@ export default function CommandeEditeur({ id }) {
                   )}
                   {enCorrection && (
                     <td style={td}>
-                      <button
-                        type="button"
-                        disabled={(l.quantite_recue ?? 0) > 0}
-                        title={(l.quantite_recue ?? 0) > 0 ? t("cmdCorrLigneRecue") : t("cmdCorrSupprimerLigne")}
-                        onClick={() => majLigne(i, "supprimee", !l.supprimee)}
-                        style={{ ...boutonSupprimerStyle, opacity: (l.quantite_recue ?? 0) > 0 ? 0.3 : 1 }}
-                      >
-                        {l.supprimee ? "↺" : "×"}
-                      </button>
+                      {l.nouvelle ? (
+                        <button type="button" title={t("cmdCorrRetirerNouvelle")} onClick={() => setLignes((prev) => prev.filter((_, k) => k !== i))} style={boutonSupprimerStyle}>×</button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={(l.quantite_recue ?? 0) > 0}
+                          title={(l.quantite_recue ?? 0) > 0 ? t("cmdCorrLigneRecue") : t("cmdCorrSupprimerLigne")}
+                          onClick={() => majLigne(i, "supprimee", !l.supprimee)}
+                          style={{ ...boutonSupprimerStyle, opacity: (l.quantite_recue ?? 0) > 0 ? 0.3 : 1 }}
+                        >
+                          {l.supprimee ? "↺" : "×"}
+                        </button>
+                      )}
                     </td>
                   )}
                   {editable && (
@@ -504,6 +521,11 @@ export default function CommandeEditeur({ id }) {
         {editable && (
           <button type="button" onClick={() => setLignes((prev) => [...prev, { ...LIGNE_VIDE }])} style={{ ...boutonSecondaireStyle, marginTop: 10 }}>
             {t("cmdAjouterLigne")}
+          </button>
+        )}
+        {enCorrection && (
+          <button type="button" onClick={() => setLignes((prev) => [...prev, { ...LIGNE_VIDE, nouvelle: true }])} style={{ ...boutonSecondaireStyle, marginTop: 10 }}>
+            {t("cmdCorrAjouterLigne")}
           </button>
         )}
         <div style={{ marginTop: 14, marginLeft: "auto", maxWidth: 340, display: "grid", gap: 4 }}>
@@ -626,6 +648,7 @@ export default function CommandeEditeur({ id }) {
                       {m.type === "PRIX" && `${m.designation} — ${t("cmdColPu")} : ${nf(m.avant)} → ${nf(m.apres)}`}
                       {m.type === "QUANTITE" && `${m.designation} — ${t("cmdColQuantite")} : ${nf(m.avant)} → ${nf(m.apres)}`}
                       {m.type === "LIGNE_SUPPRIMEE" && `${m.designation} — ${t("cmdCorrLigneSupprimee")}`}
+                      {m.type === "LIGNE_AJOUTEE" && `${m.designation} — ${t("cmdCorrLigneAjoutee")} (${nf(m.apres?.quantite)} × ${nf(m.apres?.prix_unitaire_devise)} ${commande.devise})`}
                     </li>
                   ))}
                 </ul>
