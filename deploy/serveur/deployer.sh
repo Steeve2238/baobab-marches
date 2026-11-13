@@ -47,7 +47,7 @@ main() {
   trap "rm -rf '$VERROU'" EXIT
 
   activer() { # $1 = script d'activation Node (facultatif)
-    if [ -f "$1" ]; then . "$1"; fi
+    if [ -f "$1" ]; then set +u; . "$1"; set -u; fi
   }
   redemarrer() {
     mkdir -p "$API_DIR/tmp" "$FRONT_DIR/tmp"
