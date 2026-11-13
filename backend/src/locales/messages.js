@@ -323,6 +323,9 @@ const MESSAGES = {
     RH_DMT_FIGEE: "Cette declaration n'est plus au stade de brouillon : son contenu ne peut plus etre modifie ni supprime.",
     RH_FICHE_CREATE_ERROR: "Erreur lors de la creation de la fiche employe.",
     RH_FICHE_UPDATE_ERROR: "Erreur lors de la mise a jour de la fiche employe.",
+    RH_PERSONNEL_SUPPR_HISTORIQUE: "Ce salarié a un historique (contrats, bulletins, congés…) : il ne peut pas être supprimé. Archivez-le pour le sortir du personnel en conservant son historique.",
+    RH_PERSONNEL_SUPPR_SOI: "Vous ne pouvez pas supprimer votre propre fiche.",
+    RH_PERSONNEL_SUPPR_ERROR: "Erreur lors de la suppression de la fiche employé.",
 
     RH_REGLES_FETCH_ERROR: "Erreur lors de la recuperation du circuit d'approbation.",
     RH_REGLES_INVALID: "Circuit d'approbation invalide (role inexistant ou role demandeur en double).",
@@ -1313,6 +1316,9 @@ const MESSAGES = {
     RH_DMT_FIGEE: "This declaration is no longer a draft: its content can no longer be edited or deleted.",
     RH_FICHE_CREATE_ERROR: "Error while creating the employee record.",
     RH_FICHE_UPDATE_ERROR: "Error while updating the employee record.",
+    RH_PERSONNEL_SUPPR_HISTORIQUE: "This employee has history (contracts, payslips, leave…) and cannot be deleted. Archive them to remove them from active staff while keeping their history.",
+    RH_PERSONNEL_SUPPR_SOI: "You cannot delete your own record.",
+    RH_PERSONNEL_SUPPR_ERROR: "Error while deleting the employee record.",
 
     RH_REGLES_FETCH_ERROR: "Error while fetching the approval workflow.",
     RH_REGLES_INVALID: "Invalid approval workflow (unknown role or duplicate requester role).",

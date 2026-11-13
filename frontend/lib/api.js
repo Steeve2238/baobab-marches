@@ -434,6 +434,7 @@ export const api = {
   createFicheEmploye: (data) => request("/rh/personnel", { method: "POST", body: JSON.stringify(data) }),
   patchFicheEmploye: (id, data) =>
     request(`/rh/personnel/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  supprimerFicheEmploye: (id) => request(`/rh/personnel/${id}`, { method: "DELETE" }),
   // RH lot 2 : contrats de travail, modeles, DMT
   getModelesContrats: () => request("/rh/modeles-contrats"),
   putModeleContrat: (type, articles) =>
@@ -441,6 +442,9 @@ export const api = {
   deleteModeleContrat: (type) => request(`/rh/modeles-contrats/${type}`, { method: "DELETE" }),
   getContrats: (employeId) => request(`/rh/contrats${employeId ? `?employe_id=${employeId}` : ""}`),
   getContratPrefill: (employeId, type) => request(`/rh/contrats/prefill?employe_id=${employeId}&type=${type}`),
+  getContratConventions: (date) => request(`/rh/contrats/conventions${date ? `?date=${date}` : ""}`),
+  getContratComposition: (conventionId, categorieCode, date) =>
+    request(`/rh/contrats/composition?convention_id=${encodeURIComponent(conventionId)}&categorie_code=${encodeURIComponent(categorieCode)}${date ? `&date=${date}` : ""}`),
   getContrat: (id) => request(`/rh/contrats/${id}`),
   createContrat: (data) => request("/rh/contrats", { method: "POST", body: JSON.stringify(data) }),
   patchContrat: (id, data) => request(`/rh/contrats/${id}`, { method: "PATCH", body: JSON.stringify(data) }),

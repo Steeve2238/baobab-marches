@@ -156,7 +156,7 @@ export default function FicheEmployePage() {
           <section className="card">
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
               <h2 style={{ fontSize: 14, margin: 0 }}>{t("rhcDocs")}</h2>
-              <Link href={`/rh/contrats/nouveau?employe_id=${id}&type=${fiche.type_contrat === "CDD" || fiche.type_contrat === "JOURNALIER" ? fiche.type_contrat : "CDI"}`} style={{ ...boutonLeger, marginLeft: "auto" }}>
+              <Link href={`/rh/contrats/nouveau?employe_id=${id}&type=${["CDD", "JOURNALIER", "STAGE"].includes(fiche.type_contrat) ? fiche.type_contrat : "CDI"}`} style={{ ...boutonLeger, marginLeft: "auto" }}>
                 + {t("rhcGenererContrat")}
               </Link>
               <Link href={`/rh/dmt/nouvelle?employe_id=${id}&objet=EMBAUCHE`} style={boutonLeger}>

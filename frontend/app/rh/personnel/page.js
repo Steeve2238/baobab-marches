@@ -24,6 +24,50 @@ export default function PersonnelPage() {
       .finally(() => setChargement(false));
   }, []);
 
+  const aujourdhui = () => new Date().toISOString().slice(0, 10);
+  const nom = (p) => `${p.prenom || ""} ${p.nom || ""}`.trim();
+
+  // Suppression : autorisee seulement pour une fiche sans historique. Sinon on propose l'archivage (le salarie sort du personnel actif,
+  // contrats / bulletins / conges restent consultables).
+  async function supprimer(p) {
+    setErreur("");
+    setMsg("");
+    if (!window.confirm(t("rhdSupprConfirm").replace("{nom}", nom(p)))) return;
+    try {
+      await api.supprimerFicheEmploye(p.id);
+      setPersonnel((l) => l.filter((x) => x.id !== p.id));
+      setMsg(t("rhdSupprOk").replace("{nom}", nom(p)));
+    } catch (err) {
+      if (err.status === 409 && err.code === "HISTORIQUE") {
+        if (window.confirm(t("rhdArchiverProposition").replace("{nom}", nom(p)))) await archiver(p);
+      } else {
+        setErreur(err.message);
+      }
+    }
+  }
+
+  async function archiver(p) {
+    try {
+      await api.patchFicheEmploye(p.id, { statut: "INACTIF", date_sortie: p.date_sortie || aujourdhui() });
+      setPersonnel((l) => l.map((x) => (x.id === p.id ? { ...x, statut: "INACTIF" } : x)));
+      setMsg(t("rhdArchiveOk").replace("{nom}", nom(p)));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
+  async function reactiver(p) {
+    setErreur("");
+    setMsg("");
+    try {
+      await api.patchFicheEmploye(p.id, { statut: "ACTIF", date_sortie: null });
+      setPersonnel((l) => l.map((x) => (x.id === p.id ? { ...x, statut: "ACTIF" } : x)));
+      setMsg(t("rhdReactiveOk").replace("{nom}", nom(p)));
+    } catch (err) {
+      setErreur(err.message);
+    }
+  }
+
   const filtre = useMemo(() => {
     const q = recherche.trim().toLowerCase();
     if (!q) return personnel;
@@ -49,6 +93,7 @@ export default function PersonnelPage() {
       </p>
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+      {msg && <p style={{ color: "var(--petrol)", fontSize: 12.5, marginBottom: 14 }}>{msg}</p>}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>{t("rhiBloc")}</div>
@@ -96,41 +141,58 @@ export default function PersonnelPage() {
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
           {filtre.map((p) => (
-            <Link
+            <div
               key={p.id}
-              href={`/rh/personnel/${p.id}`}
               className="card"
               style={{
                 display: "grid",
-                gridTemplateColumns: "1.5fr 1.2fr 1fr auto auto",
+                gridTemplateColumns: "minmax(0, 1fr) auto",
                 gap: 12,
                 alignItems: "center",
-                textDecoration: "none",
-                color: "inherit",
+                opacity: p.statut === "INACTIF" ? 0.65 : 1,
               }}
             >
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 13.5 }}>
-                  {p.prenom} {p.nom}
+              <Link
+                href={`/rh/personnel/${p.id}`}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1.5fr 1.2fr 1fr auto auto",
+                  gap: 12,
+                  alignItems: "center",
+                  textDecoration: "none",
+                  color: "inherit",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13.5 }}>
+                    {p.prenom} {p.nom}
+                  </div>
+                  <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)" }}>
+                    {p.matricule || "—"}
+                  </div>
                 </div>
-                <div className="mono" style={{ fontSize: 11.5, color: "var(--sub)" }}>
-                  {p.matricule || "—"}
+                <div style={{ fontSize: 12, color: "var(--sub)" }}>
+                  {p.poste || "—"}
+                  {p.categorie ? <div style={{ fontSize: 11 }}>{p.categorie}</div> : null}
                 </div>
+                <div style={{ fontSize: 11.5, color: "var(--sub)" }}>
+                  {p.a_compte ? t("rhdAvecCompte") : t("rhdSansCompte")}
+                </div>
+                <span className={p.completude && p.completude.pourcentage === 100 ? "chip ok" : "chip risk"}>
+                  {p.completude ? `${p.completude.pourcentage} %` : "—"}
+                </span>
+                <span className={p.statut === "ACTIF" ? "chip ok" : "chip risk"}>
+                  {statutEmployeLabel(p.statut)}
+                </span>
+              </Link>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <Link href={`/rh/personnel/${p.id}`} style={{ ...boutonLeger, textDecoration: "none" }}>{t("rhdModifier")}</Link>
+                {p.statut === "INACTIF" ? (
+                  <button type="button" style={boutonLeger} onClick={() => reactiver(p)}>{t("rhdReactiver")}</button>
+                ) : null}
+                <button type="button" style={{ ...boutonLeger, color: "var(--brique)" }} onClick={() => supprimer(p)}>{t("rhdSupprimer")}</button>
               </div>
-              <div style={{ fontSize: 12, color: "var(--sub)" }}>
-                {p.poste || "—"}
-                {p.categorie ? <div style={{ fontSize: 11 }}>{p.categorie}</div> : null}
-              </div>
-              <div style={{ fontSize: 11.5, color: "var(--sub)" }}>
-                {p.a_compte ? t("rhdAvecCompte") : t("rhdSansCompte")}
-              </div>
-              <span className={p.completude && p.completude.pourcentage === 100 ? "chip ok" : "chip risk"}>
-                {p.completude ? `${p.completude.pourcentage} %` : "—"}
-              </span>
-              <span className={p.statut === "ACTIF" ? "chip ok" : "chip risk"}>
-                {statutEmployeLabel(p.statut)}
-              </span>
-            </Link>
+            </div>
           ))}
         </div>
       )}

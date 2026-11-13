@@ -1,5 +1,5 @@
 /**
- * Modeles de contrats de travail (CDI, CDD, journalier) et moteur de redaction.
+ * Modeles de contrats de travail (CDI, CDD, journalier) et de stage et moteur de redaction.
  *
  * Un modele est une liste d'articles { titre, paragraphes[], remuneration? }. Les paragraphes contiennent des variables
  * entre accolades ({travailleur}, {date_effet}...) et peuvent commencer par une balise de condition :
@@ -29,7 +29,9 @@ const VARIABLES = [
   ["lieu_emploi", "Lieu d'emploi"],
   ["date_effet", "Date de prise d'effet"],
   ["date_fin", "Date de fin (CDD)"],
-  ["motif", "Motif du CDD (précédé de « , »)"],
+  ["motif", "Motif du CDD ou objet du stage (précédé de « , »)"],
+  ["etablissement", "Stage : établissement d'enseignement (précédé de « , »)"],
+  ["tuteur", "Stage : tuteur dans l'entreprise"],
   ["essai", "Durée de la période d'essai en lettres"],
   ["heures", "Heures hebdomadaires"],
   ["date_contrat", "Date du contrat"],
@@ -196,6 +198,57 @@ const MODELES_DEFAUT = {
     ART_SOCIAL,
     ART_LITIGES,
   ],
+  STAGE: [
+    {
+      titre: "Objet du contrat de stage",
+      paragraphes: [
+        "Le présent contrat a pour objet de définir les conditions dans lesquelles {travailleur}, ci-après « le stagiaire », effectue un stage au sein de {employeur}{etablissement}.",
+        "Le stage a pour but la formation pratique et la mise en situation professionnelle du stagiaire. Il est régi par le présent contrat, par la réglementation applicable et, le cas échéant, par la convention conclue avec l'établissement d'enseignement.",
+      ],
+    },
+    {
+      titre: "Durée du stage",
+      paragraphes: [
+        "Le stage se déroule du {date_effet} au {date_fin}{motif}. Il prend fin de plein droit à son terme ; toute prolongation fait l'objet d'un avenant écrit.",
+      ],
+    },
+    {
+      titre: "Fonctions, lieu et encadrement",
+      paragraphes: [
+        "Le stagiaire est accueilli au poste de : {fonction}. Le lieu du stage est : {lieu_emploi}.",
+        "Il est placé sous la responsabilité de {tuteur}, tuteur de stage, chargé de l'accueillir, de l'encadrer et d'évaluer son travail.",
+      ],
+    },
+    {
+      titre: "Conditions d'accueil",
+      paragraphes: [
+        "Pendant la durée du stage, le stagiaire s'engage à respecter le règlement intérieur, les consignes de sécurité et d'hygiène, ainsi que le secret professionnel. Il prend soin du matériel qui lui est confié et suit les directives de son tuteur.",
+        "Le stagiaire est soumis aux horaires de l'entreprise, dans la limite de {heures} heures par semaine. Toute absence doit être justifiée et portée sans délai à la connaissance du tuteur.",
+      ],
+    },
+    {
+      titre: "Gratification",
+      remuneration: true,
+      paragraphes: [
+        "Le stagiaire perçoit une gratification mensuelle, ainsi décomposée :",
+        "La gratification est versée mensuellement. Elle n'a pas le caractère d'un salaire et ne confère pas la qualité de salarié ; elle est soumise, le cas échéant, aux retenues prévues par la réglementation applicable.",
+      ],
+    },
+    {
+      titre: "Assurance et responsabilité",
+      paragraphes: [
+        "Le stagiaire justifie d'une couverture contre les accidents et d'une assurance responsabilité civile, par l'établissement d'enseignement ou à titre personnel. Il signale sans délai à l'entreprise tout changement de sa situation.",
+      ],
+    },
+    {
+      titre: "Fin du stage et attestation",
+      paragraphes: [
+        "Chaque partie peut mettre fin au stage avant son terme en cas de manquement grave, de force majeure ou d'accord des parties, par notification écrite.",
+        "À l'issue du stage, l'entreprise remet au stagiaire une attestation précisant la durée et la nature des missions accomplies. Le stage ne vaut pas promesse d'embauche.",
+      ],
+    },
+    ART_LITIGES,
+  ],
 };
 
 // --------------------------------------------------------------------------- contexte et redaction
@@ -222,7 +275,9 @@ function libelleSituation(emp, nbEnfants) {
 function libelleCategorie(cat) {
   if (!cat) return "";
   const c = String(cat).trim();
-  return /cat[ée]gorie/i.test(c) ? c : `${c} catégorie`;
+  // Un code court (« 5 », « 3A ») prend le mot « catégorie » ; un libelle complet de la grille (« Ouvrier 3ème catégorie »,
+  // « Ingénieur / cadre P5 ») est repris tel quel.
+  return /cat[ée]gorie/i.test(c) || c.length > 8 ? c : `${c} catégorie`;
 }
 
 function nombreHeures(h) {
@@ -243,7 +298,7 @@ function construireContexte(entete, emp, enfants, contrat, enfantACharge) {
   const naissance = [emp.date_naissance ? dateLongue(emp.date_naissance) : "", emp.lieu_naissance ? `à ${emp.lieu_naissance}` : ""].filter(Boolean).join(" ");
   const filiationLien = emp.sexe === "F" ? "Fille de" : "Fils de";
   const parents = [emp.pere_nom, emp.mere_nom ? `${emp.pere_nom ? "et de " : "de "}${emp.mere_nom}` : null].filter(Boolean).join(" ");
-  const essaiMois = Number(contrat.periode_essai_mois) || 0;
+  const essaiMois = contrat.type === "STAGE" ? 0 : Number(contrat.periode_essai_mois) || 0;
   const lignes = (contrat.elements || []).map((l) => ({
     libelle: String(l.libelle || "").trim(),
     montant: Number(l.montant) || 0,
@@ -267,10 +322,13 @@ function construireContexte(entete, emp, enfants, contrat, enfantACharge) {
     date_fin: contrat.date_fin ? dateLongue(contrat.date_fin) : POINTS,
     motif: contrat.motif ? `, ${String(contrat.motif).trim().replace(/^,\s*/, "")}` : "",
     essai: essaiMois ? `${entierEnLettres(essaiMois)} (${essaiMois}) mois` : "",
+    etablissement: contrat.etablissement ? `, en provenance de ${String(contrat.etablissement).trim()}` : "",
+    tuteur: contrat.tuteur ? String(contrat.tuteur).trim() : POINTS,
     heures: nombreHeures(contrat.heures_hebdo || 40),
     date_contrat: contrat.date_contrat ? dateLongue(contrat.date_contrat) : dateLongue(new Date()),
     ville,
   };
+  const estStage = contrat.type === "STAGE";
   const identite = [
     ["Nom et prénoms du travailleur", travailleur],
     ["Date et lieu de naissance", naissance || POINTS],
@@ -279,9 +337,16 @@ function construireContexte(entete, emp, enfants, contrat, enfantACharge) {
     ["Situation de famille", libelleSituation(emp, nbEnfants) || POINTS],
     ["Lieu de résidence habituelle", [emp.adresse, emp.ville].filter(Boolean).join(", ") || POINTS],
     ["Fonction", variables.fonction],
-    ["Date de l'engagement", variables.date_effet],
-    ["Classification professionnelle", variables.classification],
-    ["Convention collective", variables.convention],
+    [estStage ? "Date de début du stage" : "Date de l'engagement", variables.date_effet],
+    ...(estStage
+      ? [
+          ["Établissement d'origine", contrat.etablissement ? String(contrat.etablissement).trim() : POINTS],
+          ["Tuteur (maître de stage)", variables.tuteur],
+        ]
+      : [
+          ["Classification professionnelle", variables.classification],
+          ["Convention collective", variables.convention],
+        ]),
     ["Durée de travail", `${variables.heures} h par semaine`],
   ];
   return { variables, identite, essaiMois, lignes, totalApres, totalEssai, sansEssai, ville };
@@ -318,7 +383,7 @@ function rediger(type, modeleArticles, entete, ctx, contratChamps) {
         lignes: ctx.lignes,
         total: ctx.totalApres,
         total_lettres: premiereLettreMajuscule(montantEnLettres(ctx.totalApres)),
-        libelle_total: jour ? "Total brut par jour" : "Total brut mensuel",
+        libelle_total: type === "STAGE" ? "Total gratification mensuelle" : jour ? "Total brut par jour" : "Total brut mensuel",
         total_essai: essaiMois && ctx.sansEssai.length ? ctx.totalEssai : null,
         sans_essai: essaiMois ? ctx.sansEssai : [],
       };
@@ -360,7 +425,16 @@ function avertissements(entete, emp, c, ctx) {
   if (!emp.nom || !emp.prenom) bloquant("IDENTITE_INCOMPLETE");
   if (!c.date_effet) bloquant("DATE_EFFET");
   if (!(c.poste || emp.poste)) bloquant("POSTE");
-  if (!ctx.lignes.some((l) => l.montant > 0)) bloquant("REMUNERATION");
+  if (!ctx.lignes.some((l) => l.montant > 0)) {
+    if (c.type === "STAGE") attention("STAGE_SANS_GRATIFICATION", "elements"); // un stage peut etre non gratifie
+    else bloquant("REMUNERATION");
+  }
+  if (c.type === "STAGE") {
+    if (!c.date_fin) bloquant("DATE_FIN_STAGE");
+    else if (c.date_effet && c.date_fin <= c.date_effet) bloquant("DATE_FIN_AVANT_EFFET");
+    if (!c.tuteur) attention("STAGE_TUTEUR", "tuteur");
+    if (!c.etablissement) attention("STAGE_ETABLISSEMENT", "etablissement");
+  }
   if (c.type === "CDD") {
     if (!c.date_fin) bloquant("DATE_FIN_CDD");
     else if (c.date_effet && c.date_fin <= c.date_effet) bloquant("DATE_FIN_AVANT_EFFET");
@@ -375,8 +449,8 @@ function avertissements(entete, emp, c, ctx) {
   if (!entete.signature_cachet_base64) attention("ENTETE_SIGNATURE_IMAGE");
   if (ctx.essaiMois > 6) attention("ESSAI_LONG", "periode_essai_mois", { valeur: ctx.essaiMois });
   if (Number(c.heures_hebdo) > 40) attention("HEURES_SUP", "heures_hebdo", { valeur: Number(c.heures_hebdo) });
-  if (!(c.convention || emp.convention_collective)) attention("CONVENTION", "convention");
-  if (!(c.categorie || emp.categorie)) attention("CATEGORIE", "categorie");
+  if (c.type !== "STAGE" && !(c.convention || emp.convention_collective)) attention("CONVENTION", "convention");
+  if (c.type !== "STAGE" && !(c.categorie || emp.categorie)) attention("CATEGORIE", "categorie");
   if (!emp.date_naissance || !emp.lieu_naissance) attention("NAISSANCE");
   if (!emp.adresse) attention("ADRESSE");
   if (!emp.pere_nom && !emp.mere_nom) attention("FILIATION");

@@ -6,6 +6,7 @@ const { requireAuth, requireModuleAny, exigerModulePaieActif } = require("../mid
 const { t } = require("../utils/i18n");
 const rhFiche = require("../services/rhFiche");
 const modeles = require("../services/rhContratModeles");
+const conventionsSvc = require("../services/rhConventions");
 const dmtSvc = require("../services/rhDmt");
 const { contratTravailPdf, dmtPdf } = require("../services/rhDocumentsPdf");
 const sig = require("../services/rhSignature");
@@ -23,7 +24,7 @@ const CHEMINS_PAIE = ["/modeles-contrats", "/contrats", "/dmt"];
 router.use(CHEMINS_PAIE, exigerModulePaieActif);
 router.use(CHEMINS_PAIE, requireModuleAny("rh", "paie", "paie-validation"));
 
-const TYPES_CONTRAT = ["CDI", "CDD", "JOURNALIER"];
+const TYPES_CONTRAT = ["CDI", "CDD", "JOURNALIER", "STAGE"];
 const dateOuNull = (v) => {
   if (v == null || v === "") return null;
   const s = String(v).slice(0, 10);
@@ -162,7 +163,7 @@ function champsContrat(body) {
       else v[k] = d;
     }
   }
-  for (const k of ["lieu_signature", "poste", "lieu_emploi", "convention", "categorie", "motif", "notes"]) {
+  for (const k of ["lieu_signature", "poste", "lieu_emploi", "convention", "categorie", "motif", "notes", "etablissement", "tuteur"]) {
     if (k in body) v[k] = body[k] == null || String(body[k]).trim() === "" ? null : String(body[k]).trim();
   }
   if ("periode_essai_mois" in body) {
@@ -198,6 +199,8 @@ function contratPourRedaction(row) {
     convention: row.convention,
     categorie: row.categorie,
     motif: row.motif,
+    etablissement: row.etablissement,
+    tuteur: row.tuteur,
     elements: row.elements_json || [],
   };
 }
@@ -226,6 +229,37 @@ async function composerContrat(tenantId, row) {
   };
 }
 
+// Liste deroulante convention -> categories (grille Paie a la date du contrat).
+router.get("/contrats/conventions", async (req, res) => {
+  try {
+    const conventions = await conventionsSvc.listerConventions(req.user.tenantId, req.query.date);
+    let selection = null;
+    if (req.query.employe_id) {
+      const e = await chargerEmploye(req.user.tenantId, req.query.employe_id);
+      if (e) selection = conventionsSvc.resoudre(conventions, e.emp.convention_collective, e.emp.categorie);
+    }
+    res.json({ conventions, selection });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_CONTRAT_ERREUR") });
+  }
+});
+
+// Salaire de base automatique (grille Paie) pour une convention / categorie.
+router.get("/contrats/composition", async (req, res) => {
+  try {
+    const c = await conventionsSvc.composition(req.user.tenantId, {
+      conventionId: req.query.convention_id || null,
+      categorieCode: req.query.categorie_code || null,
+      dateContrat: req.query.date,
+    });
+    res.json(c);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_CONTRAT_ERREUR") });
+  }
+});
+
 // Valeurs par defaut pour un nouveau contrat, a partir de la fiche employe.
 router.get("/contrats/prefill", async (req, res) => {
   try {
@@ -233,8 +267,19 @@ router.get("/contrats/prefill", async (req, res) => {
     const e = await chargerEmploye(req.user.tenantId, req.query.employe_id);
     if (!e) return res.status(404).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
     const emp = e.emp;
+    const date_contrat = new Date().toISOString().slice(0, 10);
+    const conventions = await conventionsSvc.listerConventions(req.user.tenantId, date_contrat);
+    const reso = conventionsSvc.resoudre(conventions, emp.convention_collective, emp.categorie);
+    // Stage : ni convention ni grille (gratification libre, saisie par l'utilisateur).
+    const compo = type !== "STAGE" && reso.convention_id && reso.categorie_code
+      ? await conventionsSvc.composition(req.user.tenantId, { conventionId: reso.convention_id, categorieCode: reso.categorie_code, dateContrat: date_contrat })
+      : null;
+    const conv = conventions.find((c) => c.id === reso.convention_id);
     res.json({
       employe_id: emp.id,
+      convention_id: type === "STAGE" ? "" : reso.convention_id || "",
+      categorie_code: type === "STAGE" ? "" : reso.categorie_code || "",
+      composition: compo,
       type,
       date_effet: emp.date_embauche ? String(emp.date_embauche).slice(0, 10) : "",
       date_fin: emp.date_fin_contrat ? String(emp.date_fin_contrat).slice(0, 10) : "",
@@ -242,12 +287,14 @@ router.get("/contrats/prefill", async (req, res) => {
       heures_hebdo: Number(emp.heures_hebdo) || 40,
       poste: emp.poste || "",
       lieu_emploi: emp.lieu_travail || "",
-      convention: emp.convention_collective || "",
-      categorie: emp.categorie || "",
+      convention: type === "STAGE" ? "" : conv ? conv.libelle : emp.convention_collective || "",
+      categorie: type === "STAGE" ? "" : reso.categorie_code ? (conv.categories.find((k) => k.code === reso.categorie_code) || {}).libelle || reso.categorie_code : emp.categorie || "",
       motif: "",
+      etablissement: "",
+      tuteur: "",
       lieu_signature: "Dakar",
-      date_contrat: new Date().toISOString().slice(0, 10),
-      elements: [{ libelle: "Salaire de base", montant: 0, essai: true }],
+      date_contrat,
+      elements: compo && compo.lignes.length ? compo.lignes : [{ libelle: type === "STAGE" ? "Gratification mensuelle" : "Salaire de base", montant: 0, essai: true }],
     });
   } catch (err) {
     console.error(err);

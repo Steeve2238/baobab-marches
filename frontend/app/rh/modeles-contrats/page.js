@@ -8,7 +8,7 @@ import AppShell from "../../../lib/components/AppShell";
 import PaieSousNav from "../../../lib/components/PaieSousNav";
 import { boutonPrincipal, boutonLeger, inputStyle, labelStyle, Section } from "../../../lib/components/rhUi";
 
-const TYPES = ["CDI", "CDD", "JOURNALIER"];
+const TYPES = ["CDI", "CDD", "JOURNALIER", "STAGE"];
 
 const versEditeur = (articles) =>
   articles.map((a) => ({ titre: a.titre, texte: (a.paragraphes || []).join("\n"), remuneration: !!a.remuneration, si: a.si === "ESSAI" }));

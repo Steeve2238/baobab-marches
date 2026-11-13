@@ -452,6 +452,54 @@ router.patch("/personnel/:id", async (req, res) => {
   }
 });
 
+// Tables portant l'historique d'un salarie : si l'une est renseignee, la fiche ne peut plus etre supprimee (archivage).
+const TABLES_HISTORIQUE = [
+  ["contrats", "rh_contrat"],
+  ["dmt", "rh_dmt"],
+  ["bulletins", "paie_bulletin"],
+  ["variables_paie", "paie_variable"],
+  ["demandes", "demande_rh"],
+  ["conges", "conge_historique"],
+  ["fiches_temps", "fiche_temps"],
+  ["courriers", "rh_courrier"],
+  ["affectations", "affectation_dossier"],
+];
+
+async function historiqueSalarie(tenantId, employeId) {
+  const details = {};
+  for (const [cle, table] of TABLES_HISTORIQUE) {
+    const existe = await db.query(`SELECT to_regclass($1) AS t`, [`public.${table}`]);
+    if (!existe.rows[0].t) continue;
+    const r = await db.query(`SELECT COUNT(*)::int AS n FROM ${table} WHERE employe_id = $1`, [employeId]);
+    if (r.rows[0].n > 0) details[cle] = r.rows[0].n;
+  }
+  return details;
+}
+
+// DELETE /api/rh/personnel/:id - suppression d'une fiche creee par erreur (sans aucun historique). Sinon : 409 + details,
+// et l'interface propose l'archivage (statut INACTIF + date de sortie), qui conserve tout l'historique.
+router.delete("/personnel/:id", requireModule("rh"), async (req, res) => {
+  try {
+    const r = await db.query(`SELECT id, utilisateur_id FROM employe WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenantId]);
+    if (r.rows.length === 0) return res.status(404).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
+    if (r.rows[0].utilisateur_id && r.rows[0].utilisateur_id === req.user.sub) {
+      return res.status(409).json({ error: t(req, "RH_PERSONNEL_SUPPR_SOI") });
+    }
+    const details = await historiqueSalarie(req.user.tenantId, req.params.id);
+    if (Object.keys(details).length > 0) {
+      return res.status(409).json({ error: t(req, "RH_PERSONNEL_SUPPR_HISTORIQUE"), code: "HISTORIQUE", details, archivage_possible: true });
+    }
+    await db.query(`DELETE FROM employe WHERE id = $1 AND tenant_id = $2`, [req.params.id, req.user.tenantId]);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === "23503") {
+      return res.status(409).json({ error: t(req, "RH_PERSONNEL_SUPPR_HISTORIQUE"), code: "HISTORIQUE", details: {}, archivage_possible: true });
+    }
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_PERSONNEL_SUPPR_ERROR") });
+  }
+});
+
 // PATCH /api/rh/personnel/:id/compte - lier ou delier un compte utilisateur ({ utilisateur_id } ou null).
 router.patch("/personnel/:id/compte", requireModule("rh"), async (req, res) => {
   try {

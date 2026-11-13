@@ -37,7 +37,7 @@ export default function ContratsPage() {
           ))}
         </select>
         <select value={type} onChange={(e) => setType(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
-          {["CDI", "CDD", "JOURNALIER"].map((x) => (
+          {["CDI", "CDD", "JOURNALIER", "STAGE"].map((x) => (
             <option key={x} value={x}>{t(`rhcType_${x}`)}</option>
           ))}
         </select>
