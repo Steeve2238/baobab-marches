@@ -6,6 +6,7 @@ const { v4: uuidv4 } = require("uuid");
 const { requireAuth, requireModule } = require("../middleware/auth");
 const { t, resolveLangue } = require("../utils/i18n");
 const rhFiche = require("../services/rhFiche");
+const conventionsSvc = require("../services/rhConventions");
 const rhImport = require("../services/rhImportFiche");
 const { chargerEntete } = require("../services/rhCommun");
 
@@ -118,6 +119,18 @@ async function enregistrerHistorique(tenantId, employeId, ancien, nouvellesValeu
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [uuidv4(), tenantId, employeId, champ, a, n, auteurId || null]
     );
+  }
+}
+
+// Convention / categorie choisies sur la fiche -> dossier de paie (module Paie actif). Ne remplace jamais un choix deja fait dans la paie.
+async function synchroPaie(req, employeId) {
+  const b = req.body || {};
+  if (!(req.user.permissions && req.user.permissions.paieActive) || !b.convention_id) return null;
+  try {
+    return await conventionsSvc.synchroniserDossierPaie(req.user.tenantId, employeId, { conventionId: b.convention_id, categorieCode: b.categorie_code || null }, req.user.sub);
+  } catch (err) {
+    console.error(err);
+    return { statut: "ERREUR" };
   }
 }
 
@@ -328,6 +341,18 @@ router.get("/personnel/utilisateurs-disponibles", requireModule("rh"), async (re
 });
 
 // GET /api/rh/personnel/:id - une fiche (module "rh"/ADMIN, ou la personne elle-meme)
+// GET /api/rh/personnel/conventions - listes deroulantes convention -> categories pour la fiche (module Paie actif seulement ;
+// sinon { actif: false } et la fiche garde des champs libres).
+router.get("/personnel/conventions", requireModule("rh"), async (req, res) => {
+  try {
+    if (!(req.user.permissions && req.user.permissions.paieActive)) return res.json({ actif: false, conventions: [] });
+    res.json({ actif: true, conventions: await conventionsSvc.listerConventions(req.user.tenantId) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: t(req, "RH_FICHE_NOT_FOUND") });
+  }
+});
+
 router.get("/personnel/:id", async (req, res) => {
   try {
     const result = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, req.params.id]);
@@ -389,8 +414,9 @@ router.post("/personnel", requireModule("rh"), async (req, res) => {
     await db.query(`INSERT INTO employe (${colonnes.join(", ")}) VALUES (${marques.join(", ")})`, params);
     if (enfants.length > 0) await remplacerEnfants(req.user.tenantId, id, enfants);
 
+    const paie_sync = await synchroPaie(req, id);
     const fiche = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, id]);
-    res.status(201).json(await composerFiche(req.user.tenantId, fiche.rows[0], true));
+    res.status(201).json({ ...(await composerFiche(req.user.tenantId, fiche.rows[0], true)), paie_sync });
   } catch (err) {
     if (err.code === "23505") {
       const matricule = String(err.constraint || "").includes("matricule");
@@ -443,8 +469,9 @@ router.patch("/personnel/:id", async (req, res) => {
       await remplacerEnfants(req.user.tenantId, req.params.id, enfants);
     }
 
+    const paie_sync = estRH ? await synchroPaie(req, req.params.id) : null;
     const fiche = await db.query(`${SELECT_FICHE} AND e.id = $2`, [req.user.tenantId, req.params.id]);
-    res.json(await composerFiche(req.user.tenantId, fiche.rows[0], estRH));
+    res.json({ ...(await composerFiche(req.user.tenantId, fiche.rows[0], estRH)), paie_sync });
   } catch (err) {
     if (err.code === "23505") return res.status(409).json({ error: t(req, "RH_MATRICULE_EXISTE") });
     console.error(err);

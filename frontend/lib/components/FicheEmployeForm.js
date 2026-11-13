@@ -1,5 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { api } from "../api";
+import { retrouver } from "../conventionsUtil";
+
+const LIBRE = "__libre__";
+
 // Description des sections du dossier employe. Les libelles viennent du dictionnaire (rhd_<champ>).
 const OPT = (prefix, values) => values.map((v) => ({ value: v, key: `${prefix}${v}` }));
 const SEXE = OPT("rhdOpt_", ["M", "F"]);
@@ -80,8 +86,8 @@ const SECTIONS = [
       ["qualification", "text"],
       ["service", "text"],
       ["lieu_travail", "text"],
-      ["convention_collective", "text"],
-      ["categorie", "text"],
+      ["convention_collective", "convention"],
+      ["categorie", "categorie"],
       ["echelon", "text"],
       ["classification", "select", { options: CLASSIF }],
       ["type_contrat", "contrat"],
@@ -136,6 +142,8 @@ export function formInitial(fiche) {
       v[name] = x;
     }
   }
+  v.convention_id = "";
+  v.categorie_code = "";
   if (!fiche) {
     v.nationalite = "Sénégalaise";
     v.nationalite_categorie = "S";
@@ -164,7 +172,12 @@ export function formVersCorps(form, { salarieSeul } = {}) {
       corps[name] = type === "number" && form[name] === "" ? null : form[name];
     }
   }
-  if (!salarieSeul) corps.enfants = form.enfants;
+  if (!salarieSeul) {
+    corps.enfants = form.enfants;
+    // Liste convention -> categorie (module Paie) : le serveur reporte le choix dans le dossier de paie.
+    corps.convention_id = form.convention_id || null;
+    corps.categorie_code = form.categorie_code || null;
+  }
   return corps;
 }
 
@@ -182,6 +195,43 @@ function enfantACharge(e, annee) {
 
 export default function FicheEmployeForm({ form, setForm, t, lectureSeule, salarieSeul }) {
   const maj = (name, valeur) => setForm((f) => ({ ...f, [name]: valeur }));
+  // Listes deroulantes convention -> categorie (uniquement si le module Paie est actif ; sinon champs libres).
+  const [conv, setConv] = useState({ actif: false, liste: [] });
+  const [libre, setLibre] = useState(false);
+  useEffect(() => {
+    if (salarieSeul) return undefined;
+    let vivant = true;
+    api.getPersonnelConventions().then((r) => { if (vivant) setConv({ actif: !!r.actif, liste: r.conventions || [] }); }).catch(() => {});
+    return () => { vivant = false; };
+  }, [salarieSeul]);
+  const aListes = conv.actif && conv.liste.length > 0;
+  const reso = form.convention_id
+    ? { convention_id: form.convention_id, categorie_code: form.categorie_code }
+    : aListes ? retrouver(conv.liste, form.convention_collective, form.categorie) : { convention_id: "", categorie_code: "" };
+  // Memorise dans le formulaire la convention retrouvee a partir du texte de la fiche (pour l'enregistrement).
+  useEffect(() => {
+    if (!aListes || form.convention_id || !reso.convention_id) return;
+    setForm((f) => (f.convention_id ? f : { ...f, convention_id: reso.convention_id, categorie_code: reso.categorie_code }));
+  }, [aListes, form.convention_id, reso.convention_id, reso.categorie_code]);
+  const convChoisie = conv.liste.find((c) => c.id === reso.convention_id) || null;
+  const catChoisie = convChoisie ? convChoisie.categories.find((k) => k.code === reso.categorie_code) || null : null;
+  const texteLibre = libre || (aListes && !reso.convention_id && Boolean(form.convention_collective));
+  const choisirConvention = (v) => {
+    if (v === LIBRE) { setLibre(true); setForm((f) => ({ ...f, convention_id: "", categorie_code: "" })); return; }
+    setLibre(false);
+    const c = conv.liste.find((x) => x.id === v);
+    setForm((f) => ({ ...f, convention_id: v, categorie_code: "", convention_collective: c ? c.libelle : "", categorie: "" }));
+  };
+  const choisirCategorie = (code) => {
+    const k = convChoisie && convChoisie.categories.find((x) => x.code === code);
+    setForm((f) => ({
+      ...f,
+      convention_id: convChoisie ? convChoisie.id : f.convention_id,
+      categorie_code: k ? k.code : "",
+      categorie: k ? k.libelle : "",
+      classification: k && CLASSIF.some((o) => o.value === k.classification) ? k.classification : f.classification,
+    }));
+  };
   const editable = (name) => {
     if (lectureSeule) return false;
     if (!salarieSeul) return true;
@@ -213,6 +263,37 @@ export default function FicheEmployeForm({ form, setForm, t, lectureSeule, salar
             <option key={o.value} value={o.value}>{t(o.key)}</option>
           ))}
         </select>
+      );
+    } else if (type === "convention" && aListes && !salarieSeul) {
+      input = (
+        <>
+          <select value={texteLibre ? LIBRE : reso.convention_id} onChange={(e) => choisirConvention(e.target.value)} {...base}>
+            <option value="">{t("rhcConventionChoisir")}</option>
+            {conv.liste.map((c) => (
+              <option key={c.id} value={c.id}>{c.libelle}</option>
+            ))}
+            <option value={LIBRE}>{t("rhcConventionLibre")}</option>
+          </select>
+          {texteLibre && (
+            <input value={form.convention_collective} onChange={(e) => maj("convention_collective", e.target.value)} {...base} style={{ ...inputStyle, marginTop: 6 }} />
+          )}
+        </>
+      );
+    } else if (type === "categorie" && aListes && !salarieSeul) {
+      input = texteLibre ? (
+        <input value={form.categorie} onChange={(e) => maj("categorie", e.target.value)} {...base} />
+      ) : (
+        <>
+          <select value={reso.categorie_code} onChange={(e) => choisirCategorie(e.target.value)} {...base} disabled={dis || !convChoisie}>
+            <option value="">{t("rhcCategorieChoisir")}</option>
+            {convChoisie && convChoisie.categories.map((k) => (
+              <option key={k.code} value={k.code}>{k.libelle}</option>
+            ))}
+          </select>
+          {catChoisie && (
+            <div style={{ fontSize: 11, color: "var(--sub)", marginTop: 3 }}>{t("rhdBaseGrille").replace("{montant}", Number(catChoisie.salaire_base).toLocaleString("fr-FR"))}</div>
+          )}
+        </>
       );
     } else if (type === "bool") {
       input = (

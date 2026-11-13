@@ -236,7 +236,7 @@ router.get("/contrats/conventions", async (req, res) => {
     let selection = null;
     if (req.query.employe_id) {
       const e = await chargerEmploye(req.user.tenantId, req.query.employe_id);
-      if (e) selection = conventionsSvc.resoudre(conventions, e.emp.convention_collective, e.emp.categorie);
+      if (e) selection = await conventionsSvc.selectionPourEmploye(req.user.tenantId, e.emp, conventions);
     }
     res.json({ conventions, selection });
   } catch (err) {
@@ -269,7 +269,7 @@ router.get("/contrats/prefill", async (req, res) => {
     const emp = e.emp;
     const date_contrat = new Date().toISOString().slice(0, 10);
     const conventions = await conventionsSvc.listerConventions(req.user.tenantId, date_contrat);
-    const reso = conventionsSvc.resoudre(conventions, emp.convention_collective, emp.categorie);
+    const reso = await conventionsSvc.selectionPourEmploye(req.user.tenantId, emp, conventions);
     // Stage : ni convention ni grille (gratification libre, saisie par l'utilisateur).
     const compo = type !== "STAGE" && reso.convention_id && reso.categorie_code
       ? await conventionsSvc.composition(req.user.tenantId, { conventionId: reso.convention_id, categorieCode: reso.categorie_code, dateContrat: date_contrat })
@@ -418,6 +418,33 @@ router.delete("/contrats/:id", async (req, res) => {
 });
 
 // Validation : fige le texte, appose la signature de l'employeur et passe le contrat a SIGNE_EMPLOYEUR.
+// Contrat valide -> fiche employe : type de contrat, fin de contrat, periode d'essai et horaire restent coherents avec le contrat
+// signe. La date d'embauche, la convention et la categorie ne sont volontairement pas touchees.
+async function synchroniserFicheDepuisContrat(tenantId, row, auteurId) {
+  const r = await db.query(`SELECT type_contrat, date_fin_contrat, periode_essai_mois, heures_hebdo FROM employe WHERE tenant_id = $1 AND id = $2`, [tenantId, row.employe_id]);
+  if (!r.rows.length) return;
+  const avant = r.rows[0];
+  const jour = (d) => (d ? (d instanceof Date ? d.toISOString() : String(d)).slice(0, 10) : null);
+  const stage = row.type === "STAGE";
+  const apres = {
+    type_contrat: row.type,
+    date_fin_contrat: row.type === "CDD" || stage ? jour(row.date_fin) : null,
+    periode_essai_mois: stage || row.periode_essai_mois == null ? null : row.periode_essai_mois,
+    heures_hebdo: row.heures_hebdo != null ? Number(row.heures_hebdo) : avant.heures_hebdo,
+  };
+  const texte = (champ, v) => (v == null ? null : champ === "date_fin_contrat" ? jour(v) : champ === "heures_hebdo" ? String(Number(v)) : String(v));
+  for (const champ of Object.keys(apres)) {
+    const a = texte(champ, avant[champ]);
+    const n = texte(champ, apres[champ]);
+    if (a === n) continue;
+    await db.query(`UPDATE employe SET ${champ} = $3 WHERE tenant_id = $1 AND id = $2`, [tenantId, row.employe_id, apres[champ]]);
+    await db.query(
+      `INSERT INTO employe_historique (id, tenant_id, employe_id, champ, ancienne_valeur, nouvelle_valeur, modifie_par) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [uuidv4(), tenantId, row.employe_id, champ, a, n, auteurId || null]
+    );
+  }
+}
+
 router.post("/contrats/:id/valider", async (req, res) => {
   try {
     const row = await chargerContrat(req, res);
@@ -435,6 +462,7 @@ router.post("/contrats/:id/valider", async (req, res) => {
       [JSON.stringify(contenu), empreinte, req.user.sub, row.id]
     );
     await sig.journaliser(req.user.tenantId, row.id, "SIGNE_EMPLOYEUR", "SIGNE_EMPLOYEUR", req.user.sub, sig.ipDe(req), { empreinte });
+    try { await synchroniserFicheDepuisContrat(req.user.tenantId, row, req.user.sub); } catch (e) { console.error("synchro fiche depuis contrat :", e); }
     const maj = (await db.query(`SELECT * FROM rh_contrat WHERE id = $1`, [row.id])).rows[0];
     res.json(await composerContrat(req.user.tenantId, maj));
   } catch (err) {

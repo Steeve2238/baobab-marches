@@ -434,6 +434,7 @@ export const api = {
   createFicheEmploye: (data) => request("/rh/personnel", { method: "POST", body: JSON.stringify(data) }),
   patchFicheEmploye: (id, data) =>
     request(`/rh/personnel/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  getPersonnelConventions: () => request("/rh/personnel/conventions"),
   supprimerFicheEmploye: (id) => request(`/rh/personnel/${id}`, { method: "DELETE" }),
   // RH lot 2 : contrats de travail, modeles, DMT
   getModelesContrats: () => request("/rh/modeles-contrats"),

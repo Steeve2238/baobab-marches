@@ -22,6 +22,7 @@ export default function FicheEmployePage() {
   const [courriers, setCourriers] = useState([]);
   const [dmts, setDmts] = useState([]);
   const [paieActive, setPaieActive] = useState(false);
+  const [avertPaie, setAvertPaie] = useState(null);
 
   function appliquer(f) {
     setFiche(f);
@@ -42,10 +43,13 @@ export default function FicheEmployePage() {
     setEnCours(true);
     setMessage("");
     setErreur("");
+    setAvertPaie(null);
     try {
       const maj = await api.patchFicheEmploye(id, formVersCorps(form, { salarieSeul: estSalarieSeul }));
       appliquer(maj);
-      setMessage(t("rhdEnregistre"));
+      const ps = maj.paie_sync;
+      setMessage(ps && ps.statut === "OK" ? `${t("rhdEnregistre")} ${t("rhdPaieSyncOk")}` : t("rhdEnregistre"));
+      setAvertPaie(ps && ps.statut === "CONFLIT" ? ps.paie : null);
     } catch (err) {
       setErreur(err.message);
     } finally {
@@ -92,6 +96,12 @@ export default function FicheEmployePage() {
 
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
       {message && <p style={{ color: "var(--petrol)", fontSize: 12.5, marginBottom: 14 }}>{message}</p>}
+      {avertPaie && (
+        <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>
+          {t("rhdPaieSyncConflit").replace("{convention}", avertPaie.convention || "—").replace("{categorie}", avertPaie.categorie || "—")}{" "}
+          <Link href={`/paie/dossiers/${id}`} style={{ color: "var(--petrol)", fontWeight: 600 }}>{t("rhdPaieSyncLien")} →</Link>
+        </p>
+      )}
 
       <div style={{ maxWidth: 980, display: "grid", gap: 16 }}>
         <div className="card" style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
