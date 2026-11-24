@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../../../lib/rechercheUtil";
 import AppShell from "../../../../lib/components/AppShell";
 import ConsultationRestreinteSousNav from "../../../../lib/components/ConsultationRestreinteSousNav";
 
@@ -31,29 +33,39 @@ export default function FacturesVentePage() {
   const [filtre, setFiltre] = useState("IMPAYEE");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
+  const [recherche, setRecherche] = useState("");
+  // Une recherche porte sur tous les statuts.
+  const filtreEffectif = recherche.trim() ? "TOUTES" : filtre;
 
   useEffect(() => {
     setChargement(true);
     api
-      .getFacturesVente(filtre === "TOUTES" ? undefined : filtre)
+      .getFacturesVente(filtreEffectif === "TOUTES" ? undefined : filtreEffectif)
       .then(setFactures)
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false));
-  }, [filtre]);
+  }, [filtreEffectif]);
+
+  const affichees = useMemo(
+    () => filtrerRecherche(factures, recherche, (f) => [f.numero, numeroAffiche(f.numero, f.mois_emission), f.client_nom, f.reference_bc_client, f.total_ttc, t(`venteFactureStatut_${f.statut}`)]),
+    [factures, recherche, t]
+  );
 
   return (
     <AppShell title={t("venteFacturesPageTitle")} subNav={<ConsultationRestreinteSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
+      <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderFactures")} total={factures.length} affiche={affichees.length} note={filtre !== "TOUTES" ? t("rechToutesSituations") : ""} />
+
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {FILTRES.map((f) => (
           <button
             key={f}
-            onClick={() => setFiltre(f)}
+            onClick={() => { setFiltre(f); setRecherche(""); }}
             style={{
               ...filtreBtnStyle,
-              background: filtre === f ? "var(--petrol)" : "transparent",
-              color: filtre === f ? "#fff" : "var(--petrol)",
+              background: filtreEffectif === f ? "var(--petrol)" : "transparent",
+              color: filtreEffectif === f ? "#fff" : "var(--petrol)",
             }}
           >
             {f === "TOUTES" ? t("saFilterAll") : t(`venteFactureStatut_${f}`)}
@@ -65,9 +77,11 @@ export default function FacturesVentePage() {
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
       ) : factures.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("venteNoInvoices")}</p>
+      ) : affichees.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
-          {factures.map((f) => {
+          {affichees.map((f) => {
             const style = STATUT_STYLE[f.statut] || {};
             return (
               <Link key={f.id} href={`/marches/consultation-restreinte/factures/${f.id}`} style={{ textDecoration: "none", color: "inherit" }}>

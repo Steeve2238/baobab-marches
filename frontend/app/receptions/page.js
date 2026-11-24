@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../lib/rechercheUtil";
 import AppShell from "../../lib/components/AppShell";
 
 // Liste des receptions de marchandises (facture fournisseur -> articles + stock).
@@ -14,21 +16,31 @@ export default function ReceptionsPage() {
   const [statut, setStatut] = useState("");
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
+  const [recherche, setRecherche] = useState("");
+  // Une recherche porte sur toutes les receptions, quel que soit le statut choisi.
+  const statutEffectif = recherche.trim() ? "" : statut;
 
   useEffect(() => {
     setChargement(true);
     api
-      .getReceptions(statut ? { statut } : {})
+      .getReceptions(statutEffectif ? { statut: statutEffectif } : {})
       .then(setReceptions)
       .catch((err) => setErreur(err.message || t("defaultLoadError")))
       .finally(() => setChargement(false));
-  }, [statut, t]);
+  }, [statutEffectif, t]);
+
+  const affichees = useMemo(
+    () => filtrerRecherche(receptions, recherche, (r) => [r.numero, r.fournisseur_nom, r.commande_numero, r.reference_facture, r.total_devise, r.total_xof, r.devise, t(`receptionsStatut${r.statut}`)]),
+    [receptions, recherche, t]
+  );
 
   return (
     <AppShell title={t("receptionsTitle")}>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 12 }}>{t("receptionsSubtitle")}</p>
+      <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderReceptions")} total={receptions.length} affiche={affichees.length} note={statut ? t("rechToutesSituations") : ""} />
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
-        <select value={statut} onChange={(e) => setStatut(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
+        <select value={statut} onChange={(e) => { setStatut(e.target.value); setRecherche(""); }} style={{ ...inputStyle, width: "auto" }}>
           <option value="">{t("receptionsFiltreTous")}</option>
           {["BROUILLON", "VALIDEE", "ANNULEE"].map((s) => (
             <option key={s} value={s}>
@@ -49,6 +61,8 @@ export default function ReceptionsPage() {
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
       ) : receptions.length === 0 ? (
         <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("receptionsVide")}</p>
+      ) : affichees.length === 0 ? (
+        <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>
       ) : (
         <div className="card" style={{ overflowX: "auto", padding: 0 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 900 }}>
@@ -66,7 +80,7 @@ export default function ReceptionsPage() {
               </tr>
             </thead>
             <tbody>
-              {receptions.map((r) => (
+              {affichees.map((r) => (
                 <tr key={r.id} style={{ borderTop: "1px solid var(--line)" }}>
                   <td className="mono" style={tdStyle}>
                     <Link href={`/receptions/${r.id}`} style={{ color: "var(--petrol)", fontWeight: 600 }}>

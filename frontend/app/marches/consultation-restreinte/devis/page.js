@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, estAdmin, getUtilisateurCourant } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../../../lib/rechercheUtil";
 import AppShell from "../../../../lib/components/AppShell";
 import ConsultationRestreinteSousNav from "../../../../lib/components/ConsultationRestreinteSousNav";
 
@@ -30,17 +32,25 @@ export default function DevisListePage() {
   const [filtre, setFiltre] = useState("TOUTES");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
+  const [recherche, setRecherche] = useState("");
+  // Une recherche porte sur tous les statuts.
+  const filtreEffectif = recherche.trim() ? "TOUTES" : filtre;
   const [permissions, setPermissions] = useState(null);
   const [suppressionEnCours, setSuppressionEnCours] = useState(null);
 
   useEffect(() => {
     setChargement(true);
     api
-      .getDevisListe(filtre === "TOUTES" ? undefined : filtre)
+      .getDevisListe(filtreEffectif === "TOUTES" ? undefined : filtreEffectif)
       .then(setDevisListe)
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false));
-  }, [filtre]);
+  }, [filtreEffectif]);
+
+  const affiches = useMemo(
+    () => filtrerRecherche(devisListe, recherche, (d) => [d.numero, d.client_nom, d.objet, d.reference_bc_client, d.total_ttc, t(`venteDevisStatut_${d.statut}`)]),
+    [devisListe, recherche, t]
+  );
 
   useEffect(() => {
     api.getPermissions().then(setPermissions).catch(() => {});
@@ -72,16 +82,18 @@ export default function DevisListePage() {
     <AppShell title={t("venteDevisPageTitle")} subNav={<ConsultationRestreinteSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
+      <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderDevis")} total={devisListe.length} affiche={affiches.length} note={filtre !== "TOUTES" ? t("rechToutesSituations") : ""} />
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {FILTRES.map((f) => (
             <button
               key={f}
-              onClick={() => setFiltre(f)}
+              onClick={() => { setFiltre(f); setRecherche(""); }}
               style={{
                 ...filtreBtnStyle,
-                background: filtre === f ? "var(--petrol)" : "transparent",
-                color: filtre === f ? "#fff" : "var(--petrol)",
+                background: filtreEffectif === f ? "var(--petrol)" : "transparent",
+                color: filtreEffectif === f ? "#fff" : "var(--petrol)",
               }}
             >
               {f === "TOUTES" ? t("saFilterAll") : t(`venteDevisStatut_${f}`)}
@@ -102,9 +114,11 @@ export default function DevisListePage() {
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
       ) : devisListe.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("venteNoDevis")}</p>
+      ) : affiches.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
-          {devisListe.map((d) => {
+          {affiches.map((d) => {
             const style = STATUT_STYLE[d.statut] || {};
             return (
               <div key={d.id} className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>

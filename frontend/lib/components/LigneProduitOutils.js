@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import ProduitRecherche from "./ProduitRecherche";
 import { useLangue } from "../i18n/LanguageContext";
 import { analyserSaisiePrix, champsLigneDepuisProduit, margeEffectiveLigne, prixVenteDepuisCout } from "../prixLigne";
 
@@ -41,8 +42,7 @@ export default function LigneProduitOutils({ ligne, onPatch }) {
   const marge = margeEffectiveLigne(ligne);
   const [margeSaisie, setMargeSaisie] = useState(null);
 
-  function choisir(e) {
-    const produit = produits.find((p) => p.id === e.target.value);
+  function choisir(produit) {
     if (produit) {
       setMargeSaisie(null);
       onPatch(champsLigneDepuisProduit(produit));
@@ -67,16 +67,7 @@ export default function LigneProduitOutils({ ligne, onPatch }) {
   return (
     <div style={{ marginTop: 4, display: "grid", gap: 4 }}>
       {produits.length > 0 && (
-        <select value="" onChange={choisir} style={selectStyle} aria-label={t("venteProduitChoisir")}>
-          <option value="">{t("venteProduitChoisir")}</option>
-          {produits.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.reference ? `${p.reference} · ` : ""}
-              {p.designation} — {Number(p.prix_vente_xof).toLocaleString()}
-              {p.stock_quantite !== undefined ? ` · ${t("produitsColStock")} ${Number(p.stock_quantite).toLocaleString()}` : ""}
-            </option>
-          ))}
-        </select>
+        <ProduitRecherche produits={produits} onChoisir={choisir} />
       )}
       {lie && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 11.5, color: "var(--sub)" }}>

@@ -33,6 +33,7 @@ import { RHE_FR, RHE_EN } from "./rhEspaceDictionary";
 import { RHK_FR, RHK_EN } from "./rhCourriersDictionary";
 import { PAIEK_FR, PAIEK_EN } from "./paieDictionary";
 import { PAIE2_FR, PAIE2_EN } from "./paie2Dictionary";
+import { RECH_FR, RECH_EN } from "./rechercheDictionary";
 
 export const DICTIONARIES = {
   fr: {
@@ -4200,3 +4201,5 @@ Object.assign(DICTIONARIES.en, AVO_EN);
 Object.assign(DICTIONARIES.en, IMP_EN);
 Object.assign(DICTIONARIES.en, REM_EN);
 Object.assign(DICTIONARIES.en, CST_EN);
+Object.assign(DICTIONARIES.fr, RECH_FR);
+Object.assign(DICTIONARIES.en, RECH_EN);

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../../../lib/rechercheUtil";
 import AppShell from "../../../../lib/components/AppShell";
 import ConsultationRestreinteSousNav from "../../../../lib/components/ConsultationRestreinteSousNav";
 
@@ -28,29 +30,39 @@ export default function BlListePage() {
   const [filtre, setFiltre] = useState("BROUILLON");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
+  const [recherche, setRecherche] = useState("");
+  // Une recherche porte sur tous les statuts.
+  const filtreEffectif = recherche.trim() ? "TOUTES" : filtre;
 
   useEffect(() => {
     setChargement(true);
     api
-      .getBlListe(filtre === "TOUTES" ? undefined : filtre)
+      .getBlListe(filtreEffectif === "TOUTES" ? undefined : filtreEffectif)
       .then(setBlListe)
       .catch((err) => setErreur(err.message))
       .finally(() => setChargement(false));
-  }, [filtre]);
+  }, [filtreEffectif]);
+
+  const affiches = useMemo(
+    () => filtrerRecherche(blListe, recherche, (b) => [b.numero, `BL-${numeroAffiche(b.numero, b.mois_emission)}`, numeroAffiche(b.numero, b.mois_emission), b.client_nom, b.facture_numero, numeroAffiche(b.facture_numero, b.mois_emission), t(`venteBlStatut_${b.statut}`)]),
+    [blListe, recherche, t]
+  );
 
   return (
     <AppShell title={t("venteBlPageTitle")} subNav={<ConsultationRestreinteSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
 
+      <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderBl")} total={blListe.length} affiche={affiches.length} note={filtre !== "TOUTES" ? t("rechToutesSituations") : ""} />
+
       <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
         {FILTRES.map((f) => (
           <button
             key={f}
-            onClick={() => setFiltre(f)}
+            onClick={() => { setFiltre(f); setRecherche(""); }}
             style={{
               ...filtreBtnStyle,
-              background: filtre === f ? "var(--petrol)" : "transparent",
-              color: filtre === f ? "#fff" : "var(--petrol)",
+              background: filtreEffectif === f ? "var(--petrol)" : "transparent",
+              color: filtreEffectif === f ? "#fff" : "var(--petrol)",
             }}
           >
             {f === "TOUTES" ? t("saFilterAll") : t(`venteBlStatut_${f}`)}
@@ -62,9 +74,11 @@ export default function BlListePage() {
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
       ) : blListe.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("venteNoBl")}</p>
+      ) : affiches.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
-          {blListe.map((bl) => {
+          {affiches.map((bl) => {
             const style = STATUT_STYLE[bl.statut] || {};
             return (
               <Link key={bl.id} href={`/marches/consultation-restreinte/bl/${bl.id}`} style={{ textDecoration: "none", color: "inherit" }}>

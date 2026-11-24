@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../lib/rechercheUtil";
 import AppShell from "../../lib/components/AppShell";
 
 // Liste des livraisons de dossier d'appel d'offres (Lot 5, 05/10/2026).
@@ -14,21 +16,31 @@ export default function LivraisonsDossierPage() {
   const [statut, setStatut] = useState("");
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
+  const [recherche, setRecherche] = useState("");
+  // Une recherche porte sur toutes les livraisons, quel que soit le statut choisi.
+  const statutEffectif = recherche.trim() ? "" : statut;
 
   useEffect(() => {
     setChargement(true);
     api
-      .getLivraisonsDossier(statut ? { statut } : {})
+      .getLivraisonsDossier(statutEffectif ? { statut: statutEffectif } : {})
       .then(setListe)
       .catch((e) => setErreur(e.message))
       .finally(() => setChargement(false));
-  }, [statut]);
+  }, [statutEffectif]);
+
+  const affichees = useMemo(
+    () => filtrerRecherche(liste, recherche, (l) => [l.numero, l.dossier_reference, l.dossier_intitule, t(`livStatut${l.statut}`)]),
+    [liste, recherche, t]
+  );
 
   return (
     <AppShell title={t("livTitle")}>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 12 }}>{t("livSubtitle")}</p>
+      <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderLivraisons")} total={liste.length} affiche={affichees.length} note={statut ? t("rechToutesSituations") : ""} />
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
-        <select value={statut} onChange={(e) => setStatut(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
+        <select value={statut} onChange={(e) => { setStatut(e.target.value); setRecherche(""); }} style={{ ...inputStyle, width: "auto" }}>
           <option value="">{t("receptionsFiltreTous")}</option>
           {["BROUILLON", "LIVREE", "ANNULEE"].map((s) => (
             <option key={s} value={s}>{t(`livStatut${s}`)}</option>
@@ -42,6 +54,8 @@ export default function LivraisonsDossierPage() {
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
       ) : liste.length === 0 ? (
         <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("livVide")}</p>
+      ) : affichees.length === 0 ? (
+        <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>
       ) : (
         <div className="card" style={{ overflowX: "auto", padding: 0 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 720 }}>
@@ -55,7 +69,7 @@ export default function LivraisonsDossierPage() {
               </tr>
             </thead>
             <tbody>
-              {liste.map((l) => (
+              {affichees.map((l) => (
                 <tr key={l.id} style={{ borderTop: "1px solid var(--line)" }}>
                   <td className="mono" style={tdStyle}>
                     <Link href={`/livraisons-dossier/${l.id}`} style={{ color: "var(--petrol)", fontWeight: 600 }}>{l.numero}</Link>

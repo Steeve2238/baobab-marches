@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../lib/rechercheUtil";
 import AppShell from "../../lib/components/AppShell";
 
 const FORM_VIDE = { nom: "", prenom: "", email: "", role_ids: [] };
@@ -17,6 +19,7 @@ export default function UtilisateursPage() {
   const [utilisateurs, setUtilisateurs] = useState([]);
   const [roles, setRoles] = useState([]);
   const [erreur, setErreur] = useState("");
+  const [recherche, setRecherche] = useState("");
   const [form, setForm] = useState(FORM_VIDE);
   const [motDePasseAffiche, setMotDePasseAffiche] = useState(null); // { nom, mot_de_passe }
   const [enEditionRoles, setEnEditionRoles] = useState(null); // id de l'utilisateur en cours d'edition
@@ -116,6 +119,8 @@ export default function UtilisateursPage() {
     }
   }
 
+  const utilisateursAffiches = filtrerRecherche(utilisateurs, recherche, (u) => [u.prenom, u.nom, `${u.prenom} ${u.nom}`, u.email, ...(Array.isArray(u.roles) ? u.roles.map((r) => r.nom || r.code) : [])]);
+
   return (
     <AppShell title={t("usersPageTitle")}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
@@ -196,8 +201,11 @@ export default function UtilisateursPage() {
       {utilisateurs.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("noUsers")}</p>
       ) : (
+        <>
+        <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderUtilisateurs")} total={utilisateurs.length} affiche={utilisateursAffiches.length} />
+        {utilisateursAffiches.length === 0 && <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>}
         <div style={{ display: "grid", gap: 8 }}>
-          {utilisateurs.map((utilisateur) => (
+          {utilisateursAffiches.map((utilisateur) => (
             <div key={utilisateur.id} className="card" style={{ display: "grid", gap: 6 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                 <div>
@@ -276,6 +284,7 @@ export default function UtilisateursPage() {
             </div>
           ))}
         </div>
+        </>
       )}
     </AppShell>
   );

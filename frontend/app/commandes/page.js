@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../lib/rechercheUtil";
 import AppShell from "../../lib/components/AppShell";
 import { libelleDossier } from "../../lib/commandes";
 
@@ -16,22 +18,32 @@ export default function CommandesPage() {
   const [filtre, setFiltre] = useState("");
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState("");
+  const [recherche, setRecherche] = useState("");
+  // Une recherche porte sur toutes les commandes, quel que soit le filtre choisi.
+  const filtreEffectif = recherche.trim() ? "" : filtre;
 
   useEffect(() => {
     setChargement(true);
-    const params = filtre === "A_RECEVOIR" ? { a_recevoir: "1" } : filtre ? { statut: filtre } : {};
+    const params = filtreEffectif === "A_RECEVOIR" ? { a_recevoir: "1" } : filtreEffectif ? { statut: filtreEffectif } : {};
     api
       .getCommandes(params)
       .then(setListe)
       .catch((e) => setErreur(e.message))
       .finally(() => setChargement(false));
-  }, [filtre]);
+  }, [filtreEffectif]);
+
+  const affichees = useMemo(
+    () => filtrerRecherche(liste, recherche, (c) => [c.numero, c.fournisseur_nom, libelleDossier(c, t), c.total_devise, c.total_xof, c.devise, c.reference_fournisseur, c.incoterm, t(`cmdStatut${c.statut}`)]),
+    [liste, recherche, t]
+  );
 
   return (
     <AppShell title={t("cmdTitle")}>
       <p style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 12 }}>{t("cmdSubtitle")}</p>
+      <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderCommandes")} total={liste.length} affiche={affichees.length} note={filtre ? t("rechToutesSituations") : ""} />
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
-        <select value={filtre} onChange={(e) => setFiltre(e.target.value)} style={{ ...inputStyle, width: "auto" }}>
+        <select value={filtre} onChange={(e) => { setFiltre(e.target.value); setRecherche(""); }} style={{ ...inputStyle, width: "auto" }}>
           <option value="">{t("cmdFiltreTous")}</option>
           <option value="A_RECEVOIR">{t("cmdARecevoir")}</option>
           {["BROUILLON", "CONFIRMEE", "ANNULEE"].map((s) => (
@@ -46,6 +58,8 @@ export default function CommandesPage() {
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
       ) : liste.length === 0 ? (
         <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("cmdVide")}</p>
+      ) : affichees.length === 0 ? (
+        <p className="card" style={{ fontSize: 13, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>
       ) : (
         <div className="card" style={{ overflowX: "auto", padding: 0 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 900 }}>
@@ -62,7 +76,7 @@ export default function CommandesPage() {
               </tr>
             </thead>
             <tbody>
-              {liste.map((c) => (
+              {affichees.map((c) => (
                 <tr key={c.id} style={{ borderTop: "1px solid var(--line)" }}>
                   <td className="mono" style={tdStyle}>
                     <Link href={`/commandes/${c.id}`} style={{ color: "var(--petrol)", fontWeight: 600 }}>{c.numero}</Link>

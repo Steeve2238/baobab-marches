@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "../../../../lib/api";
 import { useLangue } from "../../../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../../../lib/rechercheUtil";
 import AppShell from "../../../../lib/components/AppShell";
 import ConsultationRestreinteSousNav from "../../../../lib/components/ConsultationRestreinteSousNav";
 import { useProfilActivite } from "../../../../lib/useProfilActivite";
@@ -35,6 +37,9 @@ export default function ConsultationsPage() {
   const [filtre, setFiltre] = useState("RECUE");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
+  const [recherche, setRecherche] = useState("");
+  // Une recherche porte sur tous les statuts.
+  const filtreEffectif = recherche.trim() ? "TOUTES" : filtre;
   const [form, setForm] = useState({ client_commercial_id: "", objet: "", notes: "", type: "CONSULTATION" });
   const [afficherForm, setAfficherForm] = useState(false);
 
@@ -52,7 +57,7 @@ export default function ConsultationsPage() {
   useEffect(() => {
     if (typeListe === "VENTE" && filtre === "RECUE") setFiltre("DEVIS_EN_COURS");
   }, [profil, typeUrl]);
-  useEffect(() => charger(filtre), [filtre, profil, typeUrl]);
+  useEffect(() => charger(filtreEffectif), [filtreEffectif, profil, typeUrl]);
   useEffect(() => {
     api.getClientsCommerciaux().then((data) => setClients(data.filter((c) => c.actif))).catch(() => {});
     // Arrivee depuis la fiche d'un client (« Nouvelle vente ») : formulaire ouvert avec le client prerempli.
@@ -81,7 +86,7 @@ export default function ConsultationsPage() {
     setErreur("");
     try {
       const nouvelle = await api.createConsultation({ ...form, type: typeCreation });
-      if (filtre === "TOUTES" || filtre === nouvelle.statut) {
+      if (filtreEffectif === "TOUTES" || filtre === nouvelle.statut) {
         setConsultations((prev) => [nouvelle, ...prev]);
       }
       setForm({ client_commercial_id: "", objet: "", notes: "", type: "CONSULTATION" });
@@ -97,26 +102,33 @@ export default function ConsultationsPage() {
   async function handleSansSuite(id) {
     try {
       const maj = await api.patchConsultation(id, { statut: "SANS_SUITE" });
-      setConsultations((prev) => (filtre === "TOUTES" ? prev.map((c) => (c.id === id ? maj : c)) : prev.filter((c) => c.id !== id)));
+      setConsultations((prev) => (filtreEffectif === "TOUTES" ? prev.map((c) => (c.id === id ? maj : c)) : prev.filter((c) => c.id !== id)));
     } catch (err) {
       setErreur(err.message);
     }
   }
 
+  const affichees = useMemo(
+    () => filtrerRecherche(consultations, recherche, (c) => [c.reference, c.numero, c.client_nom, c.objet, c.notes, t(`venteConsultationStatut_${c.statut}`)]),
+    [consultations, recherche, t]
+  );
+
   return (
     <AppShell title={t(profil === "NEGOCE" ? "venteVentesPageTitle" : "venteConsultationsPageTitle")} subNav={<ConsultationRestreinteSousNav />}>
       {erreur && <p style={{ color: "var(--brique)", fontSize: 12.5, marginBottom: 14 }}>{erreur}</p>}
+
+      <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderConsultations")} total={consultations.length} affiche={affichees.length} note={filtre !== "TOUTES" ? t("rechToutesSituations") : ""} />
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {filtresDispo.map((f) => (
             <button
               key={f}
-              onClick={() => setFiltre(f)}
+              onClick={() => { setFiltre(f); setRecherche(""); }}
               style={{
                 ...filtreBtnStyle,
-                background: filtre === f ? "var(--petrol)" : "transparent",
-                color: filtre === f ? "#fff" : "var(--petrol)",
+                background: filtreEffectif === f ? "var(--petrol)" : "transparent",
+                color: filtreEffectif === f ? "#fff" : "var(--petrol)",
               }}
             >
               {f === "TOUTES" ? t("saFilterAll") : t(`${profil === "NEGOCE" ? "venteVenteStatut_" : "venteConsultationStatut_"}${f}`)}
@@ -178,9 +190,11 @@ export default function ConsultationsPage() {
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("loading")}</p>
       ) : consultations.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t(profil === "NEGOCE" ? "venteNoVentes" : "venteNoConsultations")}</p>
+      ) : affichees.length === 0 ? (
+        <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>
       ) : (
         <div style={{ display: "grid", gap: 8 }}>
-          {consultations.map((c) => {
+          {affichees.map((c) => {
             const style = STATUT_STYLE[c.statut] || {};
             const vente = c.type === "VENTE";
             return (

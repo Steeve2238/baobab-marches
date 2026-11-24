@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../lib/api";
 import { useLangue } from "../../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../../lib/rechercheUtil";
 import EcheancierEditor, { EcheancierFiche } from "../../../lib/components/EcheancierEditor";
 import { echeancierValide, pourApi } from "../../../lib/echeancier";
 import AppShell from "../../../lib/components/AppShell";
@@ -16,6 +18,7 @@ export default function ClientsCommerciauxPage() {
   const [clients, setClients] = useState([]);
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(true);
+  const [recherche, setRecherche] = useState("");
   const [form, setForm] = useState({ nom: "", adresse: "", telephone: "", email: "", echeancier: [] });
 
   function charger() {
@@ -52,6 +55,8 @@ export default function ClientsCommerciauxPage() {
       setErreur(err.message);
     }
   }
+
+  const clientsAffiches = filtrerRecherche(clients, recherche, (c) => [c.nom, c.adresse, c.telephone, c.email]);
 
   return (
     <AppShell title={t("venteClientsPageTitle")} subNav={<VentesSousNav />}>
@@ -102,8 +107,11 @@ export default function ClientsCommerciauxPage() {
       ) : clients.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("venteNoClients")}</p>
       ) : (
+        <>
+        <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderClients")} total={clients.length} affiche={clientsAffiches.length} />
+        {clientsAffiches.length === 0 && <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>}
         <div style={{ display: "grid", gap: 8 }}>
-          {clients.map((c) => (
+          {clientsAffiches.map((c) => (
             <div key={c.id} className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
@@ -141,6 +149,7 @@ export default function ClientsCommerciauxPage() {
             </div>
           ))}
         </div>
+        </>
       )}
     </AppShell>
   );

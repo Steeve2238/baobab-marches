@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../lib/api";
 import { useLangue } from "../../lib/i18n/LanguageContext";
+import BarreRecherche from "../../lib/components/BarreRecherche";
+import { filtrerRecherche } from "../../lib/rechercheUtil";
 import AppShell from "../../lib/components/AppShell";
 import { PAYS } from "../../lib/constants/pays";
 import EcheancierEditor, { PastilleARenseigner } from "../../lib/components/EcheancierEditor";
@@ -13,6 +15,7 @@ export default function FournisseursPage() {
   const [edition, setEdition] = useState(null); // { id, echeancier }
   const [fournisseurs, setFournisseurs] = useState([]);
   const [erreur, setErreur] = useState("");
+  const [recherche, setRecherche] = useState("");
   const [form, setForm] = useState({ nom: "", pays: "", echeancier: [] });
 
   useEffect(() => {
@@ -50,6 +53,10 @@ export default function FournisseursPage() {
     }
   }
 
+  const fournisseursAffiches = useMemo(
+    () => filtrerRecherche(fournisseurs, recherche, (f) => [f.nom, f.pays, f.contact_nom, f.telephone, f.email, f.adresse]),
+    [fournisseurs, recherche]
+  );
   const nbSansEcheancier = fournisseurs.filter((f) => !Array.isArray(f.echeancier_json) || f.echeancier_json.length === 0).length;
 
   return (
@@ -92,8 +99,11 @@ export default function FournisseursPage() {
       {fournisseurs.length === 0 ? (
         <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("noSuppliers")}</p>
       ) : (
+        <>
+        <BarreRecherche valeur={recherche} onChange={setRecherche} placeholder={t("rechPlaceholderFournisseurs")} total={fournisseurs.length} affiche={fournisseursAffiches.length} />
+        {fournisseursAffiches.length === 0 && <p style={{ fontSize: 12.5, color: "var(--sub)" }}>{t("rechAucunResultat").replace("{q}", recherche)}</p>}
         <div style={{ display: "grid", gap: 8 }}>
-          {fournisseurs.map((f) => {
+          {fournisseursAffiches.map((f) => {
             const ech = Array.isArray(f.echeancier_json) && f.echeancier_json.length > 0 ? f.echeancier_json : null;
             const enEdition = edition && edition.id === f.id;
             return (
@@ -141,6 +151,7 @@ export default function FournisseursPage() {
             );
           })}
         </div>
+        </>
       )}
     </AppShell>
   );
